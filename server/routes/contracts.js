@@ -24,7 +24,16 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
       return res.status(400).json({ error: 'Ya existe un contrato para esta reservacion' });
     }
 
-    const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(reservation.space_id);
+    // Validar que existan datos FROZEN en la reservacion
+    if (!reservation.frozen_space_data) {
+      return res.status(400).json({ error: 'La reservacion no tiene datos contractuales congelados' });
+    }
+
+    // =====================================================================
+    // FROZEN DATA ONLY - NO se lee de tabla spaces
+    // Solo se obtienen datos de usuarios (partes del contrato) que son necesarios
+    // Los datos del espacio vienen EXCLUSIVAMENTE del snapshot FROZEN
+    // =====================================================================
     const guest = db.prepare('SELECT * FROM users WHERE id = ?').get(reservation.guest_id);
     const host = db.prepare('SELECT * FROM users WHERE id = ?').get(reservation.host_id);
 
@@ -34,6 +43,10 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
     const endDate = calculateEndDate(startDate, reservation.period_type, reservation.period_quantity);
 
     const hostPayoutAmount = reservation.total_amount - reservation.commission_amount;
+
+    // Parsear datos FROZEN del espacio - NUNCA leer de tabla spaces
+    const frozenSpace = JSON.parse(reservation.frozen_space_data);
+    const frozenPricing = reservation.frozen_pricing ? JSON.parse(reservation.frozen_pricing) : null;
 
     const contractData = JSON.stringify({
       parties: {
@@ -56,7 +69,10 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
           city: host.city
         }
       },
-      space: JSON.parse(reservation.frozen_space_data),
+      // FROZEN: Datos del espacio desde snapshot inmutable
+      space: frozenSpace,
+      // FROZEN: Precios vigentes al momento de confirmacion
+      pricing_snapshot: frozenPricing,
       rental: {
         sqm: reservation.sqm_requested,
         period_type: reservation.period_type,
@@ -65,13 +81,24 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
         end_date: endDate,
         total_amount: reservation.total_amount,
         deposit_amount: reservation.deposit_amount,
+        deposit_percentage: reservation.frozen_deposit_percentage,
         commission_amount: reservation.commission_amount,
+        commission_percentage: reservation.frozen_commission_percentage,
+        price_per_sqm_applied: reservation.frozen_price_per_sqm_applied,
         host_payout: hostPayoutAmount
+      },
+      video: {
+        url: reservation.frozen_video_url,
+        duration: reservation.frozen_video_duration
       },
       legal: {
         jurisdiction: 'Bolivia',
         intermediary_clause: 'La plataforma actua unicamente como intermediario tecnologico',
         anti_bypass_clause: 'Queda prohibido contratar fuera de la plataforma'
+      },
+      snapshot_metadata: {
+        created_at: reservation.frozen_snapshot_created_at,
+        note: 'FROZEN: Todos los datos del espacio y precios reflejan las condiciones al momento de confirmacion'
       }
     });
 
