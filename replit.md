@@ -70,11 +70,49 @@ Changes by HOST after confirmation do NOT affect existing contracts.
   - Full legal clauses (liability, applicable law, anti-bypass)
 - Saved to: `uploads/contracts/`
 
-### Legal Clauses (LEGAL_CLAUSES constant)
+### Dynamic Legal Text Management (legal_texts table)
+All legal texts are now managed dynamically in the database with versioning.
+
+**Legal Text Types (12 types):**
+- `aviso_legal` - Legal notice
+- `terminos_condiciones` - Terms and conditions
+- `privacidad` - Privacy policy
+- `pagos_reembolsos` - Payment and refund policy
+- `intermediacion` - Technological intermediation declaration
+- `anti_bypass_guest` - Anti-bypass clause for GUESTs
+- `anti_bypass_host` - Anti-bypass clause for HOSTs
+- `disclaimer_contrato` - Contract disclaimer
+- `disclaimer_firma` - Signature disclaimer
+- `disclaimer_factura` - Invoice disclaimer
 - `liability_limitation` - Platform limitation of responsibility
 - `applicable_law` - Bolivian law (Civil Code, Commercial Code)
-- `intermediary` - Technological intermediation clause
-- `anti_bypass` - Anti-bypass clause
+
+**Version Tracking:**
+- Each type can have multiple versions, but only ONE active at a time
+- Contracts, invoices, and appointments store frozen legal text snapshots
+- PDFs render the version in effect at creation time, not the current version
+- Active texts cannot be edited (must deactivate first or create new version)
+
+**Helper Module (server/utils/legalTexts.js):**
+- `getLegalClausesForContract()` - Returns all clauses for contract PDF
+- `getInvoiceDisclaimer()` - Returns active invoice disclaimer
+- `getAntiBypassForRole(role)` - Returns anti-bypass text for GUEST/HOST
+- `getActiveLegalText(type)` - Returns active text by type
+- `getAllActiveLegalTexts()` - Returns all active texts
+
+**ADMIN Endpoints:**
+- `GET /admin/legal-texts` - List all legal texts (with active/inactive filter)
+- `POST /admin/legal-texts` - Create new legal text (version auto-incremented)
+- `GET /admin/legal-texts/:id` - Get specific legal text
+- `PUT /admin/legal-texts/:id` - Update legal text (inactive only)
+- `PUT /admin/legal-texts/:id/activate` - Activate (deactivates other versions of same type)
+- `PUT /admin/legal-texts/:id/deactivate` - Deactivate
+
+**Audit Events:**
+- `LEGAL_TEXT_CREATED` - When new text is created
+- `LEGAL_TEXT_UPDATED` - When inactive text is edited
+- `LEGAL_TEXT_ACTIVATED` - When text is activated
+- `LEGAL_TEXT_DEACTIVATED` - When text is deactivated
 
 ### Invoice Generation (PDF Normal)
 - Endpoint: `POST /invoices/generate/:contract_id` - Generate invoice
@@ -123,6 +161,13 @@ All `/admin/*` endpoints require JWT + ADMIN role.
 - Totals: gross income, net after refunds, platform revenue
 
 ## Recent Changes
+- 2025-12-26: Dynamic Legal Text Management System
+  - Created versioned legal_texts table with 12 types
+  - ADMIN CRUD endpoints with activation/deactivation logic
+  - Helper module (legalTexts.js) for retrieving active texts
+  - Contracts, invoices, appointments now use database legal texts
+  - Invoices freeze disclaimer text/version at creation (immutability)
+  - Audit trail for all legal text operations
 - 2025-12-26: Complete frozen contractual data implementation
   - Added 11 FROZEN fields to reservations and contracts tables
   - payments.js captures full snapshot at deposit time

@@ -90,17 +90,21 @@ router.post('/generate/:contract_id', authenticateToken, (req, res) => {
 
     const concept = `Alquiler de espacio: ${frozenSpace.title || 'N/A'} - ${contract.sqm} m2 - ${contract.period_quantity} ${contract.period_type}(s)`;
 
+    const invoiceDisclaimer = getInvoiceDisclaimer();
+
     db.prepare(`
       INSERT INTO invoices (
         id, contract_id, guest_id, host_id, invoice_number, invoice_type,
         recipient_type, recipient_id, amount, total_amount,
-        commission_amount, host_payout_amount, concept, nit, company_name, status
-      ) VALUES (?, ?, ?, ?, ?, 'pdf_normal', 'guest', ?, ?, ?, ?, ?, ?, ?, ?, 'issued')
+        commission_amount, host_payout_amount, concept, nit, company_name,
+        frozen_disclaimer_text, frozen_disclaimer_version, frozen_disclaimer_legal_text_id, status
+      ) VALUES (?, ?, ?, ?, ?, 'pdf_normal', 'guest', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued')
     `).run(
       invoiceId, contract.id, contract.guest_id, contract.host_id, invoiceNumber,
       contract.guest_id, contract.total_amount, contract.total_amount,
       contract.commission_amount, contract.host_payout_amount, concept,
-      contract.guest_nit || contract.guest_ci, guestName
+      contract.guest_nit || contract.guest_ci, guestName,
+      invoiceDisclaimer.content, invoiceDisclaimer.version, invoiceDisclaimer.id
     );
 
     logAudit(req.user.id, 'INVOICE_GENERATED', 'invoices', invoiceId, null, {
@@ -109,6 +113,8 @@ router.post('/generate/:contract_id', authenticateToken, (req, res) => {
       total_amount: contract.total_amount,
       commission_amount: contract.commission_amount,
       host_payout_amount: contract.host_payout_amount,
+      frozen_disclaimer_version: invoiceDisclaimer.version,
+      frozen_disclaimer_legal_text_id: invoiceDisclaimer.id,
       ...clientInfo
     }, req);
 
@@ -220,8 +226,9 @@ router.get('/:id/pdf', authenticateToken, (req, res) => {
     doc.text(`Email: ${invoice.host_email}`);
     doc.moveDown(2);
 
-    const invoiceDisclaimer = getInvoiceDisclaimer();
-    doc.fontSize(8).fillColor('red').text(`${invoiceDisclaimer.content} (v${invoiceDisclaimer.version})`, { align: 'center' });
+    const disclaimerText = invoice.frozen_disclaimer_text || getInvoiceDisclaimer().content;
+    const disclaimerVersion = invoice.frozen_disclaimer_version || 'N/A';
+    doc.fontSize(8).fillColor('red').text(`${disclaimerText} (v${disclaimerVersion})`, { align: 'center' });
     doc.fillColor('black');
     doc.moveDown();
     doc.fontSize(8).text('Plataforma: Almacenes, Galpones, Espacios Libres', { align: 'center' });
