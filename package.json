@@ -1,0 +1,17 @@
+{
+  "name": "almacenes-galpones-espacios-libres",
+  "version": "1.0.0",
+  "description": "Plataforma web para la intermediación tecnológica de alquiler temporal de almacenes, galpones y espacios libres en Bolivia",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js"
+  },
+  "keywords": [
+    "almacenes",
+    "galpones",
+    "bolivia",
+    "alquiler"
+  ],
+  "license": "ISC"
+}
