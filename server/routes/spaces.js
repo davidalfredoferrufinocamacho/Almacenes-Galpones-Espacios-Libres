@@ -1,11 +1,29 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const { body, query, validationResult } = require('express-validator');
 const { db } = require('../config/database');
 const { authenticateToken, requireRole, optionalAuth } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId } = require('../utils/helpers');
+
+const VIDEO_MIN_DURATION = 30;
+const VIDEO_MAX_DURATION = 60;
+
+async function getVideoDuration(filePath) {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = require('fluent-ffmpeg');
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      const duration = metadata.format.duration;
+      resolve(duration);
+    });
+  });
+}
 
 const router = express.Router();
 
@@ -285,19 +303,47 @@ router.post('/:id/photos', authenticateToken, requireRole('HOST'), upload.array(
   }
 });
 
-router.post('/:id/video', authenticateToken, requireRole('HOST'), upload.single('video'), (req, res) => {
+router.post('/:id/video', authenticateToken, requireRole('HOST'), upload.single('video'), async (req, res) => {
   try {
     const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
     if (!space) {
+      if (req.file) fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'Espacio no encontrado' });
     }
 
-    const videoDuration = parseInt(req.body.duration) || 0;
-    const maxDuration = db.prepare("SELECT value FROM system_config WHERE key = 'video_max_duration'").get();
-    const maxSeconds = maxDuration ? parseInt(maxDuration.value) : 60;
+    const filePath = req.file.path;
+    let realDuration;
+    
+    try {
+      realDuration = await getVideoDuration(filePath);
+    } catch (ffmpegError) {
+      fs.unlinkSync(filePath);
+      console.error('Error ffprobe:', ffmpegError);
+      return res.status(400).json({ 
+        error: 'No se pudo analizar el video. Asegurese de que sea un archivo de video valido.' 
+      });
+    }
 
-    if (videoDuration > maxSeconds) {
-      return res.status(400).json({ error: `El video no puede durar mas de ${maxSeconds} segundos` });
+    const durationInSeconds = Math.round(realDuration);
+
+    if (durationInSeconds < VIDEO_MIN_DURATION) {
+      fs.unlinkSync(filePath);
+      return res.status(400).json({ 
+        error: `El video debe durar al menos ${VIDEO_MIN_DURATION} segundos. Duracion detectada: ${durationInSeconds} segundos.`,
+        detected_duration: durationInSeconds,
+        min_required: VIDEO_MIN_DURATION,
+        max_allowed: VIDEO_MAX_DURATION
+      });
+    }
+
+    if (durationInSeconds > VIDEO_MAX_DURATION) {
+      fs.unlinkSync(filePath);
+      return res.status(400).json({ 
+        error: `El video no puede durar mas de ${VIDEO_MAX_DURATION} segundos. Duracion detectada: ${durationInSeconds} segundos.`,
+        detected_duration: durationInSeconds,
+        min_required: VIDEO_MIN_DURATION,
+        max_allowed: VIDEO_MAX_DURATION
+      });
     }
 
     const videoUrl = `/uploads/videos/${req.file.filename}`;
@@ -305,10 +351,22 @@ router.post('/:id/video', authenticateToken, requireRole('HOST'), upload.single(
     db.prepare(`
       UPDATE spaces SET video_url = ?, video_duration = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(videoUrl, videoDuration, req.params.id);
+    `).run(videoUrl, durationInSeconds, req.params.id);
 
-    res.json({ video_url: videoUrl });
+    logAudit(req.user.id, 'VIDEO_UPLOADED', 'spaces', req.params.id, null, { 
+      duration: durationInSeconds,
+      filename: req.file.filename 
+    }, req);
+
+    res.json({ 
+      video_url: videoUrl,
+      duration: durationInSeconds,
+      validation: 'OK - Duracion dentro del rango permitido (30-60 segundos)'
+    });
   } catch (error) {
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al subir video' });
   }

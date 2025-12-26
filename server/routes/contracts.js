@@ -3,7 +3,9 @@ const { body, validationResult } = require('express-validator');
 const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
-const { generateId, generateContractNumber, generateOTP, calculateEndDate, getClientInfo } = require('../utils/helpers');
+const { generateId, generateContractNumber, generateOTP, hashOTP, verifyOTP, getOTPExpiration, isOTPExpired, calculateEndDate, getClientInfo, OTP_EXPIRATION_MINUTES } = require('../utils/helpers');
+
+const SIGNATURE_DISCLAIMER = '[MOCK/DEMO - SIN VALIDEZ LEGAL] Esta firma es una simulacion para propositos de demostración. NO tiene validez legal ni cumple con la legislacion boliviana de firma electronica.';
 
 const router = express.Router();
 
@@ -103,7 +105,7 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
 
 router.post('/:id/sign', authenticateToken, [
   body('otp').isLength({ min: 6, max: 6 })
-], (req, res) => {
+], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -122,8 +124,32 @@ router.post('/:id/sign', authenticateToken, [
       return res.status(403).json({ error: 'No tiene permiso para firmar este contrato' });
     }
 
-    const clientInfo = getClientInfo(req);
     const { otp } = req.body;
+
+    const pendingOtp = db.prepare(`
+      SELECT * FROM pending_otps 
+      WHERE user_id = ? AND contract_id = ? AND used = 0
+      ORDER BY created_at DESC LIMIT 1
+    `).get(req.user.id, req.params.id);
+
+    if (!pendingOtp) {
+      return res.status(400).json({ error: 'No hay OTP pendiente. Solicite uno nuevo.' });
+    }
+
+    if (isOTPExpired(pendingOtp.expires_at)) {
+      db.prepare('DELETE FROM pending_otps WHERE id = ?').run(pendingOtp.id);
+      return res.status(400).json({ error: 'El OTP ha expirado. Solicite uno nuevo.' });
+    }
+
+    const isValidOtp = await verifyOTP(otp, pendingOtp.otp_hash);
+    if (!isValidOtp) {
+      return res.status(400).json({ error: 'Codigo OTP invalido' });
+    }
+
+    db.prepare('UPDATE pending_otps SET used = 1 WHERE id = ?').run(pendingOtp.id);
+
+    const clientInfo = getClientInfo(req);
+    const otpHashForRecord = pendingOtp.otp_hash;
 
     if (isGuest) {
       if (contract.guest_signed) {
@@ -139,9 +165,9 @@ router.post('/:id/sign', authenticateToken, [
           guest_sign_user_agent = ?,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(clientInfo.timestamp, clientInfo.ip, otp, clientInfo.userAgent, req.params.id);
+      `).run(clientInfo.timestamp, clientInfo.ip, otpHashForRecord, clientInfo.userAgent, req.params.id);
 
-      logAudit(req.user.id, 'CONTRACT_SIGNED_GUEST', 'contracts', req.params.id, null, clientInfo, req);
+      logAudit(req.user.id, 'CONTRACT_SIGNED_GUEST_MOCK', 'contracts', req.params.id, null, { ...clientInfo, disclaimer: SIGNATURE_DISCLAIMER }, req);
     } else {
       if (contract.host_signed) {
         return res.status(400).json({ error: 'Ya ha firmado este contrato' });
@@ -161,7 +187,7 @@ router.post('/:id/sign', authenticateToken, [
           status = 'signed',
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(clientInfo.timestamp, clientInfo.ip, otp, clientInfo.userAgent, req.params.id);
+      `).run(clientInfo.timestamp, clientInfo.ip, otpHashForRecord, clientInfo.userAgent, req.params.id);
 
       db.prepare(`
         UPDATE reservations SET status = 'contract_signed', updated_at = CURRENT_TIMESTAMP WHERE id = ?
@@ -172,8 +198,8 @@ router.post('/:id/sign', authenticateToken, [
         WHERE reservation_id = ? AND escrow_status = 'held'
       `).run(contract.reservation_id);
 
-      logAudit(req.user.id, 'CONTRACT_SIGNED_HOST', 'contracts', req.params.id, null, clientInfo, req);
-      logAudit(req.user.id, 'ESCROW_RELEASED', 'contracts', req.params.id, null, { reservation_id: contract.reservation_id }, req);
+      logAudit(req.user.id, 'CONTRACT_SIGNED_HOST_MOCK', 'contracts', req.params.id, null, { ...clientInfo, disclaimer: SIGNATURE_DISCLAIMER }, req);
+      logAudit(req.user.id, 'ESCROW_RELEASED_MOCK', 'contracts', req.params.id, null, { reservation_id: contract.reservation_id, disclaimer: 'MOCK - Sin transferencia real de fondos' }, req);
     }
 
     const updatedContract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
@@ -182,7 +208,8 @@ router.post('/:id/sign', authenticateToken, [
     res.json({
       message: 'Contrato firmado exitosamente',
       fully_signed: bothSigned,
-      escrow_released: bothSigned
+      escrow_released: bothSigned,
+      disclaimer: SIGNATURE_DISCLAIMER
     });
   } catch (error) {
     console.error('Error:', error);
@@ -190,7 +217,7 @@ router.post('/:id/sign', authenticateToken, [
   }
 });
 
-router.get('/:id/generate-otp', authenticateToken, (req, res) => {
+router.post('/:id/request-otp', authenticateToken, async (req, res) => {
   try {
     const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
     if (!contract) {
@@ -201,11 +228,27 @@ router.get('/:id/generate-otp', authenticateToken, (req, res) => {
       return res.status(403).json({ error: 'No tiene permiso' });
     }
 
+    db.prepare('DELETE FROM pending_otps WHERE user_id = ? AND contract_id = ?').run(req.user.id, req.params.id);
+
     const otp = generateOTP();
+    const otpHash = await hashOTP(otp);
+    const expiresAt = getOTPExpiration();
+    const otpId = generateId();
 
-    logAudit(req.user.id, 'OTP_GENERATED', 'contracts', req.params.id, null, { for_signing: true }, req);
+    db.prepare(`
+      INSERT INTO pending_otps (id, user_id, contract_id, otp_hash, expires_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(otpId, req.user.id, req.params.id, otpHash, expiresAt);
 
-    res.json({ otp, message: 'Use este codigo para firmar el contrato' });
+    logAudit(req.user.id, 'OTP_REQUESTED', 'contracts', req.params.id, null, { otp_id: otpId }, req);
+
+    console.log(`[DEMO ONLY] OTP para contrato ${req.params.id}: ${otp} - En produccion esto se enviaria por email/SMS`);
+
+    res.json({ 
+      message: `Codigo OTP generado. Expira en ${OTP_EXPIRATION_MINUTES} minutos. [DEMO: Ver consola del servidor para obtener el codigo - En produccion se enviaria por email/SMS]`,
+      expires_in_minutes: OTP_EXPIRATION_MINUTES,
+      disclaimer: SIGNATURE_DISCLAIMER
+    });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al generar OTP' });

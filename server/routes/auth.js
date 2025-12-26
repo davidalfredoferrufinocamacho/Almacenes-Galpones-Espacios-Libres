@@ -9,6 +9,12 @@ const { JWT_SECRET } = require('../middleware/auth');
 
 const router = express.Router();
 
+const AUTH_DISCLAIMER = {
+  email_verification: 'PENDIENTE - La verificacion de email NO esta implementada. Los usuarios pueden registrarse sin confirmar su email.',
+  password_recovery: 'PENDIENTE - La recuperacion de contraseña NO esta implementada.',
+  security_status: 'INCOMPLETO - Este sistema de autenticacion es un MVP y NO debe considerarse seguro para produccion.'
+};
+
 router.post('/register', [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 8 }),
@@ -50,7 +56,8 @@ router.post('/register', [
     res.status(201).json({
       message: 'Usuario registrado exitosamente',
       token,
-      user: { id: userId, email, role, person_type, first_name, last_name }
+      user: { id: userId, email, role, person_type, first_name, last_name, email_verified: false },
+      security_disclaimer: AUTH_DISCLAIMER
     });
   } catch (error) {
     console.error('Error en registro:', error);
@@ -93,8 +100,10 @@ router.post('/login', [
         person_type: user.person_type,
         first_name: user.first_name,
         last_name: user.last_name,
-        company_name: user.company_name
-      }
+        company_name: user.company_name,
+        email_verified: user.is_verified === 1
+      },
+      security_disclaimer: AUTH_DISCLAIMER
     });
   } catch (error) {
     console.error('Error en login:', error);

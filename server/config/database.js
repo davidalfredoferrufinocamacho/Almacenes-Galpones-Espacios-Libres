@@ -303,6 +303,19 @@ function initDatabase() {
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
 
+    -- Tabla de OTPs pendientes (SEGURIDAD: solo hash, con expiracion)
+    CREATE TABLE IF NOT EXISTS pending_otps (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      contract_id TEXT NOT NULL,
+      otp_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (contract_id) REFERENCES contracts(id)
+    );
+
     -- Tabla de textos legales
     CREATE TABLE IF NOT EXISTS legal_texts (
       id TEXT PRIMARY KEY,

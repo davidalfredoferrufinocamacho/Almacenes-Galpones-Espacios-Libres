@@ -25,13 +25,13 @@ function MyContracts() {
     }
   }
 
-  const handleGenerateOtp = async (contractId) => {
+  const handleRequestOtp = async (contractId) => {
     try {
-      const response = await api.get(`/contracts/${contractId}/generate-otp`)
-      setOtp(response.data.otp)
+      const response = await api.post(`/contracts/${contractId}/request-otp`)
+      alert(response.data.message)
       setSigningId(contractId)
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al generar OTP')
+      alert(error.response?.data?.error || 'Error al solicitar OTP')
     }
   }
 
@@ -137,12 +137,20 @@ function MyContracts() {
 
                 {signingId === contract.id && (
                   <div className="signing-section">
-                    <p>Codigo OTP: <strong>{otp}</strong></p>
-                    <p>Use este codigo para firmar el contrato</p>
-                    <button onClick={() => handleSign(contract.id)} className="btn btn-primary">
+                    <p>Ingrese el codigo OTP (ver consola del servidor en DEMO):</p>
+                    <input 
+                      type="text" 
+                      value={otp} 
+                      onChange={(e) => setOtp(e.target.value)}
+                      placeholder="Codigo de 6 digitos"
+                      maxLength="6"
+                      style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '0.5rem', width: '200px' }}
+                    />
+                    <p className="disclaimer">[DEMO/MOCK - Sin validez legal]</p>
+                    <button onClick={() => handleSign(contract.id)} className="btn btn-primary" disabled={otp.length !== 6}>
                       Confirmar Firma
                     </button>
-                    <button onClick={() => setSigningId(null)} className="btn btn-outline">
+                    <button onClick={() => { setSigningId(null); setOtp(''); }} className="btn btn-outline">
                       Cancelar
                     </button>
                   </div>
@@ -152,13 +160,13 @@ function MyContracts() {
                   {contract.status === 'pending' && !signingId && (
                     <>
                       {user.role === 'GUEST' && !contract.guest_signed && (
-                        <button onClick={() => handleGenerateOtp(contract.id)} className="btn btn-primary">
-                          Firmar Contrato
+                        <button onClick={() => handleRequestOtp(contract.id)} className="btn btn-primary">
+                          Solicitar Codigo para Firmar
                         </button>
                       )}
                       {user.role === 'HOST' && contract.guest_signed && !contract.host_signed && (
-                        <button onClick={() => handleGenerateOtp(contract.id)} className="btn btn-primary">
-                          Firmar Contrato
+                        <button onClick={() => handleRequestOtp(contract.id)} className="btn btn-primary">
+                          Solicitar Codigo para Firmar
                         </button>
                       )}
                     </>

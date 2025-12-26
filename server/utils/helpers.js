@@ -1,4 +1,8 @@
 const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+
+const OTP_EXPIRATION_MINUTES = 5;
 
 function generateId() {
   return uuidv4();
@@ -20,7 +24,25 @@ function generateInvoiceNumber() {
 }
 
 function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 999999).toString();
+}
+
+async function hashOTP(otp) {
+  return await bcrypt.hash(otp, 10);
+}
+
+async function verifyOTP(otp, hash) {
+  return await bcrypt.compare(otp, hash);
+}
+
+function getOTPExpiration() {
+  const expiration = new Date();
+  expiration.setMinutes(expiration.getMinutes() + OTP_EXPIRATION_MINUTES);
+  return expiration.toISOString();
+}
+
+function isOTPExpired(expirationTime) {
+  return new Date() > new Date(expirationTime);
 }
 
 function calculateRentalPrice(pricePerSqm, sqm, periodType, quantity) {
@@ -73,8 +95,13 @@ module.exports = {
   generateContractNumber,
   generateInvoiceNumber,
   generateOTP,
+  hashOTP,
+  verifyOTP,
+  getOTPExpiration,
+  isOTPExpired,
   calculateRentalPrice,
   calculateEndDate,
   formatCurrency,
-  getClientInfo
+  getClientInfo,
+  OTP_EXPIRATION_MINUTES
 };
