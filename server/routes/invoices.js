@@ -9,6 +9,15 @@ const { generateId, generateInvoiceNumber, getClientInfo } = require('../utils/h
 
 const INVOICE_DISCLAIMER = '[FACTURA NO FISCAL] Este documento es una factura interna de la plataforma. NO tiene validez fiscal ante el Servicio de Impuestos Nacionales (SIN). Integracion SIAT pendiente de implementacion.';
 
+function validateLegalIdentity(user) {
+  if (user.person_type === 'natural') {
+    return { valid: !!user.ci, missing: user.ci ? null : 'CI' };
+  } else if (user.person_type === 'juridica') {
+    return { valid: !!user.nit, missing: user.nit ? null : 'NIT' };
+  }
+  return { valid: false, missing: 'person_type' };
+}
+
 const router = express.Router();
 
 router.post('/generate/:contract_id', authenticateToken, (req, res) => {
@@ -37,6 +46,28 @@ router.post('/generate/:contract_id', authenticateToken, (req, res) => {
       return res.status(403).json({ error: 'No tiene permiso para generar factura de este contrato' });
     }
 
+    const clientInfo = getClientInfo(req);
+
+    const guestIdentity = validateLegalIdentity({
+      person_type: contract.guest_person_type,
+      ci: contract.guest_ci,
+      nit: contract.guest_nit
+    });
+    
+    if (!guestIdentity.valid) {
+      logAudit(req.user.id, 'LEGAL_IDENTITY_INCOMPLETE', 'users', contract.guest_id, null, {
+        person_type: contract.guest_person_type,
+        missing: guestIdentity.missing,
+        blocked_operation: 'invoice',
+        contract_id: contract.id,
+        ...clientInfo
+      }, req);
+      return res.status(400).json({ 
+        error: `Identificacion legal incompleta para GUEST: falta ${guestIdentity.missing}. No se puede generar factura.`,
+        user_type: 'GUEST'
+      });
+    }
+
     const existingInvoice = db.prepare('SELECT id, invoice_number FROM invoices WHERE contract_id = ?').get(contract.id);
     if (existingInvoice) {
       return res.json({
@@ -48,7 +79,6 @@ router.post('/generate/:contract_id', authenticateToken, (req, res) => {
 
     const invoiceId = generateId();
     const invoiceNumber = generateInvoiceNumber();
-    const clientInfo = getClientInfo(req);
 
     const guestName = contract.guest_person_type === 'juridica' ? contract.guest_company : `${contract.guest_first_name} ${contract.guest_last_name}`;
     

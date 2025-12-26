@@ -10,6 +10,15 @@ const { generateId, generateContractNumber, generateOTP, hashOTP, verifyOTP, get
 
 const SIGNATURE_DISCLAIMER = '[MOCK/DEMO - SIN VALIDEZ LEGAL] Esta firma es una simulacion para propositos de demostración. NO tiene validez legal ni cumple con la legislacion boliviana de firma electronica.';
 
+function validateLegalIdentity(user) {
+  if (user.person_type === 'natural') {
+    return { valid: !!user.ci, missing: user.ci ? null : 'CI' };
+  } else if (user.person_type === 'juridica') {
+    return { valid: !!user.nit, missing: user.nit ? null : 'NIT' };
+  }
+  return { valid: false, missing: 'person_type' };
+}
+
 const LEGAL_CLAUSES = {
   liability_limitation: 'LIMITACION DE RESPONSABILIDAD: La plataforma "Almacenes, Galpones, Espacios Libres" actua exclusivamente como intermediario tecnologico entre las partes. La plataforma no es propietaria, arrendadora ni arrendataria de los espacios ofrecidos. La plataforma no garantiza la calidad, seguridad, legalidad o idoneidad de los espacios publicados. Las partes liberan expresamente a la plataforma de cualquier responsabilidad derivada del uso del espacio, danos, perdidas o perjuicios que pudieran surgir de la relacion contractual entre HOST y GUEST.',
   applicable_law: 'LEY APLICABLE: El presente contrato se rige por las leyes del Estado Plurinacional de Bolivia, en particular por el Codigo Civil Boliviano (Decreto Ley No. 12760), el Codigo de Comercio (Decreto Ley No. 14379) y demas normativa aplicable. Para cualquier controversia derivada del presente contrato, las partes se someten a la jurisdiccion de los tribunales ordinarios de Bolivia.',
@@ -46,6 +55,36 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
     // =====================================================================
     const guest = db.prepare('SELECT * FROM users WHERE id = ?').get(reservation.guest_id);
     const host = db.prepare('SELECT * FROM users WHERE id = ?').get(reservation.host_id);
+
+    const clientInfo = getClientInfo(req);
+
+    const guestIdentity = validateLegalIdentity(guest);
+    if (!guestIdentity.valid) {
+      logAudit(req.user.id, 'LEGAL_IDENTITY_INCOMPLETE', 'users', guest.id, null, {
+        person_type: guest.person_type,
+        missing: guestIdentity.missing,
+        blocked_operation: 'contract',
+        ...clientInfo
+      }, req);
+      return res.status(400).json({ 
+        error: `Identificacion legal incompleta para GUEST: falta ${guestIdentity.missing}`,
+        user_type: 'GUEST'
+      });
+    }
+
+    const hostIdentity = validateLegalIdentity(host);
+    if (!hostIdentity.valid) {
+      logAudit(req.user.id, 'LEGAL_IDENTITY_INCOMPLETE', 'users', host.id, null, {
+        person_type: host.person_type,
+        missing: hostIdentity.missing,
+        blocked_operation: 'contract',
+        ...clientInfo
+      }, req);
+      return res.status(400).json({ 
+        error: `Identificacion legal incompleta para HOST: falta ${hostIdentity.missing}`,
+        user_type: 'HOST'
+      });
+    }
 
     const contractId = generateId();
     const contractNumber = generateContractNumber();
@@ -140,8 +179,6 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
       reservation.period_quantity, startDate, endDate, reservation.total_amount,
       reservation.deposit_amount, reservation.commission_amount, hostPayoutAmount
     );
-
-    const clientInfo = getClientInfo(req);
     
     // Registrar creacion de contrato con referencia al snapshot original
     logAudit(req.user.id, 'CONTRACT_CREATED', 'contracts', contractId, null, { 
