@@ -6,8 +6,7 @@ const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, generateInvoiceNumber, getClientInfo } = require('../utils/helpers');
-
-const INVOICE_DISCLAIMER = '[FACTURA NO FISCAL] Este documento es una factura interna de la plataforma. NO tiene validez fiscal ante el Servicio de Impuestos Nacionales (SIN). Integracion SIAT pendiente de implementacion.';
+const { getInvoiceDisclaimer } = require('../utils/legalTexts');
 
 function validateLegalIdentity(user) {
   if (user.person_type === 'natural') {
@@ -221,7 +220,8 @@ router.get('/:id/pdf', authenticateToken, (req, res) => {
     doc.text(`Email: ${invoice.host_email}`);
     doc.moveDown(2);
 
-    doc.fontSize(8).fillColor('red').text(INVOICE_DISCLAIMER, { align: 'center' });
+    const invoiceDisclaimer = getInvoiceDisclaimer();
+    doc.fontSize(8).fillColor('red').text(`${invoiceDisclaimer.content} (v${invoiceDisclaimer.version})`, { align: 'center' });
     doc.fillColor('black');
     doc.moveDown();
     doc.fontSize(8).text('Plataforma: Almacenes, Galpones, Espacios Libres', { align: 'center' });

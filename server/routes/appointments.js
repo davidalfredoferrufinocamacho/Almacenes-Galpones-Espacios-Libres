@@ -4,6 +4,7 @@ const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, getClientInfo } = require('../utils/helpers');
+const { getAntiBypassForRole } = require('../utils/legalTexts');
 
 const router = express.Router();
 
@@ -92,7 +93,8 @@ router.post('/:id/accept-anti-bypass', authenticateToken, requireRole('GUEST'), 
     }
 
     const clientInfo = getClientInfo(req);
-    const legalVersion = 'ANTIBYPASS_GUEST_V1';
+    const antiBypassText = getAntiBypassForRole('GUEST');
+    const legalVersion = `${antiBypassText.type}_v${antiBypassText.version}`;
 
     db.prepare(`
       UPDATE appointments SET
@@ -108,6 +110,7 @@ router.post('/:id/accept-anti-bypass', authenticateToken, requireRole('GUEST'), 
     logAudit(req.user.id, 'APPOINTMENT_ANTIBYPASS_ACCEPTED', 'appointments', req.params.id, null, {
       space_id: appointment.space_id,
       legal_text_version: legalVersion,
+      legal_text_id: antiBypassText.id,
       ...clientInfo
     }, req);
 

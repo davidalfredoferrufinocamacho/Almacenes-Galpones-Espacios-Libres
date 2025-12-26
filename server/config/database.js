@@ -346,24 +346,36 @@ function initDatabase() {
       FOREIGN KEY (contract_id) REFERENCES contracts(id)
     );
 
-    -- Tabla de textos legales
+    -- Tabla de textos legales (versionada)
     CREATE TABLE IF NOT EXISTS legal_texts (
       id TEXT PRIMARY KEY,
-      type TEXT UNIQUE NOT NULL CHECK(type IN (
+      type TEXT NOT NULL CHECK(type IN (
         'aviso_legal',
         'terminos_condiciones',
         'privacidad',
         'pagos_reembolsos',
         'intermediacion',
-        'anti_bypass'
+        'anti_bypass_guest',
+        'anti_bypass_host',
+        'disclaimer_contrato',
+        'disclaimer_firma',
+        'disclaimer_factura',
+        'liability_limitation',
+        'applicable_law'
       )),
       title TEXT NOT NULL,
       content TEXT NOT NULL,
-      version INTEGER DEFAULT 1,
-      is_active INTEGER DEFAULT 1,
+      version TEXT NOT NULL DEFAULT '1.0',
+      is_active INTEGER DEFAULT 0,
+      effective_date TEXT,
+      created_by TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id)
     );
+
+    -- Indice para buscar texto activo por tipo
+    CREATE INDEX IF NOT EXISTS idx_legal_texts_type_active ON legal_texts(type, is_active);
 
     -- Insertar configuracion inicial
     INSERT OR IGNORE INTO system_config (id, key, value, description) VALUES
@@ -372,14 +384,20 @@ function initDatabase() {
       ('cfg_video_max', 'video_max_duration', '60', 'Duracion maxima del video en segundos'),
       ('cfg_video_min', 'video_min_duration', '30', 'Duracion minima recomendada del video en segundos');
 
-    -- Insertar textos legales iniciales
-    INSERT OR IGNORE INTO legal_texts (id, type, title, content) VALUES
-      ('legal_1', 'aviso_legal', 'Aviso Legal', 'Almacenes, Galpones, Espacios Libres es una plataforma de intermediacion tecnologica para el alquiler temporal de espacios en Bolivia. La plataforma NO es propietaria de los espacios y NO es parte del contrato de alquiler entre HOST y GUEST.'),
-      ('legal_2', 'terminos_condiciones', 'Terminos y Condiciones', 'Al usar esta plataforma, usted acepta los presentes terminos y condiciones que regulan el uso del servicio de intermediacion tecnologica.'),
-      ('legal_3', 'privacidad', 'Politica de Privacidad', 'Protegemos sus datos personales conforme a la legislacion boliviana vigente.'),
-      ('legal_4', 'pagos_reembolsos', 'Politica de Pagos y Reembolsos', 'Los pagos se procesan de forma segura. El anticipo queda en escrow hasta la confirmacion del contrato. En caso de no confirmar, se realiza reembolso del 100%.'),
-      ('legal_5', 'intermediacion', 'Declaracion de Intermediacion', 'Esta plataforma actua unicamente como intermediario tecnologico. El contrato de alquiler es bilateral entre HOST y GUEST.'),
-      ('legal_6', 'anti_bypass', 'Clausula Anti-Bypass', 'Queda prohibido contratar directa o indirectamente fuera de la plataforma. El incumplimiento conlleva sanciones legales y economicas.');
+    -- Insertar textos legales iniciales (version 1.0, activos)
+    INSERT OR IGNORE INTO legal_texts (id, type, title, content, version, is_active, effective_date) VALUES
+      ('legal_aviso_v1', 'aviso_legal', 'Aviso Legal', 'Almacenes, Galpones, Espacios Libres es una plataforma de intermediacion tecnologica para el alquiler temporal de espacios en Bolivia. La plataforma NO es propietaria de los espacios y NO es parte del contrato de alquiler entre HOST y GUEST. Nos reservamos el derecho de modificar estos terminos en cualquier momento.', '1.0', 1, '2025-01-01'),
+      ('legal_terminos_v1', 'terminos_condiciones', 'Terminos y Condiciones', 'Al usar esta plataforma, usted acepta los presentes terminos y condiciones que regulan el uso del servicio de intermediacion tecnologica. El usuario se compromete a proporcionar informacion veridica y a cumplir con las obligaciones contractuales derivadas del uso de la plataforma.', '1.0', 1, '2025-01-01'),
+      ('legal_privacidad_v1', 'privacidad', 'Politica de Privacidad', 'Protegemos sus datos personales conforme a la legislacion boliviana vigente. Recopilamos unicamente la informacion necesaria para prestar el servicio. Sus datos no seran compartidos con terceros sin su consentimiento expreso, salvo requerimiento judicial.', '1.0', 1, '2025-01-01'),
+      ('legal_pagos_v1', 'pagos_reembolsos', 'Politica de Pagos y Reembolsos', 'Los pagos se procesan de forma segura mediante sistema escrow. El anticipo queda retenido hasta la confirmacion del contrato bilateral. En caso de cancelacion antes de la firma del contrato, se realiza reembolso del 100% del anticipo. Una vez firmado el contrato por ambas partes, NO procede reembolso del anticipo.', '1.0', 1, '2025-01-01'),
+      ('legal_intermediacion_v1', 'intermediacion', 'Declaracion de Intermediacion Tecnologica', 'Esta plataforma actua UNICAMENTE como intermediario tecnologico facilitando el contacto entre oferentes (HOST) y demandantes (GUEST) de espacios para almacenamiento temporal. El contrato de alquiler es bilateral entre HOST y GUEST. La plataforma no asume responsabilidad por las condiciones del espacio ni por el cumplimiento de las obligaciones contractuales entre las partes.', '1.0', 1, '2025-01-01'),
+      ('legal_antibypass_guest_v1', 'anti_bypass_guest', 'Clausula Anti-Bypass para GUEST', 'El GUEST se compromete a no contactar, negociar o contratar directa o indirectamente con el HOST fuera de esta plataforma durante la vigencia de cualquier reserva activa y hasta 12 meses despues de finalizada. El incumplimiento de esta clausula dara lugar a una penalizacion equivalente al 100% del valor del contrato originalmente gestionado, mas los danos y perjuicios que correspondan conforme a la legislacion boliviana.', '1.0', 1, '2025-01-01'),
+      ('legal_antibypass_host_v1', 'anti_bypass_host', 'Clausula Anti-Bypass para HOST', 'El HOST se compromete a no ofrecer, negociar o contratar directa o indirectamente con usuarios de esta plataforma fuera de la misma durante la vigencia de cualquier publicacion activa y hasta 12 meses despues. El incumplimiento de esta clausula dara lugar a una penalizacion equivalente al 200% de las comisiones evadidas, mas los danos y perjuicios que correspondan conforme a la legislacion boliviana.', '1.0', 1, '2025-01-01'),
+      ('legal_disclaimer_contrato_v1', 'disclaimer_contrato', 'Disclaimer de Contrato', '[CONTRATO DIGITAL] Este documento constituye un contrato digital bilateral entre HOST y GUEST, facilitado por la plataforma Almacenes, Galpones, Espacios Libres en su calidad de intermediario tecnologico. La plataforma no es parte del contrato y no asume responsabilidad por su cumplimiento.', '1.0', 1, '2025-01-01'),
+      ('legal_disclaimer_firma_v1', 'disclaimer_firma', 'Disclaimer de Firma Electronica', '[FIRMA ELECTRONICA - DEMO] Esta firma utiliza codigo OTP y registro de IP/timestamp como metodo de autenticacion. Para cumplimiento total de la Ley 164 de Telecomunicaciones de Bolivia, se recomienda implementar firma digital certificada por entidad autorizada.', '1.0', 1, '2025-01-01'),
+      ('legal_disclaimer_factura_v1', 'disclaimer_factura', 'Disclaimer de Factura', '[FACTURA NO FISCAL] Este documento es una factura interna de la plataforma. NO tiene validez fiscal ante el Servicio de Impuestos Nacionales (SIN). Integracion SIAT pendiente de implementacion.', '1.0', 1, '2025-01-01'),
+      ('legal_liability_v1', 'liability_limitation', 'Limitacion de Responsabilidad', 'La plataforma Almacenes, Galpones, Espacios Libres actua unicamente como intermediario tecnologico y NO es parte del contrato de alquiler. La plataforma no garantiza la veracidad de la informacion proporcionada por los usuarios, las condiciones fisicas de los espacios, ni el cumplimiento de las obligaciones contractuales entre HOST y GUEST. La responsabilidad de la plataforma se limita exclusivamente al correcto funcionamiento del sistema de intermediacion.', '1.0', 1, '2025-01-01'),
+      ('legal_applicable_law_v1', 'applicable_law', 'Ley Aplicable', 'Este contrato se rige por la legislacion boliviana, incluyendo pero no limitado a: Codigo Civil Boliviano, Codigo de Comercio, Ley 164 de Telecomunicaciones, y normativa aplicable del Servicio de Impuestos Nacionales. Para cualquier controversia, las partes se someten a la jurisdiccion de los tribunales ordinarios de Bolivia.', '1.0', 1, '2025-01-01');
 
     -- Crear usuario admin por defecto
     INSERT OR IGNORE INTO users (id, email, password, role, first_name, last_name, is_verified, is_active)

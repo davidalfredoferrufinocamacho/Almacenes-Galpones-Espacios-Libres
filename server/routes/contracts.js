@@ -7,8 +7,7 @@ const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, generateContractNumber, generateOTP, hashOTP, verifyOTP, getOTPExpiration, isOTPExpired, calculateEndDate, getClientInfo, OTP_EXPIRATION_MINUTES } = require('../utils/helpers');
-
-const SIGNATURE_DISCLAIMER = '[MOCK/DEMO - SIN VALIDEZ LEGAL] Esta firma es una simulacion para propositos de demostración. NO tiene validez legal ni cumple con la legislacion boliviana de firma electronica.';
+const { getLegalClausesForContract, getActiveLegalText } = require('../utils/legalTexts');
 
 function validateLegalIdentity(user) {
   if (user.person_type === 'natural') {
@@ -18,13 +17,6 @@ function validateLegalIdentity(user) {
   }
   return { valid: false, missing: 'person_type' };
 }
-
-const LEGAL_CLAUSES = {
-  liability_limitation: 'LIMITACION DE RESPONSABILIDAD: La plataforma "Almacenes, Galpones, Espacios Libres" actua exclusivamente como intermediario tecnologico entre las partes. La plataforma no es propietaria, arrendadora ni arrendataria de los espacios ofrecidos. La plataforma no garantiza la calidad, seguridad, legalidad o idoneidad de los espacios publicados. Las partes liberan expresamente a la plataforma de cualquier responsabilidad derivada del uso del espacio, danos, perdidas o perjuicios que pudieran surgir de la relacion contractual entre HOST y GUEST.',
-  applicable_law: 'LEY APLICABLE: El presente contrato se rige por las leyes del Estado Plurinacional de Bolivia, en particular por el Codigo Civil Boliviano (Decreto Ley No. 12760), el Codigo de Comercio (Decreto Ley No. 14379) y demas normativa aplicable. Para cualquier controversia derivada del presente contrato, las partes se someten a la jurisdiccion de los tribunales ordinarios de Bolivia.',
-  intermediary: 'INTERMEDIACION TECNOLOGICA: La plataforma actua unicamente como intermediario tecnologico facilitando la conexion entre oferentes (HOST) y demandantes (GUEST) de espacios. La plataforma no interviene en la negociacion ni ejecucion del contrato mas alla de su rol de intermediacion.',
-  anti_bypass: 'CLAUSULA ANTI-BYPASS: Las partes se comprometen a realizar todas las transacciones relacionadas con este alquiler exclusivamente a traves de la plataforma. Queda expresamente prohibido contratar, extender o modificar el alquiler fuera de la plataforma, bajo pena de las sanciones establecidas en los terminos de uso.'
-};
 
 const router = express.Router();
 
@@ -140,13 +132,7 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
         url: reservation.frozen_video_url,
         duration: reservation.frozen_video_duration
       },
-      legal: {
-        jurisdiction: 'Estado Plurinacional de Bolivia',
-        liability_limitation: LEGAL_CLAUSES.liability_limitation,
-        applicable_law: LEGAL_CLAUSES.applicable_law,
-        intermediary_clause: LEGAL_CLAUSES.intermediary,
-        anti_bypass_clause: LEGAL_CLAUSES.anti_bypass
-      },
+      legal: getLegalClausesForContract(),
       snapshot_metadata: {
         created_at: reservation.frozen_snapshot_created_at,
         note: 'FROZEN: Todos los datos del espacio y precios reflejan las condiciones al momento de confirmacion'
@@ -263,7 +249,8 @@ router.post('/:id/sign', authenticateToken, [
         WHERE id = ?
       `).run(clientInfo.timestamp, clientInfo.ip, otpHashForRecord, clientInfo.userAgent, req.params.id);
 
-      logAudit(req.user.id, 'CONTRACT_SIGNED_GUEST_MOCK', 'contracts', req.params.id, null, { ...clientInfo, disclaimer: SIGNATURE_DISCLAIMER }, req);
+      const signDisclaimerGuest = getActiveLegalText('disclaimer_firma');
+      logAudit(req.user.id, 'CONTRACT_SIGNED_GUEST_MOCK', 'contracts', req.params.id, null, { ...clientInfo, disclaimer: signDisclaimerGuest.content, disclaimer_version: signDisclaimerGuest.version }, req);
     } else {
       if (contract.host_signed) {
         return res.status(400).json({ error: 'Ya ha firmado este contrato' });
@@ -294,18 +281,21 @@ router.post('/:id/sign', authenticateToken, [
         WHERE reservation_id = ? AND escrow_status = 'held'
       `).run(contract.reservation_id);
 
-      logAudit(req.user.id, 'CONTRACT_SIGNED_HOST_MOCK', 'contracts', req.params.id, null, { ...clientInfo, disclaimer: SIGNATURE_DISCLAIMER }, req);
+      const signDisclaimerHost = getActiveLegalText('disclaimer_firma');
+      logAudit(req.user.id, 'CONTRACT_SIGNED_HOST_MOCK', 'contracts', req.params.id, null, { ...clientInfo, disclaimer: signDisclaimerHost.content, disclaimer_version: signDisclaimerHost.version }, req);
       logAudit(req.user.id, 'ESCROW_RELEASED_MOCK', 'contracts', req.params.id, null, { reservation_id: contract.reservation_id, disclaimer: 'MOCK - Sin transferencia real de fondos' }, req);
     }
 
     const updatedContract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
     const bothSigned = updatedContract.guest_signed && updatedContract.host_signed;
 
+    const finalDisclaimer = getActiveLegalText('disclaimer_firma');
     res.json({
       message: 'Contrato firmado exitosamente',
       fully_signed: bothSigned,
       escrow_released: bothSigned,
-      disclaimer: SIGNATURE_DISCLAIMER
+      disclaimer: finalDisclaimer.content,
+      disclaimer_version: finalDisclaimer.version
     });
   } catch (error) {
     console.error('Error:', error);
@@ -340,10 +330,12 @@ router.post('/:id/request-otp', authenticateToken, async (req, res) => {
 
     console.log(`[DEMO ONLY] OTP para contrato ${req.params.id}: ${otp} - En produccion esto se enviaria por email/SMS`);
 
+    const otpDisclaimer = getActiveLegalText('disclaimer_firma');
     res.json({ 
       message: `Codigo OTP generado. Expira en ${OTP_EXPIRATION_MINUTES} minutos. [DEMO: Ver consola del servidor para obtener el codigo - En produccion se enviaria por email/SMS]`,
       expires_in_minutes: OTP_EXPIRATION_MINUTES,
-      disclaimer: SIGNATURE_DISCLAIMER
+      disclaimer: otpDisclaimer.content,
+      disclaimer_version: otpDisclaimer.version
     });
   } catch (error) {
     console.error('Error:', error);
@@ -608,13 +600,23 @@ router.get('/:id/pdf', authenticateToken, (req, res) => {
     doc.fontSize(14).text('CLAUSULAS LEGALES', { underline: true });
     doc.moveDown(0.5);
     doc.fontSize(9);
-    doc.text(LEGAL_CLAUSES.liability_limitation, { align: 'justify' });
+    
+    const legalClauses = getLegalClausesForContract();
+    
+    doc.text(`LIMITACION DE RESPONSABILIDAD (v${legalClauses.liability_limitation_version}):`, { continued: false });
+    doc.text(legalClauses.liability_limitation, { align: 'justify' });
     doc.moveDown();
-    doc.text(LEGAL_CLAUSES.applicable_law, { align: 'justify' });
+    doc.text(`LEY APLICABLE (v${legalClauses.applicable_law_version}):`, { continued: false });
+    doc.text(legalClauses.applicable_law, { align: 'justify' });
     doc.moveDown();
-    doc.text(LEGAL_CLAUSES.intermediary, { align: 'justify' });
+    doc.text(`INTERMEDIACION TECNOLOGICA (v${legalClauses.intermediary_version}):`, { continued: false });
+    doc.text(legalClauses.intermediary, { align: 'justify' });
     doc.moveDown();
-    doc.text(LEGAL_CLAUSES.anti_bypass, { align: 'justify' });
+    doc.text(`CLAUSULA ANTI-BYPASS GUEST (v${legalClauses.anti_bypass_guest_version}):`, { continued: false });
+    doc.text(legalClauses.anti_bypass_guest, { align: 'justify' });
+    doc.moveDown();
+    doc.text(`CLAUSULA ANTI-BYPASS HOST (v${legalClauses.anti_bypass_host_version}):`, { continued: false });
+    doc.text(legalClauses.anti_bypass_host, { align: 'justify' });
     doc.moveDown(2);
 
     doc.fontSize(14).text('FIRMAS', { underline: true });
@@ -639,7 +641,8 @@ router.get('/:id/pdf', authenticateToken, (req, res) => {
     }
     doc.moveDown(2);
 
-    doc.fontSize(8).text(SIGNATURE_DISCLAIMER, { align: 'center' });
+    const signatureDisclaimer = getActiveLegalText('disclaimer_firma');
+    doc.fontSize(8).text(`${signatureDisclaimer.content} (v${signatureDisclaimer.version})`, { align: 'center' });
     doc.moveDown();
     doc.text(`Snapshot congelado: ${contract.frozen_snapshot_created_at || 'N/A'}`, { align: 'center' });
 

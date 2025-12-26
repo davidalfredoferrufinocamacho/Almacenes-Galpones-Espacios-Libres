@@ -608,4 +608,240 @@ router.get('/accounting/summary', (req, res) => {
   }
 });
 
+// ==================== GESTION DE TEXTOS LEGALES ====================
+
+const LEGAL_TEXT_TYPES = [
+  'aviso_legal', 'terminos_condiciones', 'privacidad', 'pagos_reembolsos',
+  'intermediacion', 'anti_bypass_guest', 'anti_bypass_host',
+  'disclaimer_contrato', 'disclaimer_firma', 'disclaimer_factura',
+  'liability_limitation', 'applicable_law'
+];
+
+router.get('/legal-texts', (req, res) => {
+  try {
+    const { type, is_active } = req.query;
+    
+    let sql = 'SELECT * FROM legal_texts WHERE 1=1';
+    const params = [];
+
+    if (type) {
+      sql += ' AND type = ?';
+      params.push(type);
+    }
+    if (is_active !== undefined) {
+      sql += ' AND is_active = ?';
+      params.push(is_active === 'true' ? 1 : 0);
+    }
+
+    sql += ' ORDER BY type, version DESC';
+    const texts = db.prepare(sql).all(...params);
+
+    res.json({
+      texts,
+      available_types: LEGAL_TEXT_TYPES
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener textos legales' });
+  }
+});
+
+router.get('/legal-texts/:id', (req, res) => {
+  try {
+    const text = db.prepare('SELECT * FROM legal_texts WHERE id = ?').get(req.params.id);
+    if (!text) {
+      return res.status(404).json({ error: 'Texto legal no encontrado' });
+    }
+    res.json(text);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener texto legal' });
+  }
+});
+
+router.post('/legal-texts', [
+  body('type').isIn(LEGAL_TEXT_TYPES),
+  body('title').notEmpty().trim(),
+  body('content').notEmpty(),
+  body('version').notEmpty().trim(),
+  body('effective_date').optional().isISO8601()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { type, title, content, version, effective_date } = req.body;
+    const id = `legal_${type}_v${version.replace(/\./g, '_')}_${Date.now()}`;
+    const clientInfo = getClientInfo(req);
+
+    db.prepare(`
+      INSERT INTO legal_texts (id, type, title, content, version, is_active, effective_date, created_by)
+      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+    `).run(id, type, title, content, version, effective_date || null, req.user.id);
+
+    logAudit(req.user.id, 'LEGAL_TEXT_CREATED', 'legal_texts', id, null, {
+      type, title, version, effective_date, ...clientInfo
+    }, req);
+
+    res.status(201).json({
+      id,
+      type,
+      version,
+      message: 'Texto legal creado exitosamente. Use activar para ponerlo en vigor.'
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear texto legal' });
+  }
+});
+
+router.put('/legal-texts/:id', [
+  body('title').optional().trim(),
+  body('content').optional(),
+  body('effective_date').optional().isISO8601()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const text = db.prepare('SELECT * FROM legal_texts WHERE id = ?').get(req.params.id);
+    if (!text) {
+      return res.status(404).json({ error: 'Texto legal no encontrado' });
+    }
+
+    if (text.is_active) {
+      return res.status(400).json({ 
+        error: 'No se puede editar un texto legal activo. Desactivelo primero o cree una nueva version.'
+      });
+    }
+
+    const { title, content, effective_date } = req.body;
+    const oldData = { title: text.title, content: text.content, effective_date: text.effective_date };
+
+    db.prepare(`
+      UPDATE legal_texts SET 
+        title = COALESCE(?, title),
+        content = COALESCE(?, content),
+        effective_date = COALESCE(?, effective_date),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(title || null, content || null, effective_date || null, req.params.id);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'LEGAL_TEXT_UPDATED', 'legal_texts', req.params.id, oldData, {
+      title: title || text.title,
+      content: content ? '(contenido actualizado)' : text.content,
+      effective_date: effective_date || text.effective_date,
+      ...clientInfo
+    }, req);
+
+    res.json({ message: 'Texto legal actualizado exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar texto legal' });
+  }
+});
+
+router.put('/legal-texts/:id/activate', (req, res) => {
+  try {
+    const text = db.prepare('SELECT * FROM legal_texts WHERE id = ?').get(req.params.id);
+    if (!text) {
+      return res.status(404).json({ error: 'Texto legal no encontrado' });
+    }
+
+    if (text.is_active) {
+      return res.status(400).json({ error: 'Este texto legal ya esta activo' });
+    }
+
+    db.prepare('UPDATE legal_texts SET is_active = 0 WHERE type = ?').run(text.type);
+
+    db.prepare(`
+      UPDATE legal_texts SET 
+        is_active = 1, 
+        updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).run(req.params.id);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'LEGAL_TEXT_ACTIVATED', 'legal_texts', req.params.id, 
+      { is_active: 0 }, 
+      { is_active: 1, type: text.type, version: text.version, ...clientInfo }, 
+      req
+    );
+
+    res.json({ 
+      message: `Texto legal "${text.title}" version ${text.version} activado exitosamente`,
+      type: text.type,
+      version: text.version
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al activar texto legal' });
+  }
+});
+
+router.put('/legal-texts/:id/deactivate', (req, res) => {
+  try {
+    const text = db.prepare('SELECT * FROM legal_texts WHERE id = ?').get(req.params.id);
+    if (!text) {
+      return res.status(404).json({ error: 'Texto legal no encontrado' });
+    }
+
+    if (!text.is_active) {
+      return res.status(400).json({ error: 'Este texto legal ya esta inactivo' });
+    }
+
+    db.prepare(`
+      UPDATE legal_texts SET 
+        is_active = 0, 
+        updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).run(req.params.id);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'LEGAL_TEXT_DEACTIVATED', 'legal_texts', req.params.id, 
+      { is_active: 1 }, 
+      { is_active: 0, type: text.type, version: text.version, ...clientInfo }, 
+      req
+    );
+
+    res.json({ 
+      message: `Texto legal "${text.title}" version ${text.version} desactivado`,
+      warning: 'No hay version activa para este tipo de texto legal. Active otra version.',
+      type: text.type
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al desactivar texto legal' });
+  }
+});
+
+router.get('/legal-texts/history/:type', (req, res) => {
+  try {
+    if (!LEGAL_TEXT_TYPES.includes(req.params.type)) {
+      return res.status(400).json({ error: 'Tipo de texto legal no valido' });
+    }
+
+    const history = db.prepare(`
+      SELECT id, type, title, version, is_active, effective_date, created_by, created_at, updated_at
+      FROM legal_texts 
+      WHERE type = ?
+      ORDER BY created_at DESC
+    `).all(req.params.type);
+
+    res.json({
+      type: req.params.type,
+      versions: history,
+      total: history.length
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener historial' });
+  }
+});
+
 module.exports = router;
