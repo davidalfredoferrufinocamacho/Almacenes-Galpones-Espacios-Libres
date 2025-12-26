@@ -118,6 +118,7 @@ router.post('/accept-anti-bypass', [
     const { authenticateToken } = require('../middleware/auth');
     authenticateToken(req, res, () => {
       const clientInfo = getClientInfo(req);
+      const legalVersion = 'ANTIBYPASS_HOST_V1';
 
       const stmt = db.prepare(`
         UPDATE users 
@@ -125,13 +126,17 @@ router.post('/accept-anti-bypass', [
             anti_bypass_accepted_at = ?,
             anti_bypass_ip = ?,
             anti_bypass_user_agent = ?,
+            anti_bypass_legal_version = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `);
 
-      stmt.run(clientInfo.timestamp, clientInfo.ip, clientInfo.userAgent, req.user.id);
+      stmt.run(clientInfo.timestamp, clientInfo.ip, clientInfo.userAgent, legalVersion, req.user.id);
 
-      logAudit(req.user.id, 'ANTI_BYPASS_ACCEPTED', 'users', req.user.id, null, clientInfo, req);
+      logAudit(req.user.id, 'ANTI_BYPASS_ACCEPTED', 'users', req.user.id, null, {
+        legal_text_version: legalVersion,
+        ...clientInfo
+      }, req);
 
       res.json({ message: 'Clausula anti-bypass aceptada' });
     });

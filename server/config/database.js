@@ -29,6 +29,7 @@ function initDatabase() {
       anti_bypass_accepted_at TEXT,
       anti_bypass_ip TEXT,
       anti_bypass_user_agent TEXT,
+      anti_bypass_legal_version TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
