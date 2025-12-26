@@ -6,7 +6,7 @@ const PDFDocument = require('pdfkit');
 const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
-const { generateId, generateContractNumber, generateOTP, hashOTP, verifyOTP, getOTPExpiration, isOTPExpired, calculateEndDate, getClientInfo, OTP_EXPIRATION_MINUTES } = require('../utils/helpers');
+const { generateId, generateContractNumber, generateInvoiceNumber, generateOTP, hashOTP, verifyOTP, getOTPExpiration, isOTPExpired, calculateEndDate, getClientInfo, OTP_EXPIRATION_MINUTES } = require('../utils/helpers');
 const { getLegalClausesForContract, getActiveLegalText } = require('../utils/legalTexts');
 const { notifyContractCreated, notifyContractSigned } = require('../utils/notificationsService');
 
@@ -443,23 +443,26 @@ router.post('/:id/extend', authenticateToken, requireRole('GUEST'), [
 
     const extensionAmount = pricePerSqm * contract.sqm * period_quantity;
     
-    // Usar porcentaje de comision congelado del contrato original
     const commissionPercentage = contract.frozen_commission_percentage || 10;
     const commissionAmount = (extensionAmount * commissionPercentage) / 100;
+    const hostPayoutAmount = extensionAmount - commissionAmount;
 
-    const newEndDate = calculateEndDate(contract.end_date, period_type, period_quantity);
+    const lastExtension = db.prepare(`
+      SELECT new_end_date FROM contract_extensions 
+      WHERE contract_id = ? AND status = 'active' 
+      ORDER BY created_at DESC LIMIT 1
+    `).get(contract.id);
+    
+    const currentEndDate = lastExtension ? lastExtension.new_end_date : contract.end_date;
+    const newEndDate = calculateEndDate(currentEndDate, period_type, period_quantity);
 
     const extensionId = generateId();
     const paymentId = generateId();
+    const invoiceId = generateId();
     const clientInfo = getClientInfo(req);
 
-    db.prepare(`
-      INSERT INTO contract_extensions (
-        id, contract_id, original_end_date, new_end_date,
-        extension_period_type, extension_period_quantity,
-        extension_amount, commission_amount, anti_bypass_reaffirmed, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending')
-    `).run(extensionId, contract.id, contract.end_date, newEndDate, period_type, period_quantity, extensionAmount, commissionAmount);
+    const antiBypassText = getActiveLegalText('anti_bypass_guest');
+    const disclaimerText = getActiveLegalText('disclaimer_contrato');
 
     db.prepare(`
       INSERT INTO payments (
@@ -469,16 +472,63 @@ router.post('/:id/extend', authenticateToken, requireRole('GUEST'), [
     `).run(paymentId, contract.reservation_id, req.user.id, extensionAmount, payment_method, clientInfo.ip, clientInfo.userAgent);
 
     db.prepare(`
-      UPDATE contracts SET end_date = ?, status = 'extended', updated_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(newEndDate, contract.id);
+      INSERT INTO contract_extensions (
+        id, contract_id, payment_id, guest_id, host_id,
+        original_end_date, new_end_date,
+        extension_period_type, extension_period_quantity,
+        extension_amount, commission_amount, host_payout_amount,
+        sqm, price_per_sqm_applied,
+        anti_bypass_reaffirmed, frozen_anti_bypass_text, frozen_anti_bypass_version, frozen_anti_bypass_legal_text_id,
+        frozen_disclaimer_text, frozen_disclaimer_version,
+        ip_address, user_agent, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 'active')
+    `).run(
+      extensionId, contract.id, paymentId, contract.guest_id, contract.host_id,
+      currentEndDate, newEndDate,
+      period_type, period_quantity,
+      extensionAmount, commissionAmount, hostPayoutAmount,
+      contract.sqm, pricePerSqm,
+      antiBypassText.content, antiBypassText.version, antiBypassText.id,
+      disclaimerText.content, disclaimerText.version,
+      clientInfo.ip, clientInfo.userAgent
+    );
+
+    const guest = db.prepare('SELECT * FROM users WHERE id = ?').get(contract.guest_id);
+    const guestName = guest.person_type === 'juridica' ? guest.company_name : `${guest.first_name} ${guest.last_name}`;
+    const invoiceDisclaimer = getActiveLegalText('disclaimer_factura');
+    const invoiceNumber = generateInvoiceNumber();
 
     db.prepare(`
-      UPDATE contract_extensions SET status = 'active' WHERE id = ?
-    `).run(extensionId);
+      INSERT INTO invoices (
+        id, payment_id, contract_id, contract_extension_id, guest_id, host_id,
+        invoice_number, invoice_type, recipient_type, recipient_id,
+        amount, total_amount, commission_amount, host_payout_amount,
+        concept, nit, company_name,
+        frozen_disclaimer_text, frozen_disclaimer_version, frozen_disclaimer_legal_text_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'extension', 'guest', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      invoiceId, paymentId, contract.id, extensionId, contract.guest_id, contract.host_id,
+      invoiceNumber, contract.guest_id,
+      extensionAmount, extensionAmount, commissionAmount, hostPayoutAmount,
+      `Extension de contrato ${contract.contract_number} - ${period_quantity} ${period_type}(s)`,
+      guest.nit || guest.ci, guestName,
+      invoiceDisclaimer.content, invoiceDisclaimer.version, invoiceDisclaimer.id
+    );
 
-    logAudit(req.user.id, 'CONTRACT_EXTENDED', 'contract_extensions', extensionId, null, {
-      original_end_date: contract.end_date,
+    logAudit(req.user.id, 'CONTRACT_EXTENSION_CREATED', 'contract_extensions', extensionId, null, {
+      contract_id: contract.id,
+      contract_number: contract.contract_number,
+      original_end_date: currentEndDate,
       new_end_date: newEndDate,
+      amount: extensionAmount,
+      anti_bypass_version: antiBypassText.version,
+      ...clientInfo
+    }, req);
+
+    logAudit(req.user.id, 'INVOICE_GENERATED', 'invoices', invoiceId, null, {
+      invoice_number: invoiceNumber,
+      invoice_type: 'extension',
+      contract_extension_id: extensionId,
       amount: extensionAmount,
       ...clientInfo
     }, req);
@@ -486,9 +536,14 @@ router.post('/:id/extend', authenticateToken, requireRole('GUEST'), [
     res.json({
       extension_id: extensionId,
       payment_id: paymentId,
+      invoice_id: invoiceId,
+      invoice_number: invoiceNumber,
       new_end_date: newEndDate,
       amount: extensionAmount,
-      message: 'Alquiler extendido exitosamente'
+      commission: commissionAmount,
+      host_payout: hostPayoutAmount,
+      message: 'Extension creada exitosamente. El contrato original permanece inmutable.',
+      note: 'La nueva fecha de finalizacion se registra en el anexo, no en el contrato original.'
     });
   } catch (error) {
     console.error('Error:', error);
@@ -682,6 +737,198 @@ router.get('/:id/pdf', authenticateToken, (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al generar PDF del contrato' });
+  }
+});
+
+router.get('/extensions', authenticateToken, (req, res) => {
+  try {
+    let query = `
+      SELECT ce.*, c.contract_number 
+      FROM contract_extensions ce
+      JOIN contracts c ON ce.contract_id = c.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (req.user.role === 'GUEST') {
+      query += ' AND ce.guest_id = ?';
+      params.push(req.user.id);
+    } else if (req.user.role === 'HOST') {
+      query += ' AND ce.host_id = ?';
+      params.push(req.user.id);
+    }
+
+    query += ' ORDER BY ce.created_at DESC';
+    const extensions = db.prepare(query).all(...params);
+
+    res.json({ extensions, total: extensions.length });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener extensiones' });
+  }
+});
+
+router.get('/extensions/:id', authenticateToken, (req, res) => {
+  try {
+    const extension = db.prepare(`
+      SELECT ce.*, c.contract_number, c.frozen_space_data
+      FROM contract_extensions ce
+      JOIN contracts c ON ce.contract_id = c.id
+      WHERE ce.id = ?
+    `).get(req.params.id);
+
+    if (!extension) {
+      return res.status(404).json({ error: 'Extension no encontrada' });
+    }
+
+    if (extension.guest_id !== req.user.id && extension.host_id !== req.user.id && req.user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'No tiene permiso para ver esta extension' });
+    }
+
+    res.json(extension);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener extension' });
+  }
+});
+
+router.get('/extensions/:id/pdf', authenticateToken, (req, res) => {
+  try {
+    const extension = db.prepare(`
+      SELECT ce.*, 
+             c.contract_number, c.frozen_space_data, c.sqm as contract_sqm,
+             ug.first_name as guest_first_name, ug.last_name as guest_last_name,
+             ug.company_name as guest_company, ug.ci as guest_ci, ug.nit as guest_nit,
+             ug.address as guest_address, ug.city as guest_city, ug.person_type as guest_person_type,
+             uh.first_name as host_first_name, uh.last_name as host_last_name,
+             uh.company_name as host_company, uh.ci as host_ci, uh.nit as host_nit,
+             uh.address as host_address, uh.city as host_city, uh.person_type as host_person_type
+      FROM contract_extensions ce
+      JOIN contracts c ON ce.contract_id = c.id
+      JOIN users ug ON ce.guest_id = ug.id
+      JOIN users uh ON ce.host_id = uh.id
+      WHERE ce.id = ?
+    `).get(req.params.id);
+
+    if (!extension) {
+      return res.status(404).json({ error: 'Extension no encontrada' });
+    }
+
+    if (extension.guest_id !== req.user.id && extension.host_id !== req.user.id && req.user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'No tiene permiso para descargar este anexo' });
+    }
+
+    let frozenSpace = {};
+    if (extension.frozen_space_data) {
+      try {
+        frozenSpace = JSON.parse(extension.frozen_space_data);
+      } catch (e) {}
+    }
+
+    const pdfDir = path.join(process.cwd(), 'uploads', 'extensions');
+    if (!fs.existsSync(pdfDir)) {
+      fs.mkdirSync(pdfDir, { recursive: true });
+    }
+
+    const pdfFilename = `anexo_${extension.contract_number}_ext_${extension.id.substring(0, 8)}.pdf`;
+    const pdfPath = path.join(pdfDir, pdfFilename);
+
+    const doc = new PDFDocument({ size: 'LETTER', margin: 50 });
+    const writeStream = fs.createWriteStream(pdfPath);
+    doc.pipe(writeStream);
+
+    doc.fontSize(18).text('ANEXO DE EXTENSION CONTRACTUAL', { align: 'center' });
+    doc.fontSize(10).text('Almacenes, Galpones, Espacios Libres', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`Contrato Original: ${extension.contract_number}`, { align: 'center' });
+    doc.text(`Fecha de Extension: ${extension.created_at}`, { align: 'center' });
+    doc.moveDown(2);
+
+    doc.fontSize(14).text('PARTES DEL CONTRATO', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(11);
+
+    const guestName = extension.guest_person_type === 'juridica' ? extension.guest_company : `${extension.guest_first_name} ${extension.guest_last_name}`;
+    doc.text(`ARRENDATARIO (GUEST): ${guestName}`);
+    doc.text(`  CI/NIT: ${extension.guest_ci || extension.guest_nit || 'N/A'}`);
+    doc.moveDown(0.5);
+
+    const hostName = extension.host_person_type === 'juridica' ? extension.host_company : `${extension.host_first_name} ${extension.host_last_name}`;
+    doc.text(`ARRENDADOR (HOST): ${hostName}`);
+    doc.text(`  CI/NIT: ${extension.host_ci || extension.host_nit || 'N/A'}`);
+    doc.moveDown(1.5);
+
+    doc.fontSize(14).text('ESPACIO OBJETO DEL CONTRATO', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(11);
+    doc.text(`Titulo: ${frozenSpace.title || 'N/A'}`);
+    doc.text(`Ubicacion: ${frozenSpace.address || 'N/A'}, ${frozenSpace.city || ''}, ${frozenSpace.department || ''}`);
+    doc.text(`Metros cuadrados: ${extension.sqm} m2`);
+    doc.moveDown(1.5);
+
+    doc.fontSize(14).text('DETALLES DE LA EXTENSION', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(11);
+    doc.text(`Fecha fin anterior: ${extension.original_end_date}`);
+    doc.text(`Nueva fecha fin: ${extension.new_end_date}`);
+    doc.text(`Periodo extendido: ${extension.extension_period_quantity} ${extension.extension_period_type}(s)`);
+    doc.text(`Precio por m2 aplicado: Bs. ${extension.price_per_sqm_applied.toFixed(2)}`);
+    doc.moveDown(0.5);
+    doc.text(`Monto de extension: Bs. ${extension.extension_amount.toFixed(2)}`);
+    doc.text(`Comision plataforma: Bs. ${extension.commission_amount.toFixed(2)}`);
+    doc.text(`Pago al HOST: Bs. ${extension.host_payout_amount.toFixed(2)}`);
+    doc.moveDown(1.5);
+
+    doc.fontSize(14).text('CLAUSULA ANTI-BYPASS REAFIRMADA', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(9);
+    doc.text(extension.frozen_anti_bypass_text || 'Clausula anti-bypass vigente al momento de la extension.');
+    doc.text(`(Version: ${extension.frozen_anti_bypass_version || 'N/A'})`, { align: 'right' });
+    doc.moveDown(1.5);
+
+    doc.fontSize(14).text('DISCLAIMER LEGAL', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(9);
+    doc.text(extension.frozen_disclaimer_text || 'Disclaimer vigente al momento de la extension.');
+    doc.text(`(Version: ${extension.frozen_disclaimer_version || 'N/A'})`, { align: 'right' });
+    doc.moveDown(1.5);
+
+    doc.fontSize(10).text('NOTA: Este anexo NO modifica el contrato original. El contrato original permanece inmutable.', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(8).text(`Generado: ${new Date().toISOString()}`, { align: 'center' });
+    doc.text(`IP: ${extension.ip_address || 'N/A'}`, { align: 'center' });
+
+    doc.end();
+
+    writeStream.on('finish', () => {
+      const pdfUrl = `/uploads/extensions/${pdfFilename}`;
+
+      db.prepare(`
+        UPDATE contract_extensions SET pdf_url = ? WHERE id = ?
+      `).run(pdfUrl, extension.id);
+
+      const clientInfo = getClientInfo(req);
+      logAudit(req.user.id, 'CONTRACT_EXTENSION_PDF_GENERATED', 'contract_extensions', extension.id, null, {
+        pdf_url: pdfUrl,
+        contract_number: extension.contract_number,
+        ...clientInfo
+      }, req);
+
+      res.download(pdfPath, pdfFilename, (err) => {
+        if (err) {
+          console.error('Error enviando PDF:', err);
+        }
+      });
+    });
+
+    writeStream.on('error', (err) => {
+      console.error('Error escribiendo PDF:', err);
+      res.status(500).json({ error: 'Error al generar PDF' });
+    });
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al generar PDF del anexo' });
   }
 });
 

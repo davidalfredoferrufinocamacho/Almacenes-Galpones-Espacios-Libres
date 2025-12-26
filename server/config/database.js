@@ -251,16 +251,33 @@ function initDatabase() {
     CREATE TABLE IF NOT EXISTS contract_extensions (
       id TEXT PRIMARY KEY,
       contract_id TEXT NOT NULL,
+      payment_id TEXT,
+      guest_id TEXT NOT NULL,
+      host_id TEXT NOT NULL,
       original_end_date TEXT NOT NULL,
       new_end_date TEXT NOT NULL,
       extension_period_type TEXT NOT NULL,
       extension_period_quantity INTEGER NOT NULL,
       extension_amount REAL NOT NULL,
       commission_amount REAL NOT NULL,
+      host_payout_amount REAL NOT NULL,
+      sqm REAL NOT NULL,
+      price_per_sqm_applied REAL NOT NULL,
       anti_bypass_reaffirmed INTEGER DEFAULT 1,
-      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'signed', 'active', 'completed')),
+      frozen_anti_bypass_text TEXT,
+      frozen_anti_bypass_version TEXT,
+      frozen_anti_bypass_legal_text_id TEXT,
+      frozen_disclaimer_text TEXT,
+      frozen_disclaimer_version TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      pdf_url TEXT,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'completed')),
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (contract_id) REFERENCES contracts(id)
+      FOREIGN KEY (contract_id) REFERENCES contracts(id),
+      FOREIGN KEY (payment_id) REFERENCES payments(id),
+      FOREIGN KEY (guest_id) REFERENCES users(id),
+      FOREIGN KEY (host_id) REFERENCES users(id)
     );
 
     -- Tabla de facturas
@@ -268,10 +285,11 @@ function initDatabase() {
       id TEXT PRIMARY KEY,
       payment_id TEXT,
       contract_id TEXT NOT NULL,
+      contract_extension_id TEXT,
       guest_id TEXT NOT NULL,
       host_id TEXT NOT NULL,
       invoice_number TEXT UNIQUE NOT NULL,
-      invoice_type TEXT NOT NULL CHECK(invoice_type IN ('pdf_normal', 'siat')),
+      invoice_type TEXT NOT NULL CHECK(invoice_type IN ('pdf_normal', 'siat', 'extension')),
       recipient_type TEXT NOT NULL CHECK(recipient_type IN ('guest', 'host', 'platform')),
       recipient_id TEXT NOT NULL,
       amount REAL NOT NULL,
@@ -291,6 +309,7 @@ function initDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (payment_id) REFERENCES payments(id),
       FOREIGN KEY (contract_id) REFERENCES contracts(id),
+      FOREIGN KEY (contract_extension_id) REFERENCES contract_extensions(id),
       FOREIGN KEY (guest_id) REFERENCES users(id),
       FOREIGN KEY (host_id) REFERENCES users(id)
     );
