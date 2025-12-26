@@ -54,6 +54,23 @@ Changes by HOST after confirmation do NOT affect existing contracts.
 ### Audit Events
 - `CONTRACT_SNAPSHOT_CREATED` - When deposit is paid
 - `CONTRACT_CREATED` - When contract is generated from frozen data
+- `CONTRACT_PDF_GENERATED` - When PDF is downloaded
+- `REFUND_BLOCKED_CONTRACT_SIGNED` - When refund is blocked post-signature
+
+### Contract PDF Export
+- Endpoint: `GET /contracts/:id/pdf`
+- Generates PDF with:
+  - GUEST and HOST data
+  - Frozen space data
+  - m², prices, period, conditions
+  - Full legal clauses (liability, applicable law, anti-bypass)
+- Saved to: `uploads/contracts/`
+
+### Legal Clauses (LEGAL_CLAUSES constant)
+- `liability_limitation` - Platform limitation of responsibility
+- `applicable_law` - Bolivian law (Civil Code, Commercial Code)
+- `intermediary` - Technological intermediation clause
+- `anti_bypass` - Anti-bypass clause
 
 ## Environment Variables
 - `PORT` - Server port (default: 5000)

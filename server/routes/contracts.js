@@ -1,11 +1,21 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const path = require('path');
+const fs = require('fs');
+const PDFDocument = require('pdfkit');
 const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, generateContractNumber, generateOTP, hashOTP, verifyOTP, getOTPExpiration, isOTPExpired, calculateEndDate, getClientInfo, OTP_EXPIRATION_MINUTES } = require('../utils/helpers');
 
 const SIGNATURE_DISCLAIMER = '[MOCK/DEMO - SIN VALIDEZ LEGAL] Esta firma es una simulacion para propositos de demostración. NO tiene validez legal ni cumple con la legislacion boliviana de firma electronica.';
+
+const LEGAL_CLAUSES = {
+  liability_limitation: 'LIMITACION DE RESPONSABILIDAD: La plataforma "Almacenes, Galpones, Espacios Libres" actua exclusivamente como intermediario tecnologico entre las partes. La plataforma no es propietaria, arrendadora ni arrendataria de los espacios ofrecidos. La plataforma no garantiza la calidad, seguridad, legalidad o idoneidad de los espacios publicados. Las partes liberan expresamente a la plataforma de cualquier responsabilidad derivada del uso del espacio, danos, perdidas o perjuicios que pudieran surgir de la relacion contractual entre HOST y GUEST.',
+  applicable_law: 'LEY APLICABLE: El presente contrato se rige por las leyes del Estado Plurinacional de Bolivia, en particular por el Codigo Civil Boliviano (Decreto Ley No. 12760), el Codigo de Comercio (Decreto Ley No. 14379) y demas normativa aplicable. Para cualquier controversia derivada del presente contrato, las partes se someten a la jurisdiccion de los tribunales ordinarios de Bolivia.',
+  intermediary: 'INTERMEDIACION TECNOLOGICA: La plataforma actua unicamente como intermediario tecnologico facilitando la conexion entre oferentes (HOST) y demandantes (GUEST) de espacios. La plataforma no interviene en la negociacion ni ejecucion del contrato mas alla de su rol de intermediacion.',
+  anti_bypass: 'CLAUSULA ANTI-BYPASS: Las partes se comprometen a realizar todas las transacciones relacionadas con este alquiler exclusivamente a traves de la plataforma. Queda expresamente prohibido contratar, extender o modificar el alquiler fuera de la plataforma, bajo pena de las sanciones establecidas en los terminos de uso.'
+};
 
 const router = express.Router();
 
@@ -92,9 +102,11 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
         duration: reservation.frozen_video_duration
       },
       legal: {
-        jurisdiction: 'Bolivia',
-        intermediary_clause: 'La plataforma actua unicamente como intermediario tecnologico',
-        anti_bypass_clause: 'Queda prohibido contratar fuera de la plataforma'
+        jurisdiction: 'Estado Plurinacional de Bolivia',
+        liability_limitation: LEGAL_CLAUSES.liability_limitation,
+        applicable_law: LEGAL_CLAUSES.applicable_law,
+        intermediary_clause: LEGAL_CLAUSES.intermediary,
+        anti_bypass_clause: LEGAL_CLAUSES.anti_bypass
       },
       snapshot_metadata: {
         created_at: reservation.frozen_snapshot_created_at,
@@ -447,6 +459,184 @@ router.post('/:id/extend', authenticateToken, requireRole('GUEST'), [
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al extender contrato' });
+  }
+});
+
+router.get('/:id/pdf', authenticateToken, (req, res) => {
+  try {
+    const contract = db.prepare(`
+      SELECT c.*, 
+             ug.first_name as guest_first_name, ug.last_name as guest_last_name, 
+             ug.company_name as guest_company, ug.ci as guest_ci, ug.nit as guest_nit,
+             ug.address as guest_address, ug.city as guest_city, ug.person_type as guest_person_type,
+             uh.first_name as host_first_name, uh.last_name as host_last_name,
+             uh.company_name as host_company, uh.ci as host_ci, uh.nit as host_nit,
+             uh.address as host_address, uh.city as host_city, uh.person_type as host_person_type
+      FROM contracts c
+      JOIN users ug ON c.guest_id = ug.id
+      JOIN users uh ON c.host_id = uh.id
+      WHERE c.id = ?
+    `).get(req.params.id);
+
+    if (!contract) {
+      return res.status(404).json({ error: 'Contrato no encontrado' });
+    }
+
+    if (contract.guest_id !== req.user.id && contract.host_id !== req.user.id && req.user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'No tiene permiso para descargar este contrato' });
+    }
+
+    let frozenSpace = {};
+    if (contract.frozen_space_data) {
+      try {
+        frozenSpace = JSON.parse(contract.frozen_space_data);
+      } catch (e) {}
+    }
+
+    let frozenPricing = {};
+    if (contract.frozen_pricing) {
+      try {
+        frozenPricing = JSON.parse(contract.frozen_pricing);
+      } catch (e) {}
+    }
+
+    const pdfDir = path.join(process.cwd(), 'uploads', 'contracts');
+    if (!fs.existsSync(pdfDir)) {
+      fs.mkdirSync(pdfDir, { recursive: true });
+    }
+
+    const pdfFilename = `contrato_${contract.contract_number}.pdf`;
+    const pdfPath = path.join(pdfDir, pdfFilename);
+
+    const doc = new PDFDocument({ size: 'LETTER', margin: 50 });
+    const writeStream = fs.createWriteStream(pdfPath);
+    doc.pipe(writeStream);
+
+    doc.fontSize(18).text('CONTRATO DE ALQUILER TEMPORAL', { align: 'center' });
+    doc.fontSize(10).text('Almacenes, Galpones, Espacios Libres', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`Contrato No: ${contract.contract_number}`, { align: 'center' });
+    doc.text(`Fecha de creacion: ${contract.created_at}`, { align: 'center' });
+    doc.moveDown(2);
+
+    doc.fontSize(14).text('PARTES DEL CONTRATO', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(11);
+    
+    const guestName = contract.guest_person_type === 'juridica' ? contract.guest_company : `${contract.guest_first_name} ${contract.guest_last_name}`;
+    doc.text(`ARRENDATARIO (GUEST): ${guestName}`);
+    doc.text(`  CI/NIT: ${contract.guest_ci || contract.guest_nit || 'N/A'}`);
+    doc.text(`  Direccion: ${contract.guest_address || 'N/A'}, ${contract.guest_city || ''}`);
+    doc.moveDown(0.5);
+
+    const hostName = contract.host_person_type === 'juridica' ? contract.host_company : `${contract.host_first_name} ${contract.host_last_name}`;
+    doc.text(`ARRENDADOR (HOST): ${hostName}`);
+    doc.text(`  CI/NIT: ${contract.host_ci || contract.host_nit || 'N/A'}`);
+    doc.text(`  Direccion: ${contract.host_address || 'N/A'}, ${contract.host_city || ''}`);
+    doc.moveDown(2);
+
+    doc.fontSize(14).text('OBJETO DEL CONTRATO', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(11);
+    doc.text(`Espacio: ${frozenSpace.title || 'N/A'}`);
+    doc.text(`Tipo: ${frozenSpace.space_type || 'N/A'}`);
+    doc.text(`Direccion: ${frozenSpace.address || 'N/A'}, ${frozenSpace.city || ''}`);
+    doc.text(`Descripcion: ${contract.frozen_description || frozenSpace.description || 'N/A'}`);
+    doc.moveDown(2);
+
+    doc.fontSize(14).text('CONDICIONES DEL ALQUILER', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(11);
+    doc.text(`Superficie: ${contract.sqm} m2`);
+    doc.text(`Periodo: ${contract.period_quantity} ${contract.period_type}(s)`);
+    doc.text(`Fecha de inicio: ${contract.start_date}`);
+    doc.text(`Fecha de fin: ${contract.end_date}`);
+    doc.text(`Precio por m2 aplicado: Bs. ${contract.frozen_price_per_sqm_applied || 'N/A'}`);
+    doc.text(`Monto total: Bs. ${contract.total_amount}`);
+    doc.text(`Anticipo pagado: Bs. ${contract.deposit_amount} (${contract.frozen_deposit_percentage || 10}%)`);
+    doc.text(`Comision plataforma: Bs. ${contract.commission_amount} (${contract.frozen_commission_percentage || 10}%)`);
+    doc.text(`Pago neto al HOST: Bs. ${contract.host_payout_amount}`);
+    doc.moveDown(2);
+
+    if (contract.frozen_video_url) {
+      doc.fontSize(14).text('VIDEO DE REFERENCIA', { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(11);
+      doc.text(`URL: ${contract.frozen_video_url}`);
+      doc.text(`Duracion validada: ${contract.frozen_video_duration || 'N/A'} segundos`);
+      doc.moveDown(2);
+    }
+
+    doc.addPage();
+    doc.fontSize(14).text('CLAUSULAS LEGALES', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(9);
+    doc.text(LEGAL_CLAUSES.liability_limitation, { align: 'justify' });
+    doc.moveDown();
+    doc.text(LEGAL_CLAUSES.applicable_law, { align: 'justify' });
+    doc.moveDown();
+    doc.text(LEGAL_CLAUSES.intermediary, { align: 'justify' });
+    doc.moveDown();
+    doc.text(LEGAL_CLAUSES.anti_bypass, { align: 'justify' });
+    doc.moveDown(2);
+
+    doc.fontSize(14).text('FIRMAS', { underline: true });
+    doc.moveDown();
+    doc.fontSize(11);
+    
+    if (contract.guest_signed) {
+      doc.text(`GUEST firmado: SI`);
+      doc.text(`  Fecha: ${contract.guest_signed_at}`);
+      doc.text(`  IP: ${contract.guest_sign_ip}`);
+    } else {
+      doc.text(`GUEST firmado: PENDIENTE`);
+    }
+    doc.moveDown();
+    
+    if (contract.host_signed) {
+      doc.text(`HOST firmado: SI`);
+      doc.text(`  Fecha: ${contract.host_signed_at}`);
+      doc.text(`  IP: ${contract.host_sign_ip}`);
+    } else {
+      doc.text(`HOST firmado: PENDIENTE`);
+    }
+    doc.moveDown(2);
+
+    doc.fontSize(8).text(SIGNATURE_DISCLAIMER, { align: 'center' });
+    doc.moveDown();
+    doc.text(`Snapshot congelado: ${contract.frozen_snapshot_created_at || 'N/A'}`, { align: 'center' });
+
+    doc.end();
+
+    writeStream.on('finish', () => {
+      const pdfUrl = `/uploads/contracts/${pdfFilename}`;
+      
+      db.prepare(`
+        UPDATE contracts SET pdf_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).run(pdfUrl, contract.id);
+
+      const clientInfo = getClientInfo(req);
+      logAudit(req.user.id, 'CONTRACT_PDF_GENERATED', 'contracts', contract.id, null, {
+        pdf_url: pdfUrl,
+        contract_number: contract.contract_number,
+        ...clientInfo
+      }, req);
+
+      res.download(pdfPath, pdfFilename, (err) => {
+        if (err) {
+          console.error('Error enviando PDF:', err);
+        }
+      });
+    });
+
+    writeStream.on('error', (err) => {
+      console.error('Error escribiendo PDF:', err);
+      res.status(500).json({ error: 'Error al generar PDF' });
+    });
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al generar PDF del contrato' });
   }
 });
 
