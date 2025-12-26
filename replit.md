@@ -216,7 +216,51 @@ All official platform communications are channeled through a centralized notific
 - `NOTIFICATION_TEMPLATE_ACTIVATED` - When ADMIN activates template
 - `NOTIFICATION_TEMPLATE_DEACTIVATED` - When ADMIN deactivates template
 
+### Contract Extensions / Annexes (contract_extensions table)
+Extensions do NOT modify the original contract. They create separate annex documents.
+
+**Design Principle:**
+- Original contract remains IMMUTABLE after signing
+- Extensions are stored in `contract_extensions` table as annexes
+- Each extension calculates new end date based on previous extension (or original contract)
+- All legal texts (anti-bypass, disclaimer) are frozen at extension time
+
+**Extension Fields (FROZEN):**
+- `frozen_anti_bypass_text`, `frozen_anti_bypass_version`, `frozen_anti_bypass_legal_text_id`
+- `frozen_disclaimer_text`, `frozen_disclaimer_version`
+- `ip_address`, `user_agent` (captured at creation)
+- `sqm`, `price_per_sqm_applied` (from original contract)
+
+**Endpoints:**
+- `POST /contracts/:id/extend` - Create extension (GUEST only, generates payment + invoice + annex)
+- `GET /contracts/extensions` - List user's extensions
+- `GET /contracts/extensions/:id` - Get extension details
+- `GET /contracts/extensions/:id/pdf` - Download annex PDF
+
+**Extension PDF Contains:**
+- Reference to original contract number
+- Extension period and amounts
+- Frozen anti-bypass clause (reaffirmed)
+- Disclaimer text
+- IP, user-agent, date
+
+**Invoice Generation:**
+- Extensions automatically generate invoices with `invoice_type = 'extension'`
+- Invoices linked via `contract_extension_id` field
+- Frozen disclaimer captured at creation
+
+**Audit Events:**
+- `CONTRACT_EXTENSION_CREATED` - When extension is created
+- `CONTRACT_EXTENSION_PDF_GENERATED` - When annex PDF is downloaded
+- `INVOICE_GENERATED` - With `invoice_type: 'extension'`
+
 ## Recent Changes
+- 2025-12-26: Contract Extension System (PASO 12)
+  - Original contract NO LONGER modified during extension
+  - contract_extensions table stores annexes with frozen legal texts
+  - Automatic invoice generation for extensions
+  - PDF annex endpoint with anti-bypass reaffirmation
+  - Full audit trail for extension operations
 - 2025-12-26: Centralized Notification System (PASO 11)
   - Created notification_templates and notification_log tables
   - Built notificationsService.js with sendNotification() and 10 helper functions
