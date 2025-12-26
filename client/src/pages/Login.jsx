@@ -34,7 +34,7 @@ function Login() {
     <div className="auth-page">
       <div className="auth-container card">
         <h1>Iniciar Sesion</h1>
-        <p className="auth-subtitle">Accede a tu cuenta en AlmacenesBO</p>
+        <p className="auth-subtitle">Accede a tu cuenta</p>
 
         {error && <div className="alert alert-error">{error}</div>}
 

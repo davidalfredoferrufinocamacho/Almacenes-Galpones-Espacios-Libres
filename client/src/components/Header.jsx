@@ -15,7 +15,7 @@ function Header() {
     <header className="header">
       <div className="container header-content">
         <Link to="/" className="logo">
-          <h1>AlmacenesBO</h1>
+          <h1>Almacenes, Galpones, Espacios Libres</h1>
         </Link>
         
         <nav className="nav">

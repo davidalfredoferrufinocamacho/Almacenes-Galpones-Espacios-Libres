@@ -65,7 +65,7 @@ function Register() {
     <div className="auth-page">
       <div className="auth-container auth-register card">
         <h1>Crear Cuenta</h1>
-        <p className="auth-subtitle">Unete a AlmacenesBO</p>
+        <p className="auth-subtitle">Crea tu cuenta en la plataforma</p>
 
         {error && <div className="alert alert-error">{error}</div>}
 

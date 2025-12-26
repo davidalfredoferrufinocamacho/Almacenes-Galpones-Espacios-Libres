@@ -7,7 +7,7 @@ function Footer() {
       <div className="container">
         <div className="footer-content">
           <div className="footer-section">
-            <h3>AlmacenesBO</h3>
+            <h3>Almacenes, Galpones, Espacios Libres</h3>
             <p>Plataforma de intermediacion tecnologica para alquiler de espacios en Bolivia</p>
           </div>
           
@@ -32,7 +32,7 @@ function Footer() {
         </div>
         
         <div className="footer-bottom">
-          <p>2025 AlmacenesBO - Intermediario Tecnologico - Bolivia</p>
+          <p>2025 Almacenes, Galpones, Espacios Libres - Intermediario Tecnologico - Bolivia</p>
           <p className="disclaimer">
             Esta plataforma NO es propietaria de los espacios y NO es parte del contrato de alquiler.
           </p>

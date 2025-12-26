@@ -48,7 +48,7 @@ function Contact() {
           <div className="contact-info card">
             <h2>Informacion</h2>
             <p>
-              <strong>AlmacenesBO</strong> es una plataforma de intermediacion tecnologica
+              <strong>Almacenes, Galpones, Espacios Libres</strong> es una plataforma de intermediacion tecnologica
               para el alquiler temporal de espacios en Bolivia.
             </p>
             <p>
