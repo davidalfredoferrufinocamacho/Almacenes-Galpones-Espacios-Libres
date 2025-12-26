@@ -262,8 +262,10 @@ function initDatabase() {
     -- Tabla de facturas
     CREATE TABLE IF NOT EXISTS invoices (
       id TEXT PRIMARY KEY,
-      payment_id TEXT NOT NULL,
-      contract_id TEXT,
+      payment_id TEXT,
+      contract_id TEXT NOT NULL,
+      guest_id TEXT NOT NULL,
+      host_id TEXT NOT NULL,
       invoice_number TEXT UNIQUE NOT NULL,
       invoice_type TEXT NOT NULL CHECK(invoice_type IN ('pdf_normal', 'siat')),
       recipient_type TEXT NOT NULL CHECK(recipient_type IN ('guest', 'host', 'platform')),
@@ -271,6 +273,8 @@ function initDatabase() {
       amount REAL NOT NULL,
       tax_amount REAL DEFAULT 0,
       total_amount REAL NOT NULL,
+      commission_amount REAL NOT NULL,
+      host_payout_amount REAL NOT NULL,
       concept TEXT NOT NULL,
       nit TEXT,
       company_name TEXT,
@@ -279,7 +283,9 @@ function initDatabase() {
       status TEXT DEFAULT 'issued' CHECK(status IN ('issued', 'cancelled', 'void')),
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (payment_id) REFERENCES payments(id),
-      FOREIGN KEY (contract_id) REFERENCES contracts(id)
+      FOREIGN KEY (contract_id) REFERENCES contracts(id),
+      FOREIGN KEY (guest_id) REFERENCES users(id),
+      FOREIGN KEY (host_id) REFERENCES users(id)
     );
 
     -- Tabla de configuracion del sistema

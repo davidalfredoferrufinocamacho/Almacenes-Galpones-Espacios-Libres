@@ -72,6 +72,14 @@ Changes by HOST after confirmation do NOT affect existing contracts.
 - `intermediary` - Technological intermediation clause
 - `anti_bypass` - Anti-bypass clause
 
+### Invoice Generation (PDF Normal)
+- Endpoint: `POST /invoices/generate/:contract_id` - Generate invoice
+- Endpoint: `GET /invoices/:id/pdf` - Download PDF
+- Endpoint: `GET /invoices/my-invoices` - List user's invoices
+- Saved to: `uploads/invoices/`
+- Audit events: `INVOICE_GENERATED`, `INVOICE_PDF_DOWNLOADED`
+- Note: SIAT not implemented (disclaimer included in PDF)
+
 ## Environment Variables
 - `PORT` - Server port (default: 5000)
 - `JWT_SECRET` - JWT signing secret
