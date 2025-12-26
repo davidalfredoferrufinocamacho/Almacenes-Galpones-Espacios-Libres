@@ -75,22 +75,42 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
       }
     });
 
+    // =====================================================================
+    // FROZEN CONTRACTUAL SNAPSHOT - Copiar datos inmutables desde reservations
+    // IMPORTANTE: Estos datos provienen del snapshot creado al pagar anticipo
+    // NUNCA se leen de la tabla spaces original
+    // =====================================================================
     db.prepare(`
       INSERT INTO contracts (
         id, reservation_id, space_id, guest_id, host_id, contract_number,
-        contract_data, frozen_space_data, frozen_video_url, frozen_description,
+        contract_data,
+        frozen_space_data, frozen_video_url, frozen_video_duration, frozen_description,
+        frozen_pricing, frozen_deposit_percentage, frozen_commission_percentage,
+        frozen_price_per_sqm_applied, frozen_snapshot_created_at,
         sqm, period_type, period_quantity, start_date, end_date,
         total_amount, deposit_amount, commission_amount, host_payout_amount, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     `).run(
       contractId, reservation.id, reservation.space_id, reservation.guest_id, reservation.host_id,
-      contractNumber, contractData, reservation.frozen_space_data, reservation.frozen_video_url,
-      reservation.frozen_description, reservation.sqm_requested, reservation.period_type,
+      contractNumber, contractData,
+      reservation.frozen_space_data, reservation.frozen_video_url, reservation.frozen_video_duration,
+      reservation.frozen_description, reservation.frozen_pricing, reservation.frozen_deposit_percentage,
+      reservation.frozen_commission_percentage, reservation.frozen_price_per_sqm_applied,
+      reservation.frozen_snapshot_created_at,
+      reservation.sqm_requested, reservation.period_type,
       reservation.period_quantity, startDate, endDate, reservation.total_amount,
       reservation.deposit_amount, reservation.commission_amount, hostPayoutAmount
     );
 
-    logAudit(req.user.id, 'CONTRACT_CREATED', 'contracts', contractId, null, { contract_number: contractNumber }, req);
+    const clientInfo = getClientInfo(req);
+    
+    // Registrar creacion de contrato con referencia al snapshot original
+    logAudit(req.user.id, 'CONTRACT_CREATED', 'contracts', contractId, null, { 
+      contract_number: contractNumber,
+      frozen_snapshot_created_at: reservation.frozen_snapshot_created_at,
+      uses_frozen_data: true,
+      ...clientInfo
+    }, req);
 
     res.status(201).json({
       contract_id: contractId,

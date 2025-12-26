@@ -52,14 +52,25 @@ router.post('/deposit', authenticateToken, requireRole('GUEST'), [
     const reservationId = generateId();
     const paymentId = generateId();
     const clientInfo = getClientInfo(req);
+    const snapshotTimestamp = new Date().toISOString();
 
+    // =====================================================================
+    // FROZEN CONTRACTUAL SNAPSHOT - Captura inmutable al momento del pago
+    // IMPORTANTE: Estos datos NUNCA deben leerse de la tabla spaces despues
+    // Cualquier cambio posterior del HOST NO afecta contratos existentes
+    // =====================================================================
+
+    // FROZEN: Datos estructurales del espacio
     const frozenSpaceData = JSON.stringify({
       title: space.title,
-      description: space.description,
       space_type: space.space_type,
+      total_sqm: space.total_sqm,
+      available_sqm_at_confirmation: space.available_sqm,
       address: space.address,
       city: space.city,
       department: space.department,
+      latitude: space.latitude,
+      longitude: space.longitude,
       conditions: {
         is_open: space.is_open,
         has_roof: space.has_roof,
@@ -72,19 +83,51 @@ router.post('/deposit', authenticateToken, requireRole('GUEST'), [
       }
     });
 
+    // FROZEN: Todos los precios por m2 vigentes al momento de confirmacion
+    const frozenPricing = JSON.stringify({
+      price_per_sqm_day: space.price_per_sqm_day,
+      price_per_sqm_week: space.price_per_sqm_week,
+      price_per_sqm_month: space.price_per_sqm_month,
+      price_per_sqm_quarter: space.price_per_sqm_quarter,
+      price_per_sqm_semester: space.price_per_sqm_semester,
+      price_per_sqm_year: space.price_per_sqm_year,
+      captured_at: snapshotTimestamp
+    });
+
     db.prepare(`
       INSERT INTO reservations (
         id, space_id, guest_id, host_id, sqm_requested, period_type, period_quantity,
         total_amount, deposit_percentage, deposit_amount, remaining_amount,
         commission_percentage, commission_amount, status,
-        frozen_space_data, frozen_video_url, frozen_description
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PAID_DEPOSIT_ESCROW', ?, ?, ?)
+        frozen_space_data, frozen_video_url, frozen_video_duration, frozen_description,
+        frozen_pricing, frozen_deposit_percentage, frozen_commission_percentage,
+        frozen_price_per_sqm_applied, frozen_snapshot_created_at,
+        frozen_snapshot_ip, frozen_snapshot_user_agent
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PAID_DEPOSIT_ESCROW', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       reservationId, space_id, req.user.id, space.host_id, sqm_requested, period_type, period_quantity,
       totalAmount, depositPercentage, depositAmount, remainingAmount,
       commissionPercentage, commissionAmount,
-      frozenSpaceData, space.video_url, space.description
+      frozenSpaceData, space.video_url, space.video_duration, space.description,
+      frozenPricing, depositPercentage, commissionPercentage,
+      pricePerSqm, snapshotTimestamp,
+      clientInfo.ip, clientInfo.userAgent
     );
+
+    // Registrar evento de auditoria para snapshot contractual
+    logAudit(req.user.id, 'CONTRACT_SNAPSHOT_CREATED', 'reservations', reservationId, null, {
+      space_id,
+      sqm_requested,
+      period_type,
+      period_quantity,
+      total_amount: totalAmount,
+      price_per_sqm_applied: pricePerSqm,
+      deposit_percentage: depositPercentage,
+      commission_percentage: commissionPercentage,
+      video_duration: space.video_duration,
+      snapshot_timestamp: snapshotTimestamp,
+      ...clientInfo
+    }, req);
 
     db.prepare(`
       INSERT INTO payments (

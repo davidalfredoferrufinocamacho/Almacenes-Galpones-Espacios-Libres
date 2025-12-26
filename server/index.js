@@ -16,6 +16,7 @@ const legalRoutes = require('./routes/legal');
 const contactRoutes = require('./routes/contact');
 
 const { initDatabase } = require('./config/database');
+const { initFrozenDataTriggers } = require('./utils/frozenDataProtection');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,6 +24,7 @@ const PORT = process.env.PORT || 5000;
 app.set('trust proxy', 1);
 
 initDatabase();
+initFrozenDataTriggers();
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,

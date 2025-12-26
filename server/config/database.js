@@ -120,9 +120,20 @@ function initDatabase() {
         'cancelled',
         'refunded'
       )),
-      frozen_space_data TEXT,
-      frozen_video_url TEXT,
-      frozen_description TEXT,
+      -- FROZEN CONTRACTUAL SNAPSHOT: Datos capturados al momento del pago del anticipo
+      -- IMPORTANTE: Estos campos son INMUTABLES despues de la creacion
+      -- Cualquier cambio posterior del HOST NO afecta contratos existentes
+      frozen_space_data TEXT,                    -- FROZEN: JSON con titulo, tipo, ubicacion, condiciones estructurales
+      frozen_video_url TEXT,                     -- FROZEN: URL del video al momento de confirmacion
+      frozen_video_duration INTEGER,             -- FROZEN: Duracion validada del video (30-60s)
+      frozen_description TEXT,                   -- FROZEN: Descripcion del espacio
+      frozen_pricing TEXT,                       -- FROZEN: JSON con todos los precios por m2 vigentes
+      frozen_deposit_percentage REAL,            -- FROZEN: Porcentaje de anticipo aplicado
+      frozen_commission_percentage REAL,         -- FROZEN: Porcentaje de comision aplicado
+      frozen_price_per_sqm_applied REAL,         -- FROZEN: Precio por m2 especifico usado en este contrato
+      frozen_snapshot_created_at TEXT,           -- FROZEN: Timestamp exacto de creacion del snapshot
+      frozen_snapshot_ip TEXT,                   -- FROZEN: IP desde donde se creo el snapshot
+      frozen_snapshot_user_agent TEXT,           -- FROZEN: User-Agent del dispositivo
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (space_id) REFERENCES spaces(id),
@@ -191,9 +202,16 @@ function initDatabase() {
       host_id TEXT NOT NULL,
       contract_number TEXT UNIQUE NOT NULL,
       contract_data TEXT NOT NULL,
-      frozen_space_data TEXT NOT NULL,
-      frozen_video_url TEXT,
-      frozen_description TEXT,
+      -- FROZEN CONTRACTUAL SNAPSHOT: Copiados desde reservations - INMUTABLES
+      frozen_space_data TEXT NOT NULL,           -- FROZEN: Datos estructurales del espacio
+      frozen_video_url TEXT,                     -- FROZEN: URL del video
+      frozen_video_duration INTEGER,             -- FROZEN: Duracion del video validada
+      frozen_description TEXT,                   -- FROZEN: Descripcion del espacio
+      frozen_pricing TEXT,                       -- FROZEN: Todos los precios vigentes
+      frozen_deposit_percentage REAL,            -- FROZEN: Porcentaje anticipo
+      frozen_commission_percentage REAL,         -- FROZEN: Porcentaje comision
+      frozen_price_per_sqm_applied REAL,         -- FROZEN: Precio/m2 usado
+      frozen_snapshot_created_at TEXT,           -- FROZEN: Cuando se creo el snapshot
       sqm REAL NOT NULL,
       period_type TEXT NOT NULL,
       period_quantity INTEGER NOT NULL,
