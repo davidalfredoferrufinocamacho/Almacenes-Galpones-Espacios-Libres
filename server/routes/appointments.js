@@ -126,11 +126,14 @@ router.put('/:id/accept', authenticateToken, requireRole('HOST'), (req, res) => 
       return res.status(400).json({ error: 'El guest debe aceptar la clausula anti-bypass primero' });
     }
 
+    const oldStatus = appointment.status;
+
     db.prepare(`
       UPDATE appointments SET status = 'aceptada', updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(req.params.id);
 
-    logAudit(req.user.id, 'APPOINTMENT_ACCEPTED', 'appointments', req.params.id, null, null, req);
+    logAudit(req.user.id, 'APPOINTMENT_ACCEPTED', 'appointments', req.params.id, 
+      { status: oldStatus }, { status: 'aceptada' }, req);
 
     res.json({ message: 'Cita aceptada' });
   } catch (error) {
@@ -149,11 +152,14 @@ router.put('/:id/reject', authenticateToken, requireRole('HOST'), (req, res) => 
       return res.status(404).json({ error: 'Cita no encontrada' });
     }
 
+    const oldStatus = appointment.status;
+
     db.prepare(`
       UPDATE appointments SET status = 'rechazada', notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(req.body.reason || null, req.params.id);
 
-    logAudit(req.user.id, 'APPOINTMENT_REJECTED', 'appointments', req.params.id, null, { reason: req.body.reason }, req);
+    logAudit(req.user.id, 'APPOINTMENT_REJECTED', 'appointments', req.params.id, 
+      { status: oldStatus }, { status: 'rechazada', reason: req.body.reason }, req);
 
     res.json({ message: 'Cita rechazada' });
   } catch (error) {
@@ -183,6 +189,8 @@ router.put('/:id/reschedule', authenticateToken, requireRole('HOST'), [
 
     const { new_date, new_time, reason } = req.body;
 
+    const oldStatus = appointment.status;
+
     db.prepare(`
       UPDATE appointments SET 
         status = 'reprogramada',
@@ -193,7 +201,9 @@ router.put('/:id/reschedule', authenticateToken, requireRole('HOST'), [
       WHERE id = ?
     `).run(new_date, new_time, reason, req.params.id);
 
-    logAudit(req.user.id, 'APPOINTMENT_RESCHEDULED', 'appointments', req.params.id, appointment, { new_date, new_time, reason }, req);
+    logAudit(req.user.id, 'APPOINTMENT_RESCHEDULED', 'appointments', req.params.id, 
+      { status: oldStatus, scheduled_date: appointment.scheduled_date, scheduled_time: appointment.scheduled_time }, 
+      { status: 'reprogramada', new_date, new_time, reason }, req);
 
     res.json({ message: 'Reprogramacion propuesta' });
   } catch (error) {
@@ -212,6 +222,8 @@ router.put('/:id/accept-reschedule', authenticateToken, requireRole('GUEST'), (r
       return res.status(404).json({ error: 'Cita no encontrada' });
     }
 
+    const oldStatus = appointment.status;
+
     db.prepare(`
       UPDATE appointments SET 
         status = 'aceptada',
@@ -221,7 +233,9 @@ router.put('/:id/accept-reschedule', authenticateToken, requireRole('GUEST'), (r
       WHERE id = ?
     `).run(req.params.id);
 
-    logAudit(req.user.id, 'APPOINTMENT_RESCHEDULE_ACCEPTED', 'appointments', req.params.id, null, null, req);
+    logAudit(req.user.id, 'APPOINTMENT_RESCHEDULE_ACCEPTED', 'appointments', req.params.id, 
+      { status: oldStatus, scheduled_date: appointment.scheduled_date, scheduled_time: appointment.scheduled_time }, 
+      { status: 'aceptada', scheduled_date: appointment.reschedule_date, scheduled_time: appointment.reschedule_time }, req);
 
     res.json({ message: 'Reprogramacion aceptada' });
   } catch (error) {
@@ -240,6 +254,8 @@ router.put('/:id/mark-completed', authenticateToken, requireRole('HOST'), (req, 
       return res.status(404).json({ error: 'Cita no encontrada' });
     }
 
+    const oldStatus = appointment.status;
+
     db.prepare(`
       UPDATE appointments SET status = 'realizada', updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(req.params.id);
@@ -248,7 +264,8 @@ router.put('/:id/mark-completed', authenticateToken, requireRole('HOST'), (req, 
       UPDATE reservations SET status = 'visit_completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(appointment.reservation_id);
 
-    logAudit(req.user.id, 'APPOINTMENT_COMPLETED', 'appointments', req.params.id, null, null, req);
+    logAudit(req.user.id, 'APPOINTMENT_COMPLETED', 'appointments', req.params.id, 
+      { status: oldStatus }, { status: 'realizada' }, req);
 
     res.json({ message: 'Visita marcada como realizada' });
   } catch (error) {
@@ -267,11 +284,14 @@ router.put('/:id/mark-no-show', authenticateToken, requireRole('HOST'), (req, re
       return res.status(404).json({ error: 'Cita no encontrada' });
     }
 
+    const oldStatus = appointment.status;
+
     db.prepare(`
       UPDATE appointments SET status = 'no_asistida', updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(req.params.id);
 
-    logAudit(req.user.id, 'APPOINTMENT_NO_SHOW', 'appointments', req.params.id, null, null, req);
+    logAudit(req.user.id, 'APPOINTMENT_NO_SHOW', 'appointments', req.params.id, 
+      { status: oldStatus }, { status: 'no_asistida' }, req);
 
     res.json({ message: 'Visita marcada como no asistida' });
   } catch (error) {
