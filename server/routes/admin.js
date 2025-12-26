@@ -94,6 +94,53 @@ router.put('/users/:id/status', [
   }
 });
 
+router.put('/users/:id/role', [
+  body('role').isIn(['GUEST', 'HOST', 'ADMIN'])
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const { role: newRole } = req.body;
+    const oldRole = user.role;
+
+    if (oldRole === newRole) {
+      return res.status(400).json({ error: 'El usuario ya tiene este rol' });
+    }
+
+    if (req.params.id === req.user.id && oldRole === 'ADMIN') {
+      return res.status(400).json({ error: 'Un ADMIN no puede degradarse a si mismo' });
+    }
+
+    db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(newRole, req.params.id);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'USER_ROLE_CHANGED', 'users', req.params.id, 
+      { role: oldRole }, 
+      { role: newRole, admin_id: req.user.id, ...clientInfo }, 
+      req
+    );
+
+    res.json({ 
+      message: `Rol actualizado de ${oldRole} a ${newRole}`,
+      user_id: req.params.id,
+      old_role: oldRole,
+      new_role: newRole
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al cambiar rol de usuario' });
+  }
+});
+
 router.get('/spaces', (req, res) => {
   try {
     const spaces = db.prepare(`
