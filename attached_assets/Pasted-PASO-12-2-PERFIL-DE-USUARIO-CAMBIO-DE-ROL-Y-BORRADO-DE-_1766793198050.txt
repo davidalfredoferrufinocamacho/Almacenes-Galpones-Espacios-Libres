@@ -1,0 +1,93 @@
+PASO 12.2 — PERFIL DE USUARIO, CAMBIO DE ROL Y BORRADO DE CUENTA
+
+Objetivo:
+Completar el ciclo de vida del usuario después del registro:
+- perfil visible y editable,
+- rol visible y cambiable (con reglas),
+- cuenta borrable por el propio usuario,
+todo con auditoría.
+
+NO tocar:
+- mapas
+- pagos
+- contratos
+- citas
+
+A) AUDIT — Estado actual (SIN cambiar código)
+1) Indica:
+   - ¿Existe endpoint GET /me o similar para ver perfil completo?
+   - ¿Qué campos devuelve?
+   - ¿Existe endpoint para editar perfil?
+   - ¿Existe alguna forma para que el usuario cambie su rol?
+   - ¿Existe endpoint para borrar la cuenta propia?
+2) Muestra:
+   - endpoints existentes
+   - payloads
+   - limitaciones actuales
+
+B) FIX — PERFIL DE USUARIO
+1) Crear/confirmar endpoint:
+   GET /api/users/me
+   Debe devolver:
+   - id
+   - email
+   - role
+   - person_type
+   - datos personales
+   - estado legal (CI/NIT presentes o no)
+2) Crear/confirmar endpoint:
+   PUT /api/users/me
+   Permite editar datos personales
+   (NO rol, NO email)
+
+C) FIX — CAMBIO DE ROL POR EL USUARIO
+1) Crear endpoint:
+   PUT /api/users/me/role
+2) Reglas:
+   - GUEST ↔ HOST permitido
+   - No puede cambiar a ADMIN
+   - Si tiene contratos activos → BLOQUEADO
+3) Auditoría:
+   USER_ROLE_SELF_CHANGED
+   (user_id, old_role, new_role, IP, user-agent, timestamp)
+
+D) FIX — BORRADO DE CUENTA
+1) Crear endpoint:
+   DELETE /api/users/me
+2) Reglas:
+   - Requiere confirmación explícita (flag confirm=true)
+   - Si tiene:
+     • contratos activos
+     • pagos pendientes
+     → BLOQUEADO
+3) Acción:
+   - Soft delete (deleted_at)
+   - Token invalidado
+4) Auditoría:
+   USER_ACCOUNT_DELETED
+
+E) RE-TEST OBLIGATORIO
+Demostrar:
+1) GET /me devuelve perfil completo
+2) PUT /me edita datos
+3) Cambio de rol GUEST ↔ HOST funciona
+4) Cambio a ADMIN bloqueado
+5) Borrado de cuenta:
+   - bloqueado con contratos
+   - permitido sin contratos
+6) Eventos de auditoría generados
+
+F) Evidencia a entregar
+Devuélveme:
+1) Lista de endpoints finales
+2) Respuestas JSON de cada test
+3) SELECT del usuario mostrando deleted_at
+4) Registros de audit_log:
+   - USER_ROLE_SELF_CHANGED
+   - USER_ACCOUNT_DELETED
+
+Restricciones:
+- NO frontend
+- NO mapas
+- NO GitHub push
+Solo cerrar perfil + cuenta.

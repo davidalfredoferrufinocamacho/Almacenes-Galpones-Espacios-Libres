@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
+const { getClientInfo } = require('../utils/helpers');
 
 const router = express.Router();
 
@@ -96,6 +97,124 @@ router.put('/me/identity', authenticateToken, [
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al actualizar identificacion' });
+  }
+});
+
+router.put('/me/role', authenticateToken, [
+  body('role').isIn(['GUEST', 'HOST'])
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    const { role: newRole } = req.body;
+    const oldRole = user.role;
+
+    if (oldRole === 'ADMIN') {
+      return res.status(400).json({ error: 'Un ADMIN no puede cambiar su rol desde este endpoint' });
+    }
+
+    if (oldRole === newRole) {
+      return res.status(400).json({ error: 'Ya tienes este rol' });
+    }
+
+    const activeContracts = db.prepare(`
+      SELECT COUNT(*) as count FROM contracts 
+      WHERE (guest_id = ? OR host_id = ?) AND status IN ('pending', 'signed', 'active')
+    `).get(req.user.id, req.user.id);
+
+    if (activeContracts.count > 0) {
+      return res.status(400).json({ 
+        error: 'No puedes cambiar de rol mientras tengas contratos activos',
+        active_contracts: activeContracts.count
+      });
+    }
+
+    db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(newRole, req.user.id);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'USER_ROLE_SELF_CHANGED', 'users', req.user.id, 
+      { role: oldRole }, 
+      { role: newRole, ...clientInfo }, 
+      req
+    );
+
+    res.json({ 
+      message: `Rol cambiado de ${oldRole} a ${newRole}`,
+      old_role: oldRole,
+      new_role: newRole
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al cambiar rol' });
+  }
+});
+
+router.delete('/me', authenticateToken, [
+  body('confirm').isBoolean().equals('true')
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Debe enviar confirm=true para confirmar el borrado' });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+
+    if (user.role === 'ADMIN') {
+      return res.status(400).json({ error: 'Un ADMIN no puede eliminar su cuenta desde este endpoint' });
+    }
+
+    const activeContracts = db.prepare(`
+      SELECT COUNT(*) as count FROM contracts 
+      WHERE (guest_id = ? OR host_id = ?) AND status IN ('pending', 'signed', 'active')
+    `).get(req.user.id, req.user.id);
+
+    if (activeContracts.count > 0) {
+      return res.status(400).json({ 
+        error: 'No puedes eliminar tu cuenta mientras tengas contratos activos',
+        active_contracts: activeContracts.count
+      });
+    }
+
+    const pendingPayments = db.prepare(`
+      SELECT COUNT(*) as count FROM payments 
+      WHERE user_id = ? AND status IN ('pending', 'processing')
+    `).get(req.user.id);
+
+    if (pendingPayments.count > 0) {
+      return res.status(400).json({ 
+        error: 'No puedes eliminar tu cuenta mientras tengas pagos pendientes',
+        pending_payments: pendingPayments.count
+      });
+    }
+
+    const deletedAt = new Date().toISOString();
+    db.prepare(`
+      UPDATE users SET 
+        is_active = 0, 
+        deleted_at = ?,
+        updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).run(deletedAt, req.user.id);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'USER_ACCOUNT_DELETED', 'users', req.user.id, null, {
+      deleted_at: deletedAt,
+      ...clientInfo
+    }, req);
+
+    res.json({ 
+      message: 'Cuenta eliminada exitosamente',
+      deleted_at: deletedAt
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar cuenta' });
   }
 });
 
