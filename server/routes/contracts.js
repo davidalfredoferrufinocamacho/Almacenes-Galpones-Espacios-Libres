@@ -304,13 +304,12 @@ router.post('/:id/request-otp', authenticateToken, async (req, res) => {
 
 router.get('/:id', authenticateToken, (req, res) => {
   try {
+    // NO se hace JOIN con spaces - se usa frozen_space_data exclusivamente
     const contract = db.prepare(`
       SELECT c.*, 
-             s.title as space_title,
              ug.first_name as guest_first_name, ug.last_name as guest_last_name, ug.company_name as guest_company,
              uh.first_name as host_first_name, uh.last_name as host_last_name, uh.company_name as host_company
       FROM contracts c
-      JOIN spaces s ON c.space_id = s.id
       JOIN users ug ON c.guest_id = ug.id
       JOIN users uh ON c.host_id = uh.id
       WHERE c.id = ?
@@ -324,7 +323,21 @@ router.get('/:id', authenticateToken, (req, res) => {
       return res.status(403).json({ error: 'No tiene permiso para ver este contrato' });
     }
 
-    res.json(contract);
+    // Extraer space_title desde frozen_space_data (FROZEN, no de tabla spaces)
+    let spaceTitle = null;
+    if (contract.frozen_space_data) {
+      try {
+        const frozenSpace = JSON.parse(contract.frozen_space_data);
+        spaceTitle = frozenSpace.title || null;
+      } catch (e) {
+        spaceTitle = null;
+      }
+    }
+
+    res.json({
+      ...contract,
+      space_title: spaceTitle
+    });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener contrato' });
@@ -352,13 +365,40 @@ router.post('/:id/extend', authenticateToken, requireRole('GUEST'), [
 
     const { period_type, period_quantity, payment_method } = req.body;
 
-    const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(contract.space_id);
-    const priceField = `price_per_sqm_${period_type === 'ano' ? 'year' : period_type === 'dia' ? 'day' : period_type === 'semana' ? 'week' : period_type === 'trimestre' ? 'quarter' : period_type === 'semestre' ? 'semester' : 'month'}`;
-    const pricePerSqm = space[priceField];
+    // =====================================================================
+    // FROZEN PRICING - NO se lee de tabla spaces
+    // Se usa el precio congelado del contrato original
+    // =====================================================================
+    if (!contract.frozen_pricing) {
+      return res.status(400).json({ error: 'El contrato no tiene precios congelados disponibles' });
+    }
+
+    let frozenPricing;
+    try {
+      frozenPricing = JSON.parse(contract.frozen_pricing);
+    } catch (e) {
+      return res.status(400).json({ error: 'Error al leer precios congelados del contrato' });
+    }
+
+    const priceFieldMap = {
+      'dia': 'price_per_sqm_day',
+      'semana': 'price_per_sqm_week',
+      'mes': 'price_per_sqm_month',
+      'trimestre': 'price_per_sqm_quarter',
+      'semestre': 'price_per_sqm_semester',
+      'ano': 'price_per_sqm_year'
+    };
+    const priceField = priceFieldMap[period_type];
+    const pricePerSqm = frozenPricing[priceField];
+
+    if (!pricePerSqm) {
+      return res.status(400).json({ error: `No hay precio congelado para el periodo ${period_type}` });
+    }
 
     const extensionAmount = pricePerSqm * contract.sqm * period_quantity;
-    const commissionConfig = db.prepare("SELECT value FROM system_config WHERE key = 'commission_percentage'").get();
-    const commissionPercentage = commissionConfig ? parseFloat(commissionConfig.value) : 10;
+    
+    // Usar porcentaje de comision congelado del contrato original
+    const commissionPercentage = contract.frozen_commission_percentage || 10;
     const commissionAmount = (extensionAmount * commissionPercentage) / 100;
 
     const newEndDate = calculateEndDate(contract.end_date, period_type, period_quantity);
