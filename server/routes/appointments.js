@@ -92,6 +92,7 @@ router.post('/:id/accept-anti-bypass', authenticateToken, requireRole('GUEST'), 
     }
 
     const clientInfo = getClientInfo(req);
+    const legalVersion = 'ANTIBYPASS_GUEST_V1';
 
     db.prepare(`
       UPDATE appointments SET
@@ -99,11 +100,16 @@ router.post('/:id/accept-anti-bypass', authenticateToken, requireRole('GUEST'), 
         anti_bypass_guest_accepted_at = ?,
         anti_bypass_guest_ip = ?,
         anti_bypass_guest_user_agent = ?,
+        anti_bypass_guest_legal_version = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(clientInfo.timestamp, clientInfo.ip, clientInfo.userAgent, req.params.id);
+    `).run(clientInfo.timestamp, clientInfo.ip, clientInfo.userAgent, legalVersion, req.params.id);
 
-    logAudit(req.user.id, 'APPOINTMENT_ANTIBYPASS_ACCEPTED', 'appointments', req.params.id, null, clientInfo, req);
+    logAudit(req.user.id, 'APPOINTMENT_ANTIBYPASS_ACCEPTED', 'appointments', req.params.id, null, {
+      space_id: appointment.space_id,
+      legal_text_version: legalVersion,
+      ...clientInfo
+    }, req);
 
     res.json({ message: 'Clausula anti-bypass aceptada para la cita' });
   } catch (error) {

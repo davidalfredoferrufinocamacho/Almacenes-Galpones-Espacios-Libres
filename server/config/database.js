@@ -181,6 +181,7 @@ function initDatabase() {
       anti_bypass_guest_accepted_at TEXT,
       anti_bypass_guest_ip TEXT,
       anti_bypass_guest_user_agent TEXT,
+      anti_bypass_guest_legal_version TEXT,
       reschedule_date TEXT,
       reschedule_time TEXT,
       reschedule_reason TEXT,
