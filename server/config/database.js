@@ -353,7 +353,7 @@ function initDatabase() {
 
     -- Crear usuario admin por defecto
     INSERT OR IGNORE INTO users (id, email, password, role, first_name, last_name, is_verified, is_active)
-    VALUES ('admin_default', 'admin@almacenesbo.com', '$2a$10$XQxBtN6BKxT9D5uYLKPMXeOQIlDj2f9mZpKqVvH5nF8rE9tG0sMqi', 'ADMIN', 'Administrador', 'Sistema', 1, 1);
+    VALUES ('admin_default', 'admin@almacenes-galpones-espacios-libres.com', '$2a$10$XQxBtN6BKxT9D5uYLKPMXeOQIlDj2f9mZpKqVvH5nF8rE9tG0sMqi', 'ADMIN', 'Administrador', 'Sistema', 1, 1);
   `);
 
   console.log('Base de datos inicializada correctamente');
