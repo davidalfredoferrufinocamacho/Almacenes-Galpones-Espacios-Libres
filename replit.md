@@ -160,7 +160,70 @@ All `/admin/*` endpoints require JWT + ADMIN role.
 - Escrow held funds
 - Totals: gross income, net after refunds, platform revenue
 
+### Centralized Notification System (notification_templates, notification_log)
+All official platform communications are channeled through a centralized notification service.
+
+**Design Principle:**
+- Prevents direct HOST ↔ GUEST contact outside the platform
+- All communications go through notificationsService.js
+- MOCK implementation (console.log) - no real email/SMS/WhatsApp yet
+
+**Notification Events (12 templates seeded):**
+- `appointment_requested` - When GUEST requests appointment
+- `appointment_accepted` - When HOST accepts appointment
+- `appointment_rejected` - When HOST rejects appointment
+- `appointment_rescheduled` - When appointment is rescheduled
+- `deposit_paid` - When GUEST pays deposit
+- `deposit_received` - When HOST receives deposit notification
+- `remaining_paid` - When GUEST pays remaining balance
+- `remaining_received` - When HOST receives remaining notification
+- `contract_created` - When contract is generated
+- `contract_signed` - When either party signs
+- `refund_processed` - When refund is processed
+- `invoice_generated` - When invoice is created
+
+**Template System:**
+- Templates stored in notification_templates table
+- Variables interpolated using {{variable_name}} syntax
+- Supports: recipient_name, space_title, amount, formatted_amount, date, period, etc.
+- Channels: email, sms, whatsapp (all MOCK)
+- is_active flag controls which templates are used
+
+**Helper Module (server/utils/notificationsService.js):**
+- `sendNotification(recipientId, eventType, channel, variables, req)` - Core function
+- `notifyAppointmentRequested(appointmentId, req)` - Triggers for appointments
+- `notifyAppointmentAccepted/Rejected/Rescheduled(appointmentId, req)`
+- `notifyDepositPaid(reservationId, amount, req)` - Triggers for payments
+- `notifyRemainingPaid(reservationId, amount, req)`
+- `notifyContractCreated(contractId, req)` - Triggers for contracts
+- `notifyContractSigned(contractId, signerRole, req)`
+- `notifyRefundProcessed(refundId, amount, status, req)`
+- `notifyInvoiceGenerated(invoiceId, req)`
+
+**ADMIN Endpoints:**
+- `GET /admin/notification-templates` - List templates (with filters: is_active, event_type, channel)
+- `GET /admin/notification-templates/:id` - Get specific template
+- `POST /admin/notification-templates` - Create new template
+- `PUT /admin/notification-templates/:id` - Update template (subject, body)
+- `PUT /admin/notification-templates/:id/activate` - Activate template
+- `PUT /admin/notification-templates/:id/deactivate` - Deactivate template
+- `GET /admin/notification-log` - View notification history (with filters: recipient_id, event_type, channel, from_date, to_date)
+
+**Audit Events:**
+- `NOTIFICATION_SENT` - Every notification sent (with recipient_id, event_type, channel, template_id)
+- `NOTIFICATION_TEMPLATE_CREATED` - When ADMIN creates template
+- `NOTIFICATION_TEMPLATE_UPDATED` - When ADMIN updates template
+- `NOTIFICATION_TEMPLATE_ACTIVATED` - When ADMIN activates template
+- `NOTIFICATION_TEMPLATE_DEACTIVATED` - When ADMIN deactivates template
+
 ## Recent Changes
+- 2025-12-26: Centralized Notification System (PASO 11)
+  - Created notification_templates and notification_log tables
+  - Built notificationsService.js with sendNotification() and 10 helper functions
+  - Seeded 12 default notification templates for all critical events
+  - Integrated triggers across appointments, payments, contracts, invoices
+  - ADMIN CRUD endpoints for template management
+  - Full audit trail for all notification operations
 - 2025-12-26: Dynamic Legal Text Management System
   - Created versioned legal_texts table with 12 types
   - ADMIN CRUD endpoints with activation/deactivation logic
