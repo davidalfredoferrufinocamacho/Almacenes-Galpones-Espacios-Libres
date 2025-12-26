@@ -21,7 +21,7 @@ router.post('/', authenticateToken, requireRole('GUEST'), [
     const { reservation_id, scheduled_date, scheduled_time } = req.body;
 
     const reservation = db.prepare(`
-      SELECT r.*, s.id as space_id, s.host_id 
+      SELECT r.*, s.id as space_id, s.host_id, s.is_calendar_active, s.status as space_status
       FROM reservations r 
       JOIN spaces s ON r.space_id = s.id
       WHERE r.id = ? AND r.guest_id = ? AND r.status = 'PAID_DEPOSIT_ESCROW'
@@ -29,6 +29,10 @@ router.post('/', authenticateToken, requireRole('GUEST'), [
 
     if (!reservation) {
       return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido' });
+    }
+
+    if (reservation.is_calendar_active !== 1) {
+      return res.status(400).json({ error: 'El calendario del espacio no esta activo. El HOST debe activar el calendario para agendar citas.' });
     }
 
     const availability = db.prepare(`

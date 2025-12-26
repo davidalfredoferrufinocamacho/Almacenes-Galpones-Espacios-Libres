@@ -407,13 +407,22 @@ router.post('/:id/publish', authenticateToken, requireRole('HOST'), (req, res) =
 
 router.get('/:id/availability', (req, res) => {
   try {
+    const space = db.prepare('SELECT status, is_calendar_active FROM spaces WHERE id = ?').get(req.params.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
     const availability = db.prepare(`
       SELECT * FROM host_availability 
       WHERE space_id = ? AND is_blocked = 0
       ORDER BY day_of_week, specific_date, start_time
     `).all(req.params.id);
 
-    res.json(availability);
+    res.json({
+      calendar_active: space.is_calendar_active === 1,
+      space_status: space.status,
+      availability
+    });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener disponibilidad' });
@@ -427,20 +436,151 @@ router.post('/:id/availability', authenticateToken, requireRole('HOST'), (req, r
       return res.status(404).json({ error: 'Espacio no encontrado' });
     }
 
+    if (space.status !== 'published') {
+      return res.status(400).json({ error: 'Solo se puede gestionar disponibilidad de espacios publicados' });
+    }
+
     const { day_of_week, specific_date, start_time, end_time, is_blocked } = req.body;
 
+    if (!start_time || !end_time) {
+      return res.status(400).json({ error: 'Horario de inicio y fin son obligatorios' });
+    }
+
     const availId = generateId();
+    const clientInfo = getClientInfo(req);
+
     db.prepare(`
       INSERT INTO host_availability (id, space_id, day_of_week, specific_date, start_time, end_time, is_blocked)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(availId, req.params.id, day_of_week, specific_date, start_time, end_time, is_blocked ? 1 : 0);
 
-    logAudit(req.user.id, 'AVAILABILITY_UPDATED', 'host_availability', availId, null, req.body, req);
+    logAudit(req.user.id, 'AVAILABILITY_CREATED', 'host_availability', availId, null, {
+      space_id: req.params.id,
+      day_of_week,
+      specific_date,
+      start_time,
+      end_time,
+      is_blocked: is_blocked ? 1 : 0,
+      ...clientInfo
+    }, req);
 
-    res.json({ id: availId, message: 'Disponibilidad actualizada' });
+    res.json({ id: availId, message: 'Disponibilidad creada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear disponibilidad' });
+  }
+});
+
+router.put('/:id/availability/:avail_id', authenticateToken, requireRole('HOST'), (req, res) => {
+  try {
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    if (space.status !== 'published') {
+      return res.status(400).json({ error: 'Solo se puede gestionar disponibilidad de espacios publicados' });
+    }
+
+    const existing = db.prepare('SELECT * FROM host_availability WHERE id = ? AND space_id = ?').get(req.params.avail_id, req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Disponibilidad no encontrada' });
+    }
+
+    const { day_of_week, specific_date, start_time, end_time, is_blocked } = req.body;
+    const clientInfo = getClientInfo(req);
+
+    const oldData = { ...existing };
+
+    db.prepare(`
+      UPDATE host_availability 
+      SET day_of_week = COALESCE(?, day_of_week),
+          specific_date = COALESCE(?, specific_date),
+          start_time = COALESCE(?, start_time),
+          end_time = COALESCE(?, end_time),
+          is_blocked = COALESCE(?, is_blocked)
+      WHERE id = ?
+    `).run(day_of_week, specific_date, start_time, end_time, is_blocked !== undefined ? (is_blocked ? 1 : 0) : null, req.params.avail_id);
+
+    logAudit(req.user.id, 'AVAILABILITY_UPDATED', 'host_availability', req.params.avail_id, oldData, {
+      space_id: req.params.id,
+      day_of_week,
+      specific_date,
+      start_time,
+      end_time,
+      is_blocked,
+      ...clientInfo
+    }, req);
+
+    res.json({ message: 'Disponibilidad actualizada' });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al actualizar disponibilidad' });
+  }
+});
+
+router.delete('/:id/availability/:avail_id', authenticateToken, requireRole('HOST'), (req, res) => {
+  try {
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    if (space.status !== 'published') {
+      return res.status(400).json({ error: 'Solo se puede gestionar disponibilidad de espacios publicados' });
+    }
+
+    const existing = db.prepare('SELECT * FROM host_availability WHERE id = ? AND space_id = ?').get(req.params.avail_id, req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Disponibilidad no encontrada' });
+    }
+
+    const clientInfo = getClientInfo(req);
+    const deletedData = { ...existing };
+
+    db.prepare('DELETE FROM host_availability WHERE id = ?').run(req.params.avail_id);
+
+    logAudit(req.user.id, 'AVAILABILITY_DELETED', 'host_availability', req.params.avail_id, deletedData, {
+      space_id: req.params.id,
+      ...clientInfo
+    }, req);
+
+    res.json({ message: 'Disponibilidad eliminada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar disponibilidad' });
+  }
+});
+
+router.post('/:id/calendar/toggle', authenticateToken, requireRole('HOST'), (req, res) => {
+  try {
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    if (space.status !== 'published') {
+      return res.status(400).json({ error: 'Solo se puede gestionar calendario de espacios publicados' });
+    }
+
+    const newStatus = space.is_calendar_active === 1 ? 0 : 1;
+    const clientInfo = getClientInfo(req);
+
+    db.prepare('UPDATE spaces SET is_calendar_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(newStatus, req.params.id);
+
+    const eventType = newStatus === 1 ? 'CALENDAR_ACTIVATED' : 'CALENDAR_PAUSED';
+    logAudit(req.user.id, eventType, 'spaces', req.params.id, { is_calendar_active: space.is_calendar_active }, {
+      is_calendar_active: newStatus,
+      ...clientInfo
+    }, req);
+
+    res.json({ 
+      is_calendar_active: newStatus === 1,
+      message: newStatus === 1 ? 'Calendario activado' : 'Calendario pausado'
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al cambiar estado del calendario' });
   }
 });
 
