@@ -1,0 +1,119 @@
+.reservations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.reservation-item {
+  padding: 1.5rem;
+}
+
+.reservation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--light);
+}
+
+.reservation-header h3 {
+  color: var(--primary);
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.status-paid-deposit-escrow {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-appointment-scheduled {
+  background: #cce5ff;
+  color: #004085;
+}
+
+.status-visit-completed {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-confirmed {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-contract-signed {
+  background: #28a745;
+  color: white;
+}
+
+.status-refunded {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.reservation-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail .label {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  margin-bottom: 0.25rem;
+}
+
+.detail .amount {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
+.detail .deposit {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.reservation-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.reservation-actions .btn.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.reservation-actions .btn.danger:hover {
+  background: var(--danger);
+  color: white;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.empty-state h3 {
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+  color: var(--text-light);
+  margin-bottom: 1.5rem;
+}

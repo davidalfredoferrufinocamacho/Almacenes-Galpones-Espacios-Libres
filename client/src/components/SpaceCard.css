@@ -1,0 +1,101 @@
+.space-card {
+  display: block;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.space-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.space-image {
+  position: relative;
+  height: 200px;
+  background: var(--light);
+}
+
+.space-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.no-image {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--secondary), var(--primary));
+  color: white;
+  font-size: 1.1rem;
+}
+
+.space-type-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: var(--primary);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.space-info {
+  padding: 1.25rem;
+}
+
+.space-info h3 {
+  font-size: 1.1rem;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+}
+
+.location {
+  color: var(--text-light);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.space-details {
+  margin-bottom: 1rem;
+}
+
+.sqm {
+  display: block;
+  color: var(--secondary);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.conditions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tag {
+  background: var(--light);
+  color: var(--primary);
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+}
+
+.space-price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.price {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.price-label {
+  color: var(--text-light);
+  font-size: 0.85rem;
+}

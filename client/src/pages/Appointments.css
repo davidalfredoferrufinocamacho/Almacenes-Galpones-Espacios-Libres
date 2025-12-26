@@ -1,0 +1,103 @@
+.appointments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.appointment-item {
+  padding: 1.5rem;
+}
+
+.appointment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.appointment-header h3 {
+  color: var(--primary);
+}
+
+.status-solicitada {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-aceptada {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-rechazada {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.status-reprogramada {
+  background: #cce5ff;
+  color: #004085;
+}
+
+.status-realizada {
+  background: #28a745;
+  color: white;
+}
+
+.status-no-asistida {
+  background: #dc3545;
+  color: white;
+}
+
+.appointment-details {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 1rem;
+}
+
+.appointment-details .detail {
+  display: flex;
+  flex-direction: column;
+}
+
+.appointment-details .label {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+.reschedule-info {
+  background: #e8f4fd;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.anti-bypass-notice {
+  background: #fff3cd;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.anti-bypass-notice p {
+  margin-bottom: 0.5rem;
+}
+
+.appointment-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.empty-state h3 {
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+  color: var(--text-light);
+}

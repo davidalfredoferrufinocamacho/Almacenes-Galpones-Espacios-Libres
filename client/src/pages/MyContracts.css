@@ -1,0 +1,117 @@
+.contracts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.contract-item {
+  padding: 1.5rem;
+}
+
+.contract-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.contract-header h3 {
+  color: var(--primary);
+  margin-bottom: 0.25rem;
+}
+
+.contract-number {
+  font-size: 0.85rem;
+  color: var(--text-light);
+}
+
+.status-pending {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-signed, .status-active {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-extended {
+  background: #cce5ff;
+  color: #004085;
+}
+
+.contract-details {
+  background: var(--light);
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-row .amount {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.signatures {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.signature {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.signature.signed {
+  color: var(--success);
+}
+
+.signing-section {
+  background: #e8f4fd;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.signing-section p {
+  margin-bottom: 0.5rem;
+}
+
+.signing-section .btn {
+  margin: 0.5rem;
+}
+
+.contract-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.empty-state h3 {
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+  color: var(--text-light);
+}
