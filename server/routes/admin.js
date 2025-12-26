@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
+const { getClientInfo } = require('../utils/helpers');
 
 const router = express.Router();
 
@@ -232,15 +233,43 @@ router.put('/config/:key', [
 router.get('/audit-log', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
-    const logs = db.prepare(`
+    const { from_date, to_date, user_id, event_type } = req.query;
+    
+    let sql = `
       SELECT a.*, u.email as user_email
       FROM audit_log a
       LEFT JOIN users u ON a.user_id = u.id
-      ORDER BY a.created_at DESC
-      LIMIT ?
-    `).all(limit);
+      WHERE 1=1
+    `;
+    const params = [];
 
-    res.json(logs);
+    if (from_date) {
+      sql += ` AND a.created_at >= ?`;
+      params.push(from_date);
+    }
+    if (to_date) {
+      sql += ` AND a.created_at <= ?`;
+      params.push(to_date + ' 23:59:59');
+    }
+    if (user_id) {
+      sql += ` AND a.user_id = ?`;
+      params.push(user_id);
+    }
+    if (event_type) {
+      sql += ` AND a.event_type = ?`;
+      params.push(event_type);
+    }
+
+    sql += ` ORDER BY a.created_at DESC LIMIT ?`;
+    params.push(limit);
+
+    const logs = db.prepare(sql).all(...params);
+
+    res.json({
+      logs,
+      filters: { from_date, to_date, user_id, event_type, limit },
+      total: logs.length
+    });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener auditoria' });
@@ -286,6 +315,13 @@ router.put('/contact-messages/:id/respond', [
       WHERE id = ?
     `).run(req.body.response, req.user.id, req.params.id);
 
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'ADMIN_CONTACT_RESPONSE', 'contact_messages', req.params.id, 
+      { status: message.status }, 
+      { status: 'responded', response_length: req.body.response.length, ...clientInfo }, 
+      req
+    );
+
     res.json({ message: 'Respuesta enviada' });
   } catch (error) {
     console.error('Error:', error);
@@ -324,10 +360,251 @@ router.get('/export/:type', (req, res) => {
         return res.status(400).json({ error: 'Tipo de exportacion no valido' });
     }
 
-    res.json({ data, exported_at: new Date().toISOString(), type });
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'ADMIN_EXPORT_DATA', 'system', null, null, {
+      export_type: type,
+      records_count: data.length,
+      ...clientInfo
+    }, req);
+
+    res.json({ data, exported_at: new Date().toISOString(), type, records_count: data.length });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al exportar datos' });
+  }
+});
+
+router.get('/payments/deposits/:id', (req, res) => {
+  try {
+    const deposit = db.prepare(`
+      SELECT p.*, 
+             u.email as user_email, u.first_name, u.last_name, u.person_type, u.ci, u.nit,
+             r.space_id, r.total_amount, r.frozen_deposit_amount, r.frozen_commission_percentage,
+             s.title as space_title
+      FROM payments p
+      JOIN users u ON p.user_id = u.id
+      JOIN reservations r ON p.reservation_id = r.id
+      JOIN spaces s ON r.space_id = s.id
+      WHERE p.id = ? AND p.payment_type = 'deposit'
+    `).get(req.params.id);
+
+    if (!deposit) {
+      return res.status(404).json({ error: 'Deposito no encontrado' });
+    }
+
+    res.json(deposit);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener deposito' });
+  }
+});
+
+router.get('/payments/refunds/:id', (req, res) => {
+  try {
+    const refund = db.prepare(`
+      SELECT p.*, 
+             u.email as user_email, u.first_name, u.last_name, u.person_type, u.ci, u.nit,
+             r.space_id, r.total_amount, r.frozen_deposit_amount, r.status as reservation_status,
+             s.title as space_title,
+             c.id as contract_id, c.guest_signed, c.host_signed
+      FROM payments p
+      JOIN users u ON p.user_id = u.id
+      JOIN reservations r ON p.reservation_id = r.id
+      JOIN spaces s ON r.space_id = s.id
+      LEFT JOIN contracts c ON r.id = c.reservation_id
+      WHERE p.id = ? AND p.payment_type = 'refund'
+    `).get(req.params.id);
+
+    if (!refund) {
+      return res.status(404).json({ error: 'Reembolso no encontrado' });
+    }
+
+    res.json(refund);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener reembolso' });
+  }
+});
+
+router.get('/refunds/pending', (req, res) => {
+  try {
+    const pending = db.prepare(`
+      SELECT p.*, 
+             u.email as user_email, u.first_name, u.last_name,
+             r.space_id, r.total_amount, r.frozen_deposit_amount,
+             s.title as space_title
+      FROM payments p
+      JOIN users u ON p.user_id = u.id
+      JOIN reservations r ON p.reservation_id = r.id
+      JOIN spaces s ON r.space_id = s.id
+      WHERE p.payment_type = 'refund' AND p.status = 'pending'
+      ORDER BY p.created_at DESC
+    `).all();
+
+    res.json(pending);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener reembolsos pendientes' });
+  }
+});
+
+router.put('/refunds/:id/review', [
+  body('action').isIn(['approve', 'reject']),
+  body('admin_notes').optional().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const refund = db.prepare(`
+      SELECT p.*, r.id as reservation_id
+      FROM payments p
+      JOIN reservations r ON p.reservation_id = r.id
+      WHERE p.id = ? AND p.payment_type = 'refund'
+    `).get(req.params.id);
+
+    if (!refund) {
+      return res.status(404).json({ error: 'Reembolso no encontrado' });
+    }
+
+    const { action, admin_notes } = req.body;
+    const newStatus = action === 'approve' ? 'approved' : 'rejected';
+    const oldStatus = refund.status;
+
+    db.prepare(`
+      UPDATE payments SET 
+        status = ?,
+        admin_notes = ?,
+        reviewed_at = CURRENT_TIMESTAMP,
+        reviewed_by = ?
+      WHERE id = ?
+    `).run(newStatus, admin_notes || null, req.user.id, req.params.id);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'ADMIN_REFUND_REVIEW', 'payments', req.params.id, 
+      { status: oldStatus }, 
+      { status: newStatus, action, admin_notes, ...clientInfo }, 
+      req
+    );
+
+    res.json({ 
+      message: `Reembolso ${action === 'approve' ? 'aprobado' : 'rechazado'} exitosamente`,
+      status: newStatus,
+      mock_disclaimer: '[MOCK] Este es un estado administrativo. No se ha procesado pago real.'
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al revisar reembolso' });
+  }
+});
+
+router.get('/accounting/summary', (req, res) => {
+  try {
+    const { from_date, to_date } = req.query;
+    
+    let dateFilter = '';
+    const params = [];
+    
+    if (from_date) {
+      dateFilter += ' AND created_at >= ?';
+      params.push(from_date);
+    }
+    if (to_date) {
+      dateFilter += ' AND created_at <= ?';
+      params.push(to_date + ' 23:59:59');
+    }
+
+    const deposits = db.prepare(`
+      SELECT 
+        COUNT(*) as count,
+        COALESCE(SUM(amount), 0) as total
+      FROM payments 
+      WHERE payment_type = 'deposit' AND status = 'completed' ${dateFilter}
+    `).get(...params);
+
+    const remainingPayments = db.prepare(`
+      SELECT 
+        COUNT(*) as count,
+        COALESCE(SUM(amount), 0) as total
+      FROM payments 
+      WHERE payment_type = 'remaining' AND status = 'completed' ${dateFilter}
+    `).get(...params);
+
+    const refunds = db.prepare(`
+      SELECT 
+        COUNT(*) as count,
+        COALESCE(SUM(ABS(amount)), 0) as total
+      FROM payments 
+      WHERE payment_type = 'refund' ${dateFilter}
+    `).get(...params);
+
+    const commissions = db.prepare(`
+      SELECT 
+        COUNT(*) as count,
+        COALESCE(SUM(commission_amount), 0) as total
+      FROM contracts 
+      WHERE status = 'signed' ${dateFilter.replace(/created_at/g, 'contracts.created_at')}
+    `).get(...params);
+
+    const hostPayouts = db.prepare(`
+      SELECT 
+        COUNT(*) as count,
+        COALESCE(SUM(host_payout_amount), 0) as total
+      FROM contracts 
+      WHERE status = 'signed' ${dateFilter.replace(/created_at/g, 'contracts.created_at')}
+    `).get(...params);
+
+    const escrowHeld = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM payments 
+      WHERE escrow_status = 'held'
+    `).get();
+
+    res.json({
+      period: { from_date: from_date || 'all', to_date: to_date || 'all' },
+      summary: {
+        deposits: {
+          count: deposits.count,
+          total: deposits.total,
+          label: 'Anticipos recibidos'
+        },
+        remaining_payments: {
+          count: remainingPayments.count,
+          total: remainingPayments.total,
+          label: 'Pagos finales'
+        },
+        refunds: {
+          count: refunds.count,
+          total: refunds.total,
+          label: 'Reembolsos'
+        },
+        commissions: {
+          count: commissions.count,
+          total: commissions.total,
+          label: 'Comisiones plataforma'
+        },
+        host_payouts: {
+          count: hostPayouts.count,
+          total: hostPayouts.total,
+          label: 'Pagos a anfitriones'
+        },
+        escrow_held: {
+          total: escrowHeld.total,
+          label: 'Fondos en custodia (escrow)'
+        }
+      },
+      totals: {
+        gross_income: deposits.total + remainingPayments.total,
+        net_after_refunds: deposits.total + remainingPayments.total - refunds.total,
+        platform_revenue: commissions.total
+      },
+      generated_at: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al generar resumen contable' });
   }
 });
 

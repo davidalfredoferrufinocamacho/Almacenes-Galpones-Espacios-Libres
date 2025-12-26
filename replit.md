@@ -56,6 +56,10 @@ Changes by HOST after confirmation do NOT affect existing contracts.
 - `CONTRACT_CREATED` - When contract is generated from frozen data
 - `CONTRACT_PDF_GENERATED` - When PDF is downloaded
 - `REFUND_BLOCKED_CONTRACT_SIGNED` - When refund is blocked post-signature
+- `LEGAL_IDENTITY_INCOMPLETE` - When contract/invoice blocked due to missing CI/NIT
+- `ADMIN_EXPORT_DATA` - When ADMIN exports data
+- `ADMIN_CONTACT_RESPONSE` - When ADMIN responds to contact message
+- `ADMIN_REFUND_REVIEW` - When ADMIN approves/rejects refund
 
 ### Contract PDF Export
 - Endpoint: `GET /contracts/:id/pdf`
@@ -88,6 +92,35 @@ Changes by HOST after confirmation do NOT affect existing contracts.
 ```bash
 node server/index.js
 ```
+
+### Admin Panel (ADMIN role only)
+All `/admin/*` endpoints require JWT + ADMIN role.
+
+**Endpoints:**
+- `GET /admin/dashboard` - Platform statistics
+- `GET /admin/users` - List all users
+- `PUT /admin/users/:id/status` - Activate/deactivate user
+- `GET /admin/spaces` - List all spaces
+- `GET /admin/reservations` - List all reservations
+- `GET /admin/contracts` - List all contracts
+- `GET /admin/payments` - List all payments
+- `GET /admin/invoices` - List all invoices
+- `GET /admin/config` - View system configuration
+- `PUT /admin/config/:key` - Update configuration (deposit_percentage, commission_percentage 0-100%)
+- `GET /admin/audit-log` - Audit log with filters (from_date, to_date, user_id, event_type, limit)
+- `GET /admin/contact-messages` - List contact messages
+- `PUT /admin/contact-messages/:id/respond` - Respond to contact message
+- `GET /admin/export/:type` - Export data (users, spaces, reservations, contracts, payments, invoices, audit)
+- `GET /admin/payments/deposits/:id` - Detail of specific deposit
+- `GET /admin/payments/refunds/:id` - Detail of specific refund
+- `GET /admin/refunds/pending` - List pending refunds
+- `PUT /admin/refunds/:id/review` - Approve/reject refund (MOCK, administrative status only)
+- `GET /admin/accounting/summary` - Accounting summary with date filters (from_date, to_date)
+
+**Accounting Summary returns:**
+- Deposits (anticipos), remaining payments, refunds, commissions, host payouts
+- Escrow held funds
+- Totals: gross income, net after refunds, platform revenue
 
 ## Recent Changes
 - 2025-12-26: Complete frozen contractual data implementation

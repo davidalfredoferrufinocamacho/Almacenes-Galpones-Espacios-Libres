@@ -150,15 +150,19 @@ function initDatabase() {
       amount REAL NOT NULL,
       payment_type TEXT NOT NULL CHECK(payment_type IN ('deposit', 'remaining', 'extension', 'refund')),
       payment_method TEXT CHECK(payment_method IN ('card', 'qr')),
-      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'failed', 'refunded')),
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'failed', 'refunded', 'approved', 'rejected')),
       escrow_status TEXT CHECK(escrow_status IN ('held', 'released', 'refunded')),
       transaction_id TEXT,
       ip_address TEXT,
       user_agent TEXT,
+      admin_notes TEXT,
+      reviewed_at TEXT,
+      reviewed_by TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (reservation_id) REFERENCES reservations(id),
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (reviewed_by) REFERENCES users(id)
     );
 
     -- Tabla de citas
