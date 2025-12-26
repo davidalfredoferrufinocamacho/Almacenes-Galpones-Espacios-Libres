@@ -207,6 +207,27 @@ router.post('/remaining/:reservation_id', authenticateToken, requireRole('GUEST'
 
 router.post('/refund/:reservation_id', authenticateToken, requireRole('GUEST'), (req, res) => {
   try {
+    const clientInfo = getClientInfo(req);
+
+    const signedContract = db.prepare(`
+      SELECT id, status, guest_signed, host_signed FROM contracts 
+      WHERE reservation_id = ? AND (guest_signed = 1 OR host_signed = 1)
+    `).get(req.params.reservation_id);
+
+    if (signedContract) {
+      logAudit(req.user.id, 'REFUND_BLOCKED_CONTRACT_SIGNED', 'payments', null, null, {
+        reservation_id: req.params.reservation_id,
+        contract_id: signedContract.id,
+        contract_status: signedContract.status,
+        ...clientInfo
+      }, req);
+
+      return res.status(403).json({ 
+        error: 'Contrato ya firmado - no reembolsable',
+        contract_id: signedContract.id
+      });
+    }
+
     const reservation = db.prepare(`
       SELECT * FROM reservations WHERE id = ? AND guest_id = ? AND status IN ('PAID_DEPOSIT_ESCROW', 'appointment_scheduled', 'visit_completed')
     `).get(req.params.reservation_id, req.user.id);
@@ -223,15 +244,16 @@ router.post('/refund/:reservation_id', authenticateToken, requireRole('GUEST'), 
       return res.status(400).json({ error: 'No se encontro pago de anticipo' });
     }
 
+    const refundAmount = depositPayment.amount;
+
     const refundId = generateId();
-    const clientInfo = getClientInfo(req);
 
     db.prepare(`
       INSERT INTO payments (
         id, reservation_id, user_id, amount, payment_type, payment_method,
         status, ip_address, user_agent
       ) VALUES (?, ?, ?, ?, 'refund', ?, 'completed', ?, ?)
-    `).run(refundId, reservation.id, req.user.id, -depositPayment.amount, depositPayment.payment_method, clientInfo.ip, clientInfo.userAgent);
+    `).run(refundId, reservation.id, req.user.id, -refundAmount, depositPayment.payment_method, clientInfo.ip, clientInfo.userAgent);
 
     db.prepare(`
       UPDATE payments SET escrow_status = 'refunded', updated_at = CURRENT_TIMESTAMP WHERE id = ?
@@ -243,13 +265,14 @@ router.post('/refund/:reservation_id', authenticateToken, requireRole('GUEST'), 
 
     logAudit(req.user.id, 'REFUND_PROCESSED', 'payments', refundId, null, {
       reservation_id: reservation.id,
-      amount: depositPayment.amount,
+      original_deposit_payment_id: depositPayment.id,
+      refund_amount: refundAmount,
       ...clientInfo
     }, req);
 
     res.json({
       refund_id: refundId,
-      amount: depositPayment.amount,
+      amount: refundAmount,
       message: 'Reembolso del 100% procesado exitosamente'
     });
   } catch (error) {
