@@ -4,6 +4,7 @@ const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, getClientInfo } = require('../utils/helpers');
+const { notifyDepositPaid, notifyRemainingPaid, notifyRefundProcessed } = require('../utils/notificationsService');
 
 const router = express.Router();
 
@@ -143,6 +144,8 @@ router.post('/deposit', authenticateToken, requireRole('GUEST'), [
       ...clientInfo
     }, req);
 
+    notifyDepositPaid(reservationId, depositAmount, req);
+
     res.status(201).json({
       reservation_id: reservationId,
       payment_id: paymentId,
@@ -193,6 +196,8 @@ router.post('/remaining/:reservation_id', authenticateToken, requireRole('GUEST'
       amount: reservation.remaining_amount,
       ...clientInfo
     }, req);
+
+    notifyRemainingPaid(reservation.id, reservation.remaining_amount, req);
 
     res.json({
       payment_id: paymentId,
@@ -269,6 +274,8 @@ router.post('/refund/:reservation_id', authenticateToken, requireRole('GUEST'), 
       refund_amount: refundAmount,
       ...clientInfo
     }, req);
+
+    notifyRefundProcessed(refundId, refundAmount, 'approved', req);
 
     res.json({
       refund_id: refundId,

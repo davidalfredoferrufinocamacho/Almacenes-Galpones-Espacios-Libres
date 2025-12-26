@@ -402,9 +402,57 @@ function initDatabase() {
       ('legal_liability_v1', 'liability_limitation', 'Limitacion de Responsabilidad', 'La plataforma Almacenes, Galpones, Espacios Libres actua unicamente como intermediario tecnologico y NO es parte del contrato de alquiler. La plataforma no garantiza la veracidad de la informacion proporcionada por los usuarios, las condiciones fisicas de los espacios, ni el cumplimiento de las obligaciones contractuales entre HOST y GUEST. La responsabilidad de la plataforma se limita exclusivamente al correcto funcionamiento del sistema de intermediacion.', '1.0', 1, '2025-01-01'),
       ('legal_applicable_law_v1', 'applicable_law', 'Ley Aplicable', 'Este contrato se rige por la legislacion boliviana, incluyendo pero no limitado a: Codigo Civil Boliviano, Codigo de Comercio, Ley 164 de Telecomunicaciones, y normativa aplicable del Servicio de Impuestos Nacionales. Para cualquier controversia, las partes se someten a la jurisdiccion de los tribunales ordinarios de Bolivia.', '1.0', 1, '2025-01-01');
 
+    -- Tabla de plantillas de notificaciones
+    CREATE TABLE IF NOT EXISTS notification_templates (
+      id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'email' CHECK(channel IN ('email', 'sms', 'whatsapp')),
+      subject TEXT,
+      body TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Indice para buscar plantilla activa por evento y canal
+    CREATE INDEX IF NOT EXISTS idx_notification_templates_event ON notification_templates(event_type, channel, is_active);
+
+    -- Tabla de log de notificaciones enviadas
+    CREATE TABLE IF NOT EXISTS notification_log (
+      id TEXT PRIMARY KEY,
+      recipient_id TEXT NOT NULL,
+      recipient_email TEXT,
+      event_type TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      template_id TEXT,
+      subject TEXT,
+      body TEXT,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'sent', 'failed')),
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (recipient_id) REFERENCES users(id),
+      FOREIGN KEY (template_id) REFERENCES notification_templates(id)
+    );
+
     -- Crear usuario admin por defecto
     INSERT OR IGNORE INTO users (id, email, password, role, first_name, last_name, is_verified, is_active)
     VALUES ('admin_default', 'admin@almacenes-galpones-espacios-libres.com', '$2a$10$XQxBtN6BKxT9D5uYLKPMXeOQIlDj2f9mZpKqVvH5nF8rE9tG0sMqi', 'ADMIN', 'Administrador', 'Sistema', 1, 1);
+
+    -- Insertar plantillas de notificacion por defecto
+    INSERT OR IGNORE INTO notification_templates (id, event_type, channel, subject, body, is_active) VALUES
+      ('tpl_apt_requested', 'appointment_requested', 'email', 'Nueva solicitud de cita - {{space_title}}', 'Hola {{recipient_name}},\n\nHas recibido una nueva solicitud de cita para tu espacio "{{space_title}}".\n\nFecha: {{scheduled_date}}\nHora: {{scheduled_time}}\n\nIngresa a la plataforma para aceptar o rechazar la solicitud.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_apt_accepted', 'appointment_accepted', 'email', 'Cita confirmada - {{space_title}}', 'Hola {{recipient_name}},\n\nTu cita ha sido confirmada.\n\nEspacio: {{space_title}}\nFecha: {{scheduled_date}}\nHora: {{scheduled_time}}\n\nRecuerda asistir puntualmente.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_apt_rejected', 'appointment_rejected', 'email', 'Cita rechazada - {{space_title}}', 'Hola {{recipient_name}},\n\nLamentamos informarte que tu cita ha sido rechazada.\n\nEspacio: {{space_title}}\nFecha solicitada: {{scheduled_date}}\nMotivo: {{reason}}\n\nPuedes solicitar una nueva cita en otro horario.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_apt_rescheduled', 'appointment_rescheduled', 'email', 'Reprogramacion de cita - {{space_title}}', 'Hola {{recipient_name}},\n\nEl HOST ha propuesto reprogramar tu cita.\n\nEspacio: {{space_title}}\nFecha original: {{original_date}} {{original_time}}\nNueva fecha propuesta: {{new_date}} {{new_time}}\nMotivo: {{reason}}\n\nIngresa a la plataforma para aceptar o rechazar la reprogramacion.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_deposit_paid', 'deposit_paid', 'email', 'Anticipo pagado exitosamente', 'Hola {{recipient_name}},\n\nTu pago de anticipo ha sido procesado exitosamente.\n\nEspacio: {{space_title}}\nMonto pagado: Bs. {{amount}}\nMonto total: Bs. {{total_amount}}\nSaldo pendiente: Bs. {{remaining_amount}}\n\nTu anticipo queda retenido en escrow hasta la confirmacion del contrato.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_deposit_received', 'deposit_received', 'email', 'Anticipo recibido - {{space_title}}', 'Hola {{recipient_name}},\n\nHas recibido un anticipo por tu espacio "{{space_title}}".\n\nMonto: Bs. {{amount}}\n\nEl monto queda retenido en escrow hasta la firma del contrato.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_remaining_paid', 'remaining_paid', 'email', 'Pago de saldo completado', 'Hola {{recipient_name}},\n\nTu pago de saldo ha sido procesado exitosamente.\n\nEspacio: {{space_title}}\nMonto pagado: Bs. {{amount}}\nTotal del contrato: Bs. {{total_amount}}\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_remaining_received', 'remaining_received', 'email', 'Saldo recibido - {{space_title}}', 'Hola {{recipient_name}},\n\nHas recibido el pago del saldo por tu espacio "{{space_title}}".\n\nMonto: Bs. {{amount}}\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_contract_created', 'contract_created', 'email', 'Contrato generado - {{contract_number}}', 'Hola {{recipient_name}},\n\nSe ha generado un contrato para el espacio "{{space_title}}".\n\nNumero de contrato: {{contract_number}}\nVigencia: {{start_date}} al {{end_date}}\nMonto total: Bs. {{total_amount}}\n\nIngresa a la plataforma para revisar y firmar el contrato.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_contract_signed', 'contract_signed', 'email', 'Contrato firmado - {{contract_number}}', 'Hola {{recipient_name}},\n\nEl {{signer_role}} ha firmado el contrato {{contract_number}} para el espacio "{{space_title}}".\n\nEstado de firmas:\n- GUEST: {{guest_signed}}\n- HOST: {{host_signed}}\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_refund_processed', 'refund_processed', 'email', 'Reembolso procesado', 'Hola {{recipient_name}},\n\nTu solicitud de reembolso ha sido procesada.\n\nEspacio: {{space_title}}\nMonto: Bs. {{amount}}\nEstado: {{status}}\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_invoice_generated', 'invoice_generated', 'email', 'Factura generada - {{invoice_number}}', 'Hola {{recipient_name}},\n\nSe ha generado una factura para tu contrato.\n\nNumero de factura: {{invoice_number}}\nContrato: {{contract_number}}\nMonto total: Bs. {{total_amount}}\n\nPuedes descargar el PDF desde la plataforma.\n\nSaludos,\n{{platform_name}}', 1);
   `);
 
   console.log('Base de datos inicializada correctamente');

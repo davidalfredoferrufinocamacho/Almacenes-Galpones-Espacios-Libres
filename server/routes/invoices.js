@@ -7,6 +7,7 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, generateInvoiceNumber, getClientInfo } = require('../utils/helpers');
 const { getInvoiceDisclaimer } = require('../utils/legalTexts');
+const { notifyInvoiceGenerated } = require('../utils/notificationsService');
 
 function validateLegalIdentity(user) {
   if (user.person_type === 'natural') {
@@ -117,6 +118,8 @@ router.post('/generate/:contract_id', authenticateToken, (req, res) => {
       frozen_disclaimer_legal_text_id: invoiceDisclaimer.id,
       ...clientInfo
     }, req);
+
+    notifyInvoiceGenerated(invoiceId, req);
 
     res.status(201).json({
       invoice_id: invoiceId,

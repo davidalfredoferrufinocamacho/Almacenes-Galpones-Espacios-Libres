@@ -8,6 +8,7 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, generateContractNumber, generateOTP, hashOTP, verifyOTP, getOTPExpiration, isOTPExpired, calculateEndDate, getClientInfo, OTP_EXPIRATION_MINUTES } = require('../utils/helpers');
 const { getLegalClausesForContract, getActiveLegalText } = require('../utils/legalTexts');
+const { notifyContractCreated, notifyContractSigned } = require('../utils/notificationsService');
 
 function validateLegalIdentity(user) {
   if (user.person_type === 'natural') {
@@ -174,6 +175,8 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
       ...clientInfo
     }, req);
 
+    notifyContractCreated(contractId, req);
+
     res.status(201).json({
       contract_id: contractId,
       contract_number: contractNumber,
@@ -251,6 +254,7 @@ router.post('/:id/sign', authenticateToken, [
 
       const signDisclaimerGuest = getActiveLegalText('disclaimer_firma');
       logAudit(req.user.id, 'CONTRACT_SIGNED_GUEST_MOCK', 'contracts', req.params.id, null, { ...clientInfo, disclaimer: signDisclaimerGuest.content, disclaimer_version: signDisclaimerGuest.version }, req);
+      notifyContractSigned(req.params.id, 'GUEST', req);
     } else {
       if (contract.host_signed) {
         return res.status(400).json({ error: 'Ya ha firmado este contrato' });
@@ -284,6 +288,7 @@ router.post('/:id/sign', authenticateToken, [
       const signDisclaimerHost = getActiveLegalText('disclaimer_firma');
       logAudit(req.user.id, 'CONTRACT_SIGNED_HOST_MOCK', 'contracts', req.params.id, null, { ...clientInfo, disclaimer: signDisclaimerHost.content, disclaimer_version: signDisclaimerHost.version }, req);
       logAudit(req.user.id, 'ESCROW_RELEASED_MOCK', 'contracts', req.params.id, null, { reservation_id: contract.reservation_id, disclaimer: 'MOCK - Sin transferencia real de fondos' }, req);
+      notifyContractSigned(req.params.id, 'HOST', req);
     }
 
     const updatedContract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);

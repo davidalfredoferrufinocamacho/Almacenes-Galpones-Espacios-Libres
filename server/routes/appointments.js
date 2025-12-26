@@ -5,6 +5,7 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, getClientInfo } = require('../utils/helpers');
 const { getAntiBypassForRole } = require('../utils/legalTexts');
+const { notifyAppointmentRequested, notifyAppointmentAccepted, notifyAppointmentRejected, notifyAppointmentRescheduled } = require('../utils/notificationsService');
 
 const router = express.Router();
 
@@ -75,6 +76,8 @@ router.post('/', authenticateToken, requireRole('GUEST'), [
       scheduled_date, scheduled_time, ...clientInfo
     }, req);
 
+    notifyAppointmentRequested(appointmentId, req);
+
     res.status(201).json({ id: appointmentId, message: 'Cita solicitada' });
   } catch (error) {
     console.error('Error:', error);
@@ -144,6 +147,8 @@ router.put('/:id/accept', authenticateToken, requireRole('HOST'), (req, res) => 
     logAudit(req.user.id, 'APPOINTMENT_ACCEPTED', 'appointments', req.params.id, 
       { status: oldStatus }, { status: 'aceptada' }, req);
 
+    notifyAppointmentAccepted(req.params.id, req);
+
     res.json({ message: 'Cita aceptada' });
   } catch (error) {
     console.error('Error:', error);
@@ -169,6 +174,8 @@ router.put('/:id/reject', authenticateToken, requireRole('HOST'), (req, res) => 
 
     logAudit(req.user.id, 'APPOINTMENT_REJECTED', 'appointments', req.params.id, 
       { status: oldStatus }, { status: 'rechazada', reason: req.body.reason }, req);
+
+    notifyAppointmentRejected(req.params.id, req.body.reason, req);
 
     res.json({ message: 'Cita rechazada' });
   } catch (error) {
@@ -213,6 +220,8 @@ router.put('/:id/reschedule', authenticateToken, requireRole('HOST'), [
     logAudit(req.user.id, 'APPOINTMENT_RESCHEDULED', 'appointments', req.params.id, 
       { status: oldStatus, scheduled_date: appointment.scheduled_date, scheduled_time: appointment.scheduled_time }, 
       { status: 'reprogramada', new_date, new_time, reason }, req);
+
+    notifyAppointmentRescheduled(req.params.id, new_date, new_time, reason, req);
 
     res.json({ message: 'Reprogramacion propuesta' });
   } catch (error) {

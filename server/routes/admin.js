@@ -844,4 +844,209 @@ router.get('/legal-texts/history/:type', (req, res) => {
   }
 });
 
+router.get('/notification-templates', (req, res) => {
+  try {
+    const { is_active, event_type, channel } = req.query;
+    let query = 'SELECT * FROM notification_templates WHERE 1=1';
+    const params = [];
+
+    if (is_active !== undefined) {
+      query += ' AND is_active = ?';
+      params.push(is_active === 'true' ? 1 : 0);
+    }
+    if (event_type) {
+      query += ' AND event_type = ?';
+      params.push(event_type);
+    }
+    if (channel) {
+      query += ' AND channel = ?';
+      params.push(channel);
+    }
+
+    query += ' ORDER BY event_type, channel';
+    const templates = db.prepare(query).all(...params);
+
+    res.json({ templates, total: templates.length });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener plantillas' });
+  }
+});
+
+router.get('/notification-templates/:id', (req, res) => {
+  try {
+    const template = db.prepare('SELECT * FROM notification_templates WHERE id = ?').get(req.params.id);
+    if (!template) {
+      return res.status(404).json({ error: 'Plantilla no encontrada' });
+    }
+    res.json(template);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener plantilla' });
+  }
+});
+
+router.post('/notification-templates', [
+  body('event_type').notEmpty().trim(),
+  body('channel').isIn(['email', 'sms', 'whatsapp']),
+  body('subject').optional().trim(),
+  body('body').notEmpty().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { event_type, channel, subject, body: bodyText } = req.body;
+    const templateId = generateId();
+
+    db.prepare(`
+      INSERT INTO notification_templates (id, event_type, channel, subject, body, is_active)
+      VALUES (?, ?, ?, ?, ?, 1)
+    `).run(templateId, event_type, channel, subject || null, bodyText);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'NOTIFICATION_TEMPLATE_CREATED', 'notification_templates', templateId, null, {
+      event_type, channel, ...clientInfo
+    }, req);
+
+    res.status(201).json({ id: templateId, message: 'Plantilla creada exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear plantilla' });
+  }
+});
+
+router.put('/notification-templates/:id', [
+  body('subject').optional().trim(),
+  body('body').optional().trim()
+], (req, res) => {
+  try {
+    const template = db.prepare('SELECT * FROM notification_templates WHERE id = ?').get(req.params.id);
+    if (!template) {
+      return res.status(404).json({ error: 'Plantilla no encontrada' });
+    }
+
+    const { subject, body: bodyText } = req.body;
+    const updates = [];
+    const params = [];
+
+    if (subject !== undefined) {
+      updates.push('subject = ?');
+      params.push(subject);
+    }
+    if (bodyText !== undefined) {
+      updates.push('body = ?');
+      params.push(bodyText);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay campos para actualizar' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(req.params.id);
+
+    db.prepare(`UPDATE notification_templates SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'NOTIFICATION_TEMPLATE_UPDATED', 'notification_templates', req.params.id, 
+      { subject: template.subject, body: template.body }, 
+      { subject: subject || template.subject, body: bodyText || template.body, ...clientInfo }, 
+      req
+    );
+
+    res.json({ message: 'Plantilla actualizada exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar plantilla' });
+  }
+});
+
+router.put('/notification-templates/:id/activate', (req, res) => {
+  try {
+    const template = db.prepare('SELECT * FROM notification_templates WHERE id = ?').get(req.params.id);
+    if (!template) {
+      return res.status(404).json({ error: 'Plantilla no encontrada' });
+    }
+
+    db.prepare(`
+      UPDATE notification_templates SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(req.params.id);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'NOTIFICATION_TEMPLATE_ACTIVATED', 'notification_templates', req.params.id, 
+      { is_active: 0 }, { is_active: 1, ...clientInfo }, req
+    );
+
+    res.json({ message: 'Plantilla activada exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al activar plantilla' });
+  }
+});
+
+router.put('/notification-templates/:id/deactivate', (req, res) => {
+  try {
+    const template = db.prepare('SELECT * FROM notification_templates WHERE id = ?').get(req.params.id);
+    if (!template) {
+      return res.status(404).json({ error: 'Plantilla no encontrada' });
+    }
+
+    db.prepare(`
+      UPDATE notification_templates SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(req.params.id);
+
+    const clientInfo = getClientInfo(req);
+    logAudit(req.user.id, 'NOTIFICATION_TEMPLATE_DEACTIVATED', 'notification_templates', req.params.id, 
+      { is_active: 1 }, { is_active: 0, ...clientInfo }, req
+    );
+
+    res.json({ message: 'Plantilla desactivada exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al desactivar plantilla' });
+  }
+});
+
+router.get('/notification-log', (req, res) => {
+  try {
+    const { recipient_id, event_type, channel, from_date, to_date, limit = 100 } = req.query;
+    let query = 'SELECT * FROM notification_log WHERE 1=1';
+    const params = [];
+
+    if (recipient_id) {
+      query += ' AND recipient_id = ?';
+      params.push(recipient_id);
+    }
+    if (event_type) {
+      query += ' AND event_type = ?';
+      params.push(event_type);
+    }
+    if (channel) {
+      query += ' AND channel = ?';
+      params.push(channel);
+    }
+    if (from_date) {
+      query += ' AND created_at >= ?';
+      params.push(from_date);
+    }
+    if (to_date) {
+      query += ' AND created_at <= ?';
+      params.push(to_date);
+    }
+
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(parseInt(limit));
+
+    const logs = db.prepare(query).all(...params);
+
+    res.json({ logs, total: logs.length });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener log de notificaciones' });
+  }
+});
+
 module.exports = router;
