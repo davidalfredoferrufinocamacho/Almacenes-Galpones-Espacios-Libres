@@ -1793,4 +1793,749 @@ router.delete('/notification-log/:id', (req, res) => {
   }
 });
 
+// =====================================================
+// CONTABILIDAD PROFESIONAL BOLIVIANA
+// =====================================================
+
+// Constantes fiscales bolivianas
+const TAX_RATES = {
+  IVA: 0.13,      // 13% IVA
+  IT: 0.03,       // 3% Impuesto a las Transacciones
+  IUE: 0.25,      // 25% Impuesto sobre Utilidades
+  RC_IVA: 0.13    // 13% RC-IVA
+};
+
+// Dashboard de contabilidad - Resumen general
+router.get('/accounting/dashboard', (req, res) => {
+  try {
+    const { year, month } = req.query;
+    const currentYear = year || new Date().getFullYear();
+    const currentMonth = month || new Date().getMonth() + 1;
+
+    // Capital total (suma de aportes de socios)
+    const capitalTotal = db.prepare(`
+      SELECT COALESCE(SUM(capital_contributed), 0) as total FROM shareholders WHERE status = 'active'
+    `).get();
+
+    // Ingresos del período (comisiones de la plataforma)
+    const incomePeriod = db.prepare(`
+      SELECT 
+        COALESCE(SUM(commission_amount), 0) as total,
+        COUNT(*) as count
+      FROM invoices 
+      WHERE strftime('%Y', created_at) = ? AND strftime('%m', created_at) = ?
+    `).get(String(currentYear), String(currentMonth).padStart(2, '0'));
+
+    // Ingresos por día (últimos 30 días)
+    const dailyIncome = db.prepare(`
+      SELECT 
+        date(created_at) as date,
+        SUM(commission_amount) as total,
+        COUNT(*) as count
+      FROM invoices 
+      WHERE created_at >= date('now', '-30 days')
+      GROUP BY date(created_at)
+      ORDER BY date DESC
+    `).all();
+
+    // Ingresos mensuales del año
+    const monthlyIncome = db.prepare(`
+      SELECT 
+        strftime('%m', created_at) as month,
+        SUM(commission_amount) as total,
+        COUNT(*) as count
+      FROM invoices 
+      WHERE strftime('%Y', created_at) = ?
+      GROUP BY strftime('%m', created_at)
+      ORDER BY month
+    `).all(String(currentYear));
+
+    // Ingresos trimestrales
+    const quarterlyIncome = db.prepare(`
+      SELECT 
+        CASE 
+          WHEN CAST(strftime('%m', created_at) AS INTEGER) <= 3 THEN 1
+          WHEN CAST(strftime('%m', created_at) AS INTEGER) <= 6 THEN 2
+          WHEN CAST(strftime('%m', created_at) AS INTEGER) <= 9 THEN 3
+          ELSE 4
+        END as quarter,
+        SUM(commission_amount) as total,
+        COUNT(*) as count
+      FROM invoices 
+      WHERE strftime('%Y', created_at) = ?
+      GROUP BY quarter
+      ORDER BY quarter
+    `).all(String(currentYear));
+
+    // Ingresos anuales (últimos 5 años)
+    const annualIncome = db.prepare(`
+      SELECT 
+        strftime('%Y', created_at) as year,
+        SUM(commission_amount) as total,
+        COUNT(*) as count
+      FROM invoices 
+      GROUP BY strftime('%Y', created_at)
+      ORDER BY year DESC
+      LIMIT 5
+    `).all();
+
+    // Cálculo de IVA del mes (13% sobre ingresos)
+    const ivaMonth = db.prepare(`
+      SELECT 
+        COALESCE(SUM(commission_amount), 0) as taxable_base,
+        COALESCE(SUM(commission_amount * 0.13), 0) as iva_debito
+      FROM invoices 
+      WHERE strftime('%Y', created_at) = ? AND strftime('%m', created_at) = ?
+    `).get(String(currentYear), String(currentMonth).padStart(2, '0'));
+
+    // Cálculo de IT del mes (3% sobre transacciones brutas)
+    const itMonth = db.prepare(`
+      SELECT 
+        COALESCE(SUM(total_amount), 0) as transaction_base,
+        COALESCE(SUM(total_amount * 0.03), 0) as it_due
+      FROM invoices 
+      WHERE strftime('%Y', created_at) = ? AND strftime('%m', created_at) = ?
+    `).get(String(currentYear), String(currentMonth).padStart(2, '0'));
+
+    // Resumen de impuestos por trimestre
+    const taxesByQuarter = db.prepare(`
+      SELECT 
+        CASE 
+          WHEN CAST(strftime('%m', created_at) AS INTEGER) <= 3 THEN 1
+          WHEN CAST(strftime('%m', created_at) AS INTEGER) <= 6 THEN 2
+          WHEN CAST(strftime('%m', created_at) AS INTEGER) <= 9 THEN 3
+          ELSE 4
+        END as quarter,
+        SUM(commission_amount * 0.13) as iva_total,
+        SUM(total_amount * 0.03) as it_total
+      FROM invoices 
+      WHERE strftime('%Y', created_at) = ?
+      GROUP BY quarter
+    `).all(String(currentYear));
+
+    // Resumen de impuestos semestral
+    const taxesBySemester = db.prepare(`
+      SELECT 
+        CASE WHEN CAST(strftime('%m', created_at) AS INTEGER) <= 6 THEN 1 ELSE 2 END as semester,
+        SUM(commission_amount * 0.13) as iva_total,
+        SUM(total_amount * 0.03) as it_total
+      FROM invoices 
+      WHERE strftime('%Y', created_at) = ?
+      GROUP BY semester
+    `).all(String(currentYear));
+
+    // Resumen anual de impuestos
+    const taxesAnnual = db.prepare(`
+      SELECT 
+        SUM(commission_amount * 0.13) as iva_total,
+        SUM(total_amount * 0.03) as it_total,
+        SUM(commission_amount) as total_income
+      FROM invoices 
+      WHERE strftime('%Y', created_at) = ?
+    `).get(String(currentYear));
+
+    // Dividendos pagados
+    const dividendsPaid = db.prepare(`
+      SELECT COALESCE(SUM(total_distributed), 0) as total FROM dividend_distributions WHERE status = 'paid'
+    `).get();
+
+    // Socios activos
+    const shareholders = db.prepare(`SELECT COUNT(*) as count FROM shareholders WHERE status = 'active'`).get();
+
+    res.json({
+      capital: {
+        total: capitalTotal.total,
+        shareholders_count: shareholders.count
+      },
+      income: {
+        current_month: incomePeriod,
+        daily: dailyIncome,
+        monthly: monthlyIncome,
+        quarterly: quarterlyIncome,
+        annual: annualIncome
+      },
+      taxes: {
+        current_month: {
+          iva: { taxable_base: ivaMonth.taxable_base, amount: ivaMonth.iva_debito, rate: TAX_RATES.IVA },
+          it: { transaction_base: itMonth.transaction_base, amount: itMonth.it_due, rate: TAX_RATES.IT }
+        },
+        quarterly: taxesByQuarter,
+        semester: taxesBySemester,
+        annual: taxesAnnual
+      },
+      dividends: {
+        total_paid: dividendsPaid.total
+      },
+      tax_rates: TAX_RATES
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener dashboard de contabilidad' });
+  }
+});
+
+// Asientos contables - CRUD
+router.get('/accounting/entries', (req, res) => {
+  try {
+    const { from_date, to_date, entry_type, limit = 100 } = req.query;
+    let query = 'SELECT * FROM accounting_entries WHERE 1=1';
+    const params = [];
+
+    if (from_date) { query += ' AND entry_date >= ?'; params.push(from_date); }
+    if (to_date) { query += ' AND entry_date <= ?'; params.push(to_date); }
+    if (entry_type) { query += ' AND entry_type = ?'; params.push(entry_type); }
+
+    query += ' ORDER BY entry_date DESC, entry_number DESC LIMIT ?';
+    params.push(parseInt(limit));
+
+    const entries = db.prepare(query).all(...params);
+    res.json({ entries, total: entries.length });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener asientos contables' });
+  }
+});
+
+router.post('/accounting/entries', [
+  body('entry_date').notEmpty(),
+  body('description').notEmpty(),
+  body('entry_type').isIn(['income', 'expense', 'transfer', 'tax', 'dividend', 'capital', 'adjustment']),
+  body('debit_account').notEmpty(),
+  body('credit_account').notEmpty(),
+  body('amount').isFloat({ min: 0.01 })
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { entry_date, description, entry_type, debit_account, credit_account, amount, taxable_base, reference_type, reference_id, notes } = req.body;
+    const id = `entry_${Date.now()}`;
+    
+    const lastEntry = db.prepare('SELECT MAX(entry_number) as last FROM accounting_entries WHERE strftime("%Y", entry_date) = strftime("%Y", ?)').get(entry_date);
+    const entry_number = (lastEntry?.last || 0) + 1;
+
+    const iva_amount = (taxable_base || amount) * TAX_RATES.IVA;
+    const it_amount = amount * TAX_RATES.IT;
+
+    db.prepare(`
+      INSERT INTO accounting_entries (id, entry_date, entry_number, description, entry_type, debit_account, credit_account, amount, taxable_base, iva_amount, it_amount, reference_type, reference_id, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, entry_date, entry_number, description, entry_type, debit_account, credit_account, amount, taxable_base || amount, iva_amount, it_amount, reference_type || null, reference_id || null, notes || null, req.user.id);
+
+    logAudit(req.user.id, 'ACCOUNTING_ENTRY_CREATED', 'accounting_entries', id, null, req.body, req);
+    res.status(201).json({ id, entry_number, message: 'Asiento creado exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear asiento contable' });
+  }
+});
+
+router.put('/accounting/entries/:id', (req, res) => {
+  try {
+    const entry = db.prepare('SELECT * FROM accounting_entries WHERE id = ?').get(req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Asiento no encontrado' });
+    if (entry.is_reconciled) return res.status(400).json({ error: 'No se puede editar un asiento conciliado' });
+
+    const { description, amount, notes } = req.body;
+    const updates = [];
+    const params = [];
+
+    if (description) { updates.push('description = ?'); params.push(description); }
+    if (amount) { 
+      updates.push('amount = ?', 'iva_amount = ?', 'it_amount = ?'); 
+      params.push(amount, amount * TAX_RATES.IVA, amount * TAX_RATES.IT); 
+    }
+    if (notes !== undefined) { updates.push('notes = ?'); params.push(notes); }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'No hay cambios' });
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(req.params.id);
+
+    db.prepare(`UPDATE accounting_entries SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    logAudit(req.user.id, 'ACCOUNTING_ENTRY_UPDATED', 'accounting_entries', req.params.id, entry, req.body, req);
+    res.json({ message: 'Asiento actualizado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar asiento' });
+  }
+});
+
+router.delete('/accounting/entries/:id', (req, res) => {
+  try {
+    const entry = db.prepare('SELECT * FROM accounting_entries WHERE id = ?').get(req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Asiento no encontrado' });
+    if (entry.is_reconciled) return res.status(400).json({ error: 'No se puede eliminar un asiento conciliado' });
+
+    db.prepare('DELETE FROM accounting_entries WHERE id = ?').run(req.params.id);
+    logAudit(req.user.id, 'ACCOUNTING_ENTRY_DELETED', 'accounting_entries', req.params.id, entry, null, req);
+    res.json({ message: 'Asiento eliminado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar asiento' });
+  }
+});
+
+// Períodos fiscales
+router.get('/accounting/tax-periods', (req, res) => {
+  try {
+    const { year, tax_type, status } = req.query;
+    let query = 'SELECT * FROM tax_periods WHERE 1=1';
+    const params = [];
+
+    if (year) { query += ' AND year = ?'; params.push(parseInt(year)); }
+    if (tax_type) { query += ' AND tax_type = ?'; params.push(tax_type); }
+    if (status) { query += ' AND status = ?'; params.push(status); }
+
+    query += ' ORDER BY year DESC, month DESC';
+    const periods = db.prepare(query).all(...params);
+    res.json({ periods });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener períodos fiscales' });
+  }
+});
+
+router.post('/accounting/tax-periods', [
+  body('tax_type').isIn(['IVA', 'IT', 'IUE', 'RC-IVA']),
+  body('year').isInt({ min: 2020 }),
+  body('month').optional().isInt({ min: 1, max: 12 })
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { tax_type, year, month, quarter, semester } = req.body;
+    const id = `tax_${tax_type}_${year}_${month || quarter || semester || 'annual'}_${Date.now()}`;
+    
+    let period_type = 'annual';
+    let start_date, end_date, due_date;
+
+    if (month) {
+      period_type = 'monthly';
+      start_date = `${year}-${String(month).padStart(2, '0')}-01`;
+      end_date = new Date(year, month, 0).toISOString().split('T')[0];
+      due_date = `${year}-${String(month + 1 > 12 ? 1 : month + 1).padStart(2, '0')}-15`;
+    } else if (quarter) {
+      period_type = 'quarterly';
+      const startMonth = (quarter - 1) * 3 + 1;
+      start_date = `${year}-${String(startMonth).padStart(2, '0')}-01`;
+      end_date = new Date(year, startMonth + 2, 0).toISOString().split('T')[0];
+      due_date = `${year}-${String(startMonth + 3 > 12 ? startMonth + 3 - 12 : startMonth + 3).padStart(2, '0')}-15`;
+    } else {
+      start_date = `${year}-01-01`;
+      end_date = `${year}-12-31`;
+      due_date = `${year + 1}-04-30`;
+    }
+
+    const tax_rate = TAX_RATES[tax_type] || 0.13;
+
+    db.prepare(`
+      INSERT INTO tax_periods (id, period_type, tax_type, year, month, quarter, semester, start_date, end_date, tax_rate, due_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, period_type, tax_type, year, month || null, quarter || null, semester || null, start_date, end_date, tax_rate, due_date);
+
+    logAudit(req.user.id, 'TAX_PERIOD_CREATED', 'tax_periods', id, null, req.body, req);
+    res.status(201).json({ id, message: 'Período fiscal creado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear período fiscal' });
+  }
+});
+
+router.put('/accounting/tax-periods/:id', (req, res) => {
+  try {
+    const period = db.prepare('SELECT * FROM tax_periods WHERE id = ?').get(req.params.id);
+    if (!period) return res.status(404).json({ error: 'Período no encontrado' });
+
+    const { status, taxable_base, tax_credits, declaration_number, declaration_date, notes } = req.body;
+    const updates = [];
+    const params = [];
+
+    if (status) { updates.push('status = ?'); params.push(status); }
+    if (taxable_base !== undefined) { 
+      updates.push('taxable_base = ?', 'tax_calculated = ?', 'tax_due = ?'); 
+      const taxCalc = taxable_base * period.tax_rate;
+      const taxDue = taxCalc - (tax_credits || period.tax_credits || 0);
+      params.push(taxable_base, taxCalc, taxDue); 
+    }
+    if (tax_credits !== undefined) { updates.push('tax_credits = ?'); params.push(tax_credits); }
+    if (declaration_number) { updates.push('declaration_number = ?'); params.push(declaration_number); }
+    if (declaration_date) { updates.push('declaration_date = ?'); params.push(declaration_date); }
+    if (notes !== undefined) { updates.push('notes = ?'); params.push(notes); }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'No hay cambios' });
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(req.params.id);
+
+    db.prepare(`UPDATE tax_periods SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    logAudit(req.user.id, 'TAX_PERIOD_UPDATED', 'tax_periods', req.params.id, period, req.body, req);
+    res.json({ message: 'Período actualizado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar período' });
+  }
+});
+
+router.delete('/accounting/tax-periods/:id', (req, res) => {
+  try {
+    const period = db.prepare('SELECT * FROM tax_periods WHERE id = ?').get(req.params.id);
+    if (!period) return res.status(404).json({ error: 'Período no encontrado' });
+    if (period.status === 'paid' || period.status === 'closed') {
+      return res.status(400).json({ error: 'No se puede eliminar un período pagado o cerrado' });
+    }
+
+    db.prepare('DELETE FROM tax_periods WHERE id = ?').run(req.params.id);
+    logAudit(req.user.id, 'TAX_PERIOD_DELETED', 'tax_periods', req.params.id, period, null, req);
+    res.json({ message: 'Período eliminado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar período' });
+  }
+});
+
+// Pagos de impuestos
+router.get('/accounting/tax-payments', (req, res) => {
+  try {
+    const payments = db.prepare(`
+      SELECT tp.*, per.tax_type, per.year, per.month, per.period_type
+      FROM tax_payments tp
+      LEFT JOIN tax_periods per ON tp.tax_period_id = per.id
+      ORDER BY tp.payment_date DESC
+    `).all();
+    res.json({ payments });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener pagos de impuestos' });
+  }
+});
+
+router.post('/accounting/tax-payments', [
+  body('tax_period_id').notEmpty(),
+  body('payment_date').notEmpty(),
+  body('amount').isFloat({ min: 0.01 })
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { tax_period_id, payment_date, amount, payment_method, bank_name, transaction_number, voucher_number, notes } = req.body;
+    const id = `taxpay_${Date.now()}`;
+
+    db.prepare(`
+      INSERT INTO tax_payments (id, tax_period_id, payment_date, amount, payment_method, bank_name, transaction_number, voucher_number, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, tax_period_id, payment_date, amount, payment_method || null, bank_name || null, transaction_number || null, voucher_number || null, notes || null, req.user.id);
+
+    // Actualizar el período con el pago
+    db.prepare('UPDATE tax_periods SET tax_paid = tax_paid + ?, status = CASE WHEN tax_paid + ? >= tax_due THEN "paid" ELSE status END WHERE id = ?')
+      .run(amount, amount, tax_period_id);
+
+    logAudit(req.user.id, 'TAX_PAYMENT_CREATED', 'tax_payments', id, null, req.body, req);
+    res.status(201).json({ id, message: 'Pago registrado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al registrar pago' });
+  }
+});
+
+router.delete('/accounting/tax-payments/:id', (req, res) => {
+  try {
+    const payment = db.prepare('SELECT * FROM tax_payments WHERE id = ?').get(req.params.id);
+    if (!payment) return res.status(404).json({ error: 'Pago no encontrado' });
+
+    db.prepare('UPDATE tax_periods SET tax_paid = tax_paid - ? WHERE id = ?').run(payment.amount, payment.tax_period_id);
+    db.prepare('DELETE FROM tax_payments WHERE id = ?').run(req.params.id);
+    logAudit(req.user.id, 'TAX_PAYMENT_DELETED', 'tax_payments', req.params.id, payment, null, req);
+    res.json({ message: 'Pago eliminado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar pago' });
+  }
+});
+
+// Socios/Accionistas
+router.get('/accounting/shareholders', (req, res) => {
+  try {
+    const shareholders = db.prepare('SELECT * FROM shareholders ORDER BY share_percentage DESC').all();
+    res.json({ shareholders });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener socios' });
+  }
+});
+
+router.post('/accounting/shareholders', [
+  body('name').notEmpty(),
+  body('share_percentage').isFloat({ min: 0, max: 100 })
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { name, document_type, document_number, email, phone, share_percentage, capital_contributed } = req.body;
+    const id = `shareholder_${Date.now()}`;
+
+    db.prepare(`
+      INSERT INTO shareholders (id, name, document_type, document_number, email, phone, share_percentage, capital_contributed)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, document_type || null, document_number || null, email || null, phone || null, share_percentage, capital_contributed || 0);
+
+    logAudit(req.user.id, 'SHAREHOLDER_CREATED', 'shareholders', id, null, req.body, req);
+    res.status(201).json({ id, message: 'Socio registrado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al registrar socio' });
+  }
+});
+
+router.put('/accounting/shareholders/:id', (req, res) => {
+  try {
+    const shareholder = db.prepare('SELECT * FROM shareholders WHERE id = ?').get(req.params.id);
+    if (!shareholder) return res.status(404).json({ error: 'Socio no encontrado' });
+
+    const { name, document_type, document_number, email, phone, share_percentage, capital_contributed, status } = req.body;
+    const updates = [];
+    const params = [];
+
+    if (name) { updates.push('name = ?'); params.push(name); }
+    if (document_type) { updates.push('document_type = ?'); params.push(document_type); }
+    if (document_number) { updates.push('document_number = ?'); params.push(document_number); }
+    if (email !== undefined) { updates.push('email = ?'); params.push(email); }
+    if (phone !== undefined) { updates.push('phone = ?'); params.push(phone); }
+    if (share_percentage !== undefined) { updates.push('share_percentage = ?'); params.push(share_percentage); }
+    if (capital_contributed !== undefined) { updates.push('capital_contributed = ?'); params.push(capital_contributed); }
+    if (status) { updates.push('status = ?'); params.push(status); }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'No hay cambios' });
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(req.params.id);
+
+    db.prepare(`UPDATE shareholders SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    logAudit(req.user.id, 'SHAREHOLDER_UPDATED', 'shareholders', req.params.id, shareholder, req.body, req);
+    res.json({ message: 'Socio actualizado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar socio' });
+  }
+});
+
+router.delete('/accounting/shareholders/:id', (req, res) => {
+  try {
+    const shareholder = db.prepare('SELECT * FROM shareholders WHERE id = ?').get(req.params.id);
+    if (!shareholder) return res.status(404).json({ error: 'Socio no encontrado' });
+
+    const hasDividends = db.prepare('SELECT COUNT(*) as count FROM dividend_details WHERE shareholder_id = ?').get(req.params.id);
+    if (hasDividends.count > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar socio con dividendos registrados. Desactive en su lugar.' });
+    }
+
+    db.prepare('DELETE FROM shareholders WHERE id = ?').run(req.params.id);
+    logAudit(req.user.id, 'SHAREHOLDER_DELETED', 'shareholders', req.params.id, shareholder, null, req);
+    res.json({ message: 'Socio eliminado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar socio' });
+  }
+});
+
+// Dividendos
+router.get('/accounting/dividends', (req, res) => {
+  try {
+    const distributions = db.prepare('SELECT * FROM dividend_distributions ORDER BY fiscal_year DESC, distribution_date DESC').all();
+    res.json({ distributions });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener dividendos' });
+  }
+});
+
+router.post('/accounting/dividends', [
+  body('fiscal_year').isInt({ min: 2020 }),
+  body('total_profit').isFloat({ min: 0 }),
+  body('distributable_profit').isFloat({ min: 0 })
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { fiscal_year, total_profit, legal_reserve, distributable_profit, notes } = req.body;
+    const id = `dividend_${fiscal_year}_${Date.now()}`;
+    const distribution_date = new Date().toISOString().split('T')[0];
+
+    // Calcular reserva legal (5% mínimo según ley boliviana)
+    const reserve = legal_reserve || (total_profit * 0.05);
+    const distributable = distributable_profit || (total_profit - reserve);
+
+    db.prepare(`
+      INSERT INTO dividend_distributions (id, distribution_date, fiscal_year, total_profit, legal_reserve, distributable_profit, total_distributed, status, notes)
+      VALUES (?, ?, ?, ?, ?, ?, 0, 'pending', ?)
+    `).run(id, distribution_date, fiscal_year, total_profit, reserve, distributable, notes || null);
+
+    // Crear detalle para cada socio activo
+    const shareholders = db.prepare('SELECT * FROM shareholders WHERE status = "active"').all();
+    for (const sh of shareholders) {
+      const gross = distributable * (sh.share_percentage / 100);
+      const withholding = gross * 0.125; // 12.5% retención RC-IVA
+      const net = gross - withholding;
+      const detailId = `divdet_${id}_${sh.id}`;
+
+      db.prepare(`
+        INSERT INTO dividend_details (id, distribution_id, shareholder_id, share_percentage, gross_amount, withholding_tax, net_amount)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(detailId, id, sh.id, sh.share_percentage, gross, withholding, net);
+    }
+
+    logAudit(req.user.id, 'DIVIDEND_DISTRIBUTION_CREATED', 'dividend_distributions', id, null, req.body, req);
+    res.status(201).json({ id, message: 'Distribución de dividendos creada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear distribución' });
+  }
+});
+
+router.get('/accounting/dividends/:id/details', (req, res) => {
+  try {
+    const details = db.prepare(`
+      SELECT dd.*, s.name as shareholder_name, s.email as shareholder_email
+      FROM dividend_details dd
+      LEFT JOIN shareholders s ON dd.shareholder_id = s.id
+      WHERE dd.distribution_id = ?
+    `).all(req.params.id);
+    res.json({ details });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener detalles' });
+  }
+});
+
+router.put('/accounting/dividends/:id', (req, res) => {
+  try {
+    const distribution = db.prepare('SELECT * FROM dividend_distributions WHERE id = ?').get(req.params.id);
+    if (!distribution) return res.status(404).json({ error: 'Distribución no encontrada' });
+
+    const { status, notes } = req.body;
+    const updates = [];
+    const params = [];
+
+    if (status) { 
+      updates.push('status = ?'); 
+      params.push(status);
+      if (status === 'approved') {
+        updates.push('approved_by = ?', 'approved_at = CURRENT_TIMESTAMP');
+        params.push(req.user.id);
+      }
+    }
+    if (notes !== undefined) { updates.push('notes = ?'); params.push(notes); }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'No hay cambios' });
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(req.params.id);
+
+    db.prepare(`UPDATE dividend_distributions SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    logAudit(req.user.id, 'DIVIDEND_DISTRIBUTION_UPDATED', 'dividend_distributions', req.params.id, distribution, req.body, req);
+    res.json({ message: 'Distribución actualizada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar distribución' });
+  }
+});
+
+router.delete('/accounting/dividends/:id', (req, res) => {
+  try {
+    const distribution = db.prepare('SELECT * FROM dividend_distributions WHERE id = ?').get(req.params.id);
+    if (!distribution) return res.status(404).json({ error: 'Distribución no encontrada' });
+    if (distribution.status === 'paid') return res.status(400).json({ error: 'No se puede eliminar una distribución pagada' });
+
+    db.prepare('DELETE FROM dividend_details WHERE distribution_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM dividend_distributions WHERE id = ?').run(req.params.id);
+    logAudit(req.user.id, 'DIVIDEND_DISTRIBUTION_DELETED', 'dividend_distributions', req.params.id, distribution, null, req);
+    res.json({ message: 'Distribución eliminada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar distribución' });
+  }
+});
+
+// Capital
+router.get('/accounting/capital', (req, res) => {
+  try {
+    const transactions = db.prepare('SELECT ct.*, s.name as shareholder_name FROM capital_transactions ct LEFT JOIN shareholders s ON ct.shareholder_id = s.id ORDER BY ct.transaction_date DESC').all();
+    const totalCapital = db.prepare("SELECT COALESCE(SUM(capital_contributed), 0) as total FROM shareholders WHERE status = 'active'").get();
+    res.json({ transactions, total_capital: totalCapital.total });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener movimientos de capital' });
+  }
+});
+
+router.post('/accounting/capital', [
+  body('transaction_type').isIn(['aporte', 'retiro', 'aumento', 'reduccion', 'reserva']),
+  body('amount').isFloat({ min: 0.01 })
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { transaction_date, transaction_type, shareholder_id, amount, description, document_reference } = req.body;
+    const id = `capital_${Date.now()}`;
+
+    const currentTotal = db.prepare("SELECT COALESCE(SUM(capital_contributed), 0) as total FROM shareholders WHERE status = 'active'").get();
+    const balance_after = transaction_type === 'aporte' || transaction_type === 'aumento' 
+      ? currentTotal.total + amount 
+      : currentTotal.total - amount;
+
+    db.prepare(`
+      INSERT INTO capital_transactions (id, transaction_date, transaction_type, shareholder_id, amount, description, document_reference, balance_after, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, transaction_date || new Date().toISOString().split('T')[0], transaction_type, shareholder_id || null, amount, description || null, document_reference || null, balance_after, req.user.id);
+
+    // Actualizar capital del socio si aplica
+    if (shareholder_id && (transaction_type === 'aporte' || transaction_type === 'retiro')) {
+      const multiplier = transaction_type === 'aporte' ? 1 : -1;
+      db.prepare('UPDATE shareholders SET capital_contributed = capital_contributed + ? WHERE id = ?').run(amount * multiplier, shareholder_id);
+    }
+
+    logAudit(req.user.id, 'CAPITAL_TRANSACTION_CREATED', 'capital_transactions', id, null, req.body, req);
+    res.status(201).json({ id, balance_after, message: 'Movimiento registrado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al registrar movimiento' });
+  }
+});
+
+router.delete('/accounting/capital/:id', (req, res) => {
+  try {
+    const transaction = db.prepare('SELECT * FROM capital_transactions WHERE id = ?').get(req.params.id);
+    if (!transaction) return res.status(404).json({ error: 'Movimiento no encontrado' });
+
+    // Revertir el movimiento en el socio
+    if (transaction.shareholder_id && (transaction.transaction_type === 'aporte' || transaction.transaction_type === 'retiro')) {
+      const multiplier = transaction.transaction_type === 'aporte' ? -1 : 1;
+      db.prepare('UPDATE shareholders SET capital_contributed = capital_contributed + ? WHERE id = ?').run(transaction.amount * multiplier, transaction.shareholder_id);
+    }
+
+    db.prepare('DELETE FROM capital_transactions WHERE id = ?').run(req.params.id);
+    logAudit(req.user.id, 'CAPITAL_TRANSACTION_DELETED', 'capital_transactions', req.params.id, transaction, null, req);
+    res.json({ message: 'Movimiento eliminado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar movimiento' });
+  }
+});
+
+// Plan de cuentas
+router.get('/accounting/chart-of-accounts', (req, res) => {
+  try {
+    const accounts = db.prepare('SELECT * FROM chart_of_accounts ORDER BY code').all();
+    res.json({ accounts });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener plan de cuentas' });
+  }
+});
+
 module.exports = router;

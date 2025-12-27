@@ -2051,62 +2051,399 @@ function AdminAuditLog() {
 }
 
 function AdminAccounting() {
-  const [summary, setSummary] = useState(null)
+  const [view, setView] = useState('resumen')
+  const [dashboard, setDashboard] = useState(null)
+  const [entries, setEntries] = useState([])
+  const [taxPeriods, setTaxPeriods] = useState([])
+  const [shareholders, setShareholders] = useState([])
+  const [dividends, setDividends] = useState([])
+  const [capital, setCapital] = useState({ transactions: [], total_capital: 0 })
   const [loading, setLoading] = useState(true)
-  const [dates, setDates] = useState({ from_date: '', to_date: '' })
+  const [editingEntry, setEditingEntry] = useState(null)
+  const [editingShareholder, setEditingShareholder] = useState(null)
+  const [newEntry, setNewEntry] = useState({ entry_date: '', description: '', entry_type: 'income', debit_account: '1111', credit_account: '4100', amount: '' })
+  const [newShareholder, setNewShareholder] = useState({ name: '', document_type: 'ci', document_number: '', email: '', share_percentage: '', capital_contributed: '' })
+  const [showNewEntry, setShowNewEntry] = useState(false)
+  const [showNewShareholder, setShowNewShareholder] = useState(false)
+  const [year, setYear] = useState(new Date().getFullYear())
 
-  const loadSummary = async () => {
+  const loadData = async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams()
-      if (dates.from_date) params.append('from_date', dates.from_date)
-      if (dates.to_date) params.append('to_date', dates.to_date)
-      const r = await api.get(`/admin/accounting/summary?${params.toString()}`)
-      setSummary(r.data)
+      const [dashRes, entriesRes, taxRes, shRes, divRes, capRes] = await Promise.all([
+        api.get(`/admin/accounting/dashboard?year=${year}`),
+        api.get('/admin/accounting/entries'),
+        api.get(`/admin/accounting/tax-periods?year=${year}`),
+        api.get('/admin/accounting/shareholders'),
+        api.get('/admin/accounting/dividends'),
+        api.get('/admin/accounting/capital')
+      ])
+      setDashboard(dashRes.data)
+      setEntries(entriesRes.data.entries || [])
+      setTaxPeriods(taxRes.data.periods || [])
+      setShareholders(shRes.data.shareholders || [])
+      setDividends(divRes.data.distributions || [])
+      setCapital(capRes.data)
     } catch (error) {
-      console.error(error)
+      console.error('Error:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { loadSummary() }, [])
+  useEffect(() => { loadData() }, [year])
+
+  const createEntry = async () => {
+    try {
+      await api.post('/admin/accounting/entries', newEntry)
+      setShowNewEntry(false)
+      setNewEntry({ entry_date: '', description: '', entry_type: 'income', debit_account: '1111', credit_account: '4100', amount: '' })
+      loadData()
+      alert('Asiento creado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al crear')
+    }
+  }
+
+  const deleteEntry = async (id) => {
+    if (!confirm('¿Eliminar este asiento?')) return
+    try {
+      await api.delete(`/admin/accounting/entries/${id}`)
+      loadData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar')
+    }
+  }
+
+  const createShareholder = async () => {
+    try {
+      await api.post('/admin/accounting/shareholders', newShareholder)
+      setShowNewShareholder(false)
+      setNewShareholder({ name: '', document_type: 'ci', document_number: '', email: '', share_percentage: '', capital_contributed: '' })
+      loadData()
+      alert('Socio registrado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al crear')
+    }
+  }
+
+  const deleteShareholder = async (id) => {
+    if (!confirm('¿Eliminar este socio?')) return
+    try {
+      await api.delete(`/admin/accounting/shareholders/${id}`)
+      loadData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar')
+    }
+  }
+
+  const deleteCapital = async (id) => {
+    if (!confirm('¿Eliminar este movimiento?')) return
+    try {
+      await api.delete(`/admin/accounting/capital/${id}`)
+      loadData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar')
+    }
+  }
+
+  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+  const entryTypes = { income: 'Ingreso', expense: 'Gasto', transfer: 'Transferencia', tax: 'Impuesto', dividend: 'Dividendo', capital: 'Capital', adjustment: 'Ajuste' }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
-      <h1>Contabilidad / Balanza</h1>
-      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem'}}>
-        <input type="date" value={dates.from_date} onChange={e => setDates({...dates, from_date: e.target.value})} />
-        <input type="date" value={dates.to_date} onChange={e => setDates({...dates, to_date: e.target.value})} />
-        <button onClick={loadSummary} className="btn btn-primary">Consultar</button>
+      <h1>Contabilidad Profesional</h1>
+      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center'}}>
+        <button onClick={() => setView('resumen')} className={`btn ${view === 'resumen' ? 'btn-primary' : 'btn-secondary'}`}>Resumen</button>
+        <button onClick={() => setView('transacciones')} className={`btn ${view === 'transacciones' ? 'btn-primary' : 'btn-secondary'}`}>Transacciones</button>
+        <button onClick={() => setView('iva')} className={`btn ${view === 'iva' ? 'btn-primary' : 'btn-secondary'}`}>IVA (13%)</button>
+        <button onClick={() => setView('it')} className={`btn ${view === 'it' ? 'btn-primary' : 'btn-secondary'}`}>IT (3%)</button>
+        <button onClick={() => setView('capital')} className={`btn ${view === 'capital' ? 'btn-primary' : 'btn-secondary'}`}>Capital/Dividendos</button>
+        <select value={year} onChange={e => setYear(parseInt(e.target.value))} style={{marginLeft: 'auto', padding: '0.5rem'}}>
+          {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
       </div>
 
-      <p style={{color: '#666', marginBottom: '1rem'}}>
-        Periodo: {summary?.period?.from_date || 'Todos'} - {summary?.period?.to_date || 'Todos'}
-      </p>
-
-      <div className="stats-grid">
-        {summary?.summary && Object.entries(summary.summary).map(([key, val]) => (
-          <div key={key} className="stat-card card">
-            <h3>{val.label || key}</h3>
-            <p className="stat-number">Bs. {(val.total || 0).toFixed(2)}</p>
-            {val.count !== undefined && <span>Cantidad: {val.count}</span>}
+      {view === 'resumen' && dashboard && (
+        <>
+          <div className="stats-grid">
+            <div className="stat-card card">
+              <h3>Capital Total</h3>
+              <p className="stat-number">Bs. {(dashboard.capital?.total || 0).toFixed(2)}</p>
+              <span>{dashboard.capital?.shareholders_count || 0} socios activos</span>
+            </div>
+            <div className="stat-card card">
+              <h3>Ingresos del Mes</h3>
+              <p className="stat-number">Bs. {(dashboard.income?.current_month?.total || 0).toFixed(2)}</p>
+              <span>{dashboard.income?.current_month?.count || 0} transacciones</span>
+            </div>
+            <div className="stat-card card">
+              <h3>IVA por Pagar (Mes)</h3>
+              <p className="stat-number" style={{color: '#dc3545'}}>Bs. {(dashboard.taxes?.current_month?.iva?.amount || 0).toFixed(2)}</p>
+              <span>13% sobre Bs. {(dashboard.taxes?.current_month?.iva?.taxable_base || 0).toFixed(2)}</span>
+            </div>
+            <div className="stat-card card">
+              <h3>IT por Pagar (Mes)</h3>
+              <p className="stat-number" style={{color: '#fd7e14'}}>Bs. {(dashboard.taxes?.current_month?.it?.amount || 0).toFixed(2)}</p>
+              <span>3% sobre Bs. {(dashboard.taxes?.current_month?.it?.transaction_base || 0).toFixed(2)}</span>
+            </div>
+            <div className="stat-card card">
+              <h3>Dividendos Pagados</h3>
+              <p className="stat-number">Bs. {(dashboard.dividends?.total_paid || 0).toFixed(2)}</p>
+            </div>
           </div>
-        ))}
-      </div>
 
-      {summary?.totals && (
-        <div className="card" style={{marginTop: '1.5rem', padding: '1rem'}}>
-          <h3>Totales</h3>
+          <div className="card" style={{marginTop: '1.5rem', padding: '1rem'}}>
+            <h3>Ingresos Mensuales {year}</h3>
+            <table className="admin-table">
+              <thead><tr><th>Mes</th><th>Ingresos</th><th>Transacciones</th><th>IVA</th><th>IT</th></tr></thead>
+              <tbody>
+                {dashboard.income?.monthly?.map(m => (
+                  <tr key={m.month}>
+                    <td>{monthNames[parseInt(m.month) - 1]}</td>
+                    <td>Bs. {(m.total || 0).toFixed(2)}</td>
+                    <td>{m.count}</td>
+                    <td>Bs. {((m.total || 0) * 0.13).toFixed(2)}</td>
+                    <td>Bs. {((m.total || 0) * 0.03).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="card" style={{marginTop: '1rem', padding: '1rem'}}>
+            <h3>Resumen Trimestral {year}</h3>
+            <table className="admin-table">
+              <thead><tr><th>Trimestre</th><th>Ingresos</th><th>IVA Total</th><th>IT Total</th></tr></thead>
+              <tbody>
+                {dashboard.income?.quarterly?.map(q => (
+                  <tr key={q.quarter}>
+                    <td>Q{q.quarter}</td>
+                    <td>Bs. {(q.total || 0).toFixed(2)}</td>
+                    <td>Bs. {((q.total || 0) * 0.13).toFixed(2)}</td>
+                    <td>Bs. {((q.total || 0) * 0.03).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {dashboard.taxes?.annual && (
+            <div className="card" style={{marginTop: '1rem', padding: '1rem', background: '#f8f9fa'}}>
+              <h3>Resumen Anual {year}</h3>
+              <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'}}>
+                <div><strong>Ingresos Totales:</strong> Bs. {(dashboard.taxes.annual.total_income || 0).toFixed(2)}</div>
+                <div><strong>IVA Anual:</strong> Bs. {(dashboard.taxes.annual.iva_total || 0).toFixed(2)}</div>
+                <div><strong>IT Anual:</strong> Bs. {(dashboard.taxes.annual.it_total || 0).toFixed(2)}</div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {view === 'transacciones' && (
+        <>
+          <button onClick={() => setShowNewEntry(!showNewEntry)} className="btn btn-primary" style={{marginBottom: '1rem'}}>{showNewEntry ? 'Cancelar' : '+ Nuevo Asiento'}</button>
+          {showNewEntry && (
+            <div className="card" style={{padding: '1rem', marginBottom: '1rem'}}>
+              <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem'}}>
+                <input type="date" value={newEntry.entry_date} onChange={e => setNewEntry({...newEntry, entry_date: e.target.value})} />
+                <select value={newEntry.entry_type} onChange={e => setNewEntry({...newEntry, entry_type: e.target.value})}>
+                  {Object.entries(entryTypes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+                <input type="number" placeholder="Monto" value={newEntry.amount} onChange={e => setNewEntry({...newEntry, amount: e.target.value})} />
+              </div>
+              <input type="text" placeholder="Descripcion" value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} style={{width: '100%', marginTop: '0.5rem', padding: '0.5rem'}} />
+              <button onClick={createEntry} className="btn btn-primary" style={{marginTop: '0.5rem'}}>Crear Asiento</button>
+            </div>
+          )}
           <table className="admin-table">
+            <thead><tr><th>#</th><th>Fecha</th><th>Tipo</th><th>Descripcion</th><th>Monto</th><th>IVA</th><th>IT</th><th>Acciones</th></tr></thead>
             <tbody>
-              <tr><td>Ingresos Brutos</td><td>Bs. {(summary.totals.gross_income || 0).toFixed(2)}</td></tr>
-              <tr><td>Neto (- reembolsos)</td><td>Bs. {(summary.totals.net_after_refunds || 0).toFixed(2)}</td></tr>
-              <tr><td><strong>Ganancia Plataforma</strong></td><td><strong>Bs. {(summary.totals.platform_revenue || 0).toFixed(2)}</strong></td></tr>
+              {entries.map(e => (
+                <tr key={e.id}>
+                  <td>{e.entry_number}</td>
+                  <td>{e.entry_date}</td>
+                  <td>{entryTypes[e.entry_type] || e.entry_type}</td>
+                  <td>{e.description}</td>
+                  <td>Bs. {(e.amount || 0).toFixed(2)}</td>
+                  <td>Bs. {(e.iva_amount || 0).toFixed(2)}</td>
+                  <td>Bs. {(e.it_amount || 0).toFixed(2)}</td>
+                  <td>
+                    <div style={{display: 'flex', gap: '0.25rem'}}>
+                      <button onClick={() => setEditingEntry(e)} className="btn btn-sm btn-secondary">Editar</button>
+                      {!e.is_reconciled && <button onClick={() => deleteEntry(e.id)} className="btn btn-sm btn-danger">Eliminar</button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
+        </>
+      )}
+
+      {view === 'iva' && (
+        <div className="card" style={{padding: '1.5rem'}}>
+          <h2>IVA - Impuesto al Valor Agregado (13%)</h2>
+          <p style={{color: '#666', marginBottom: '1rem'}}>Segun Ley 843, el IVA se paga mensualmente sobre el debito fiscal menos el credito fiscal.</p>
+          <table className="admin-table">
+            <thead><tr><th>Periodo</th><th>Base Imponible</th><th>IVA Debito (13%)</th><th>Credito Fiscal</th><th>IVA a Pagar</th></tr></thead>
+            <tbody>
+              {dashboard?.income?.monthly?.map(m => (
+                <tr key={m.month}>
+                  <td>{monthNames[parseInt(m.month) - 1]} {year}</td>
+                  <td>Bs. {(m.total || 0).toFixed(2)}</td>
+                  <td>Bs. {((m.total || 0) * 0.13).toFixed(2)}</td>
+                  <td>Bs. 0.00</td>
+                  <td style={{fontWeight: 'bold', color: '#dc3545'}}>Bs. {((m.total || 0) * 0.13).toFixed(2)}</td>
+                </tr>
+              ))}
+              <tr style={{background: '#f8f9fa', fontWeight: 'bold'}}>
+                <td>TOTAL ANUAL</td>
+                <td>Bs. {(dashboard?.taxes?.annual?.total_income || 0).toFixed(2)}</td>
+                <td>Bs. {(dashboard?.taxes?.annual?.iva_total || 0).toFixed(2)}</td>
+                <td>Bs. 0.00</td>
+                <td style={{color: '#dc3545'}}>Bs. {(dashboard?.taxes?.annual?.iva_total || 0).toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style={{marginTop: '1rem', padding: '1rem', background: '#fff3cd', borderRadius: '4px'}}>
+            <strong>Recordatorio:</strong> El IVA debe declararse hasta el dia 15 del mes siguiente al periodo fiscal.
+          </div>
+        </div>
+      )}
+
+      {view === 'it' && (
+        <div className="card" style={{padding: '1.5rem'}}>
+          <h2>IT - Impuesto a las Transacciones (3%)</h2>
+          <p style={{color: '#666', marginBottom: '1rem'}}>Segun Ley 843, el IT grava el ejercicio habitual del comercio sobre el monto bruto de transacciones.</p>
+          <table className="admin-table">
+            <thead><tr><th>Periodo</th><th>Transacciones Brutas</th><th>IT (3%)</th><th>Estado</th></tr></thead>
+            <tbody>
+              {dashboard?.income?.monthly?.map(m => (
+                <tr key={m.month}>
+                  <td>{monthNames[parseInt(m.month) - 1]} {year}</td>
+                  <td>Bs. {(m.total || 0).toFixed(2)}</td>
+                  <td style={{fontWeight: 'bold', color: '#fd7e14'}}>Bs. {((m.total || 0) * 0.03).toFixed(2)}</td>
+                  <td><span className="status-badge status-pending">Pendiente</span></td>
+                </tr>
+              ))}
+              <tr style={{background: '#f8f9fa', fontWeight: 'bold'}}>
+                <td>TOTAL ANUAL</td>
+                <td>Bs. {(dashboard?.taxes?.annual?.total_income || 0).toFixed(2)}</td>
+                <td style={{color: '#fd7e14'}}>Bs. {(dashboard?.taxes?.annual?.it_total || 0).toFixed(2)}</td>
+                <td>-</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style={{marginTop: '1rem', padding: '1rem', background: '#d1ecf1', borderRadius: '4px'}}>
+            <strong>Nota:</strong> El IT puede compensarse con el IUE pagado en la gestion anterior (hasta el 50%).
+          </div>
+        </div>
+      )}
+
+      {view === 'capital' && (
+        <>
+          <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+            <div className="card" style={{padding: '1.5rem'}}>
+              <h2>Capital Social: Bs. {(capital.total_capital || 0).toFixed(2)}</h2>
+            </div>
+            <div className="card" style={{padding: '1.5rem'}}>
+              <h2>Socios Activos: {shareholders.filter(s => s.status === 'active').length}</h2>
+            </div>
+          </div>
+
+          <h3>Socios/Accionistas</h3>
+          <button onClick={() => setShowNewShareholder(!showNewShareholder)} className="btn btn-primary" style={{marginBottom: '1rem'}}>{showNewShareholder ? 'Cancelar' : '+ Nuevo Socio'}</button>
+          {showNewShareholder && (
+            <div className="card" style={{padding: '1rem', marginBottom: '1rem'}}>
+              <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem'}}>
+                <input type="text" placeholder="Nombre" value={newShareholder.name} onChange={e => setNewShareholder({...newShareholder, name: e.target.value})} />
+                <input type="text" placeholder="CI/NIT" value={newShareholder.document_number} onChange={e => setNewShareholder({...newShareholder, document_number: e.target.value})} />
+                <input type="email" placeholder="Email" value={newShareholder.email} onChange={e => setNewShareholder({...newShareholder, email: e.target.value})} />
+                <input type="number" placeholder="% Participacion" value={newShareholder.share_percentage} onChange={e => setNewShareholder({...newShareholder, share_percentage: e.target.value})} />
+                <input type="number" placeholder="Capital Aportado" value={newShareholder.capital_contributed} onChange={e => setNewShareholder({...newShareholder, capital_contributed: e.target.value})} />
+              </div>
+              <button onClick={createShareholder} className="btn btn-primary" style={{marginTop: '0.5rem'}}>Registrar Socio</button>
+            </div>
+          )}
+          <table className="admin-table">
+            <thead><tr><th>Nombre</th><th>Documento</th><th>Email</th><th>Participacion</th><th>Capital</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody>
+              {shareholders.map(s => (
+                <tr key={s.id}>
+                  <td>{s.name}</td>
+                  <td>{s.document_type?.toUpperCase()}: {s.document_number}</td>
+                  <td>{s.email || '-'}</td>
+                  <td>{s.share_percentage}%</td>
+                  <td>Bs. {(s.capital_contributed || 0).toFixed(2)}</td>
+                  <td><span className={`status-badge status-${s.status}`}>{s.status === 'active' ? 'Activo' : 'Inactivo'}</span></td>
+                  <td>
+                    <div style={{display: 'flex', gap: '0.25rem'}}>
+                      <button onClick={() => setEditingShareholder(s)} className="btn btn-sm btn-secondary">Editar</button>
+                      <button onClick={() => deleteShareholder(s.id)} className="btn btn-sm btn-danger">Eliminar</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h3 style={{marginTop: '2rem'}}>Movimientos de Capital</h3>
+          <table className="admin-table">
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Socio</th><th>Monto</th><th>Saldo</th><th>Acciones</th></tr></thead>
+            <tbody>
+              {capital.transactions?.map(t => (
+                <tr key={t.id}>
+                  <td>{t.transaction_date}</td>
+                  <td>{t.transaction_type}</td>
+                  <td>{t.shareholder_name || '-'}</td>
+                  <td>Bs. {(t.amount || 0).toFixed(2)}</td>
+                  <td>Bs. {(t.balance_after || 0).toFixed(2)}</td>
+                  <td><button onClick={() => deleteCapital(t.id)} className="btn btn-sm btn-danger">Eliminar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h3 style={{marginTop: '2rem'}}>Dividendos Distribuidos</h3>
+          <table className="admin-table">
+            <thead><tr><th>Año Fiscal</th><th>Utilidad Total</th><th>Reserva Legal</th><th>Distribuible</th><th>Distribuido</th><th>Estado</th></tr></thead>
+            <tbody>
+              {dividends.map(d => (
+                <tr key={d.id}>
+                  <td>{d.fiscal_year}</td>
+                  <td>Bs. {(d.total_profit || 0).toFixed(2)}</td>
+                  <td>Bs. {(d.legal_reserve || 0).toFixed(2)}</td>
+                  <td>Bs. {(d.distributable_profit || 0).toFixed(2)}</td>
+                  <td>Bs. {(d.total_distributed || 0).toFixed(2)}</td>
+                  <td><span className={`status-badge status-${d.status}`}>{d.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {editingEntry && (
+        <div className="modal-overlay" onClick={() => setEditingEntry(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Editar Asiento #{editingEntry.entry_number}</h2>
+            <p>Funcion de edicion en desarrollo</p>
+            <button onClick={() => setEditingEntry(null)} className="btn btn-secondary">Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      {editingShareholder && (
+        <div className="modal-overlay" onClick={() => setEditingShareholder(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Editar Socio: {editingShareholder.name}</h2>
+            <p>Funcion de edicion en desarrollo</p>
+            <button onClick={() => setEditingShareholder(null)} className="btn btn-secondary">Cerrar</button>
+          </div>
         </div>
       )}
     </div>

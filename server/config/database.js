@@ -499,6 +499,181 @@ function initDatabase() {
       ('cfg_footer_text', 'footer_text', 'Plataforma de intermediacion tecnologica para alquiler de espacios en Bolivia', 'Texto del footer');
   `);
 
+  // Tablas de Contabilidad Profesional Boliviana
+  db.exec(`
+    -- Socios/Accionistas
+    CREATE TABLE IF NOT EXISTS shareholders (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      document_type TEXT CHECK(document_type IN ('ci', 'nit', 'pasaporte')),
+      document_number TEXT,
+      email TEXT,
+      phone TEXT,
+      share_percentage REAL NOT NULL DEFAULT 0,
+      capital_contributed REAL DEFAULT 0,
+      status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+      joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Asientos Contables (Libro Diario)
+    CREATE TABLE IF NOT EXISTS accounting_entries (
+      id TEXT PRIMARY KEY,
+      entry_date TEXT NOT NULL,
+      entry_number INTEGER,
+      description TEXT NOT NULL,
+      entry_type TEXT NOT NULL CHECK(entry_type IN ('income', 'expense', 'transfer', 'tax', 'dividend', 'capital', 'adjustment')),
+      debit_account TEXT NOT NULL,
+      credit_account TEXT NOT NULL,
+      amount REAL NOT NULL,
+      taxable_base REAL DEFAULT 0,
+      iva_amount REAL DEFAULT 0,
+      it_amount REAL DEFAULT 0,
+      reference_type TEXT,
+      reference_id TEXT,
+      is_reconciled INTEGER DEFAULT 0,
+      reconciled_at TEXT,
+      reconciled_by TEXT,
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Períodos Fiscales
+    CREATE TABLE IF NOT EXISTS tax_periods (
+      id TEXT PRIMARY KEY,
+      period_type TEXT NOT NULL CHECK(period_type IN ('monthly', 'quarterly', 'semester', 'annual')),
+      tax_type TEXT NOT NULL CHECK(tax_type IN ('IVA', 'IT', 'IUE', 'RC-IVA')),
+      year INTEGER NOT NULL,
+      month INTEGER,
+      quarter INTEGER,
+      semester INTEGER,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      taxable_base REAL DEFAULT 0,
+      tax_rate REAL NOT NULL,
+      tax_calculated REAL DEFAULT 0,
+      tax_credits REAL DEFAULT 0,
+      tax_due REAL DEFAULT 0,
+      tax_paid REAL DEFAULT 0,
+      status TEXT DEFAULT 'open' CHECK(status IN ('open', 'calculated', 'declared', 'paid', 'closed')),
+      declaration_number TEXT,
+      declaration_date TEXT,
+      due_date TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Pagos de Impuestos
+    CREATE TABLE IF NOT EXISTS tax_payments (
+      id TEXT PRIMARY KEY,
+      tax_period_id TEXT NOT NULL,
+      payment_date TEXT NOT NULL,
+      amount REAL NOT NULL,
+      payment_method TEXT,
+      bank_name TEXT,
+      transaction_number TEXT,
+      voucher_number TEXT,
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tax_period_id) REFERENCES tax_periods(id)
+    );
+
+    -- Distribución de Dividendos
+    CREATE TABLE IF NOT EXISTS dividend_distributions (
+      id TEXT PRIMARY KEY,
+      distribution_date TEXT NOT NULL,
+      fiscal_year INTEGER NOT NULL,
+      total_profit REAL NOT NULL,
+      legal_reserve REAL DEFAULT 0,
+      distributable_profit REAL NOT NULL,
+      total_distributed REAL NOT NULL,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'paid', 'cancelled')),
+      approved_by TEXT,
+      approved_at TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Detalle de Dividendos por Socio
+    CREATE TABLE IF NOT EXISTS dividend_details (
+      id TEXT PRIMARY KEY,
+      distribution_id TEXT NOT NULL,
+      shareholder_id TEXT NOT NULL,
+      share_percentage REAL NOT NULL,
+      gross_amount REAL NOT NULL,
+      withholding_tax REAL DEFAULT 0,
+      net_amount REAL NOT NULL,
+      payment_date TEXT,
+      payment_method TEXT,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'paid')),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (distribution_id) REFERENCES dividend_distributions(id),
+      FOREIGN KEY (shareholder_id) REFERENCES shareholders(id)
+    );
+
+    -- Movimientos de Capital
+    CREATE TABLE IF NOT EXISTS capital_transactions (
+      id TEXT PRIMARY KEY,
+      transaction_date TEXT NOT NULL,
+      transaction_type TEXT NOT NULL CHECK(transaction_type IN ('aporte', 'retiro', 'aumento', 'reduccion', 'reserva')),
+      shareholder_id TEXT,
+      amount REAL NOT NULL,
+      description TEXT,
+      document_reference TEXT,
+      balance_after REAL,
+      created_by TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (shareholder_id) REFERENCES shareholders(id)
+    );
+
+    -- Configuración de cuentas contables
+    CREATE TABLE IF NOT EXISTS chart_of_accounts (
+      id TEXT PRIMARY KEY,
+      code TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      account_type TEXT NOT NULL CHECK(account_type IN ('asset', 'liability', 'equity', 'income', 'expense')),
+      parent_code TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Insertar plan de cuentas básico boliviano
+    INSERT OR IGNORE INTO chart_of_accounts (id, code, name, account_type) VALUES
+      ('acc_1000', '1000', 'ACTIVO', 'asset'),
+      ('acc_1100', '1100', 'Activo Corriente', 'asset'),
+      ('acc_1110', '1110', 'Caja y Bancos', 'asset'),
+      ('acc_1111', '1111', 'Caja General', 'asset'),
+      ('acc_1112', '1112', 'Bancos', 'asset'),
+      ('acc_1120', '1120', 'Cuentas por Cobrar', 'asset'),
+      ('acc_1130', '1130', 'Credito Fiscal IVA', 'asset'),
+      ('acc_2000', '2000', 'PASIVO', 'liability'),
+      ('acc_2100', '2100', 'Pasivo Corriente', 'liability'),
+      ('acc_2110', '2110', 'Cuentas por Pagar', 'liability'),
+      ('acc_2120', '2120', 'Debito Fiscal IVA', 'liability'),
+      ('acc_2130', '2130', 'IT por Pagar', 'liability'),
+      ('acc_2140', '2140', 'IUE por Pagar', 'liability'),
+      ('acc_2150', '2150', 'Dividendos por Pagar', 'liability'),
+      ('acc_3000', '3000', 'PATRIMONIO', 'equity'),
+      ('acc_3100', '3100', 'Capital Social', 'equity'),
+      ('acc_3200', '3200', 'Reserva Legal', 'equity'),
+      ('acc_3300', '3300', 'Resultados Acumulados', 'equity'),
+      ('acc_3400', '3400', 'Resultado del Ejercicio', 'equity'),
+      ('acc_4000', '4000', 'INGRESOS', 'income'),
+      ('acc_4100', '4100', 'Ingresos por Comisiones', 'income'),
+      ('acc_4200', '4200', 'Otros Ingresos', 'income'),
+      ('acc_5000', '5000', 'GASTOS', 'expense'),
+      ('acc_5100', '5100', 'Gastos Operativos', 'expense'),
+      ('acc_5200', '5200', 'Gastos Administrativos', 'expense'),
+      ('acc_5300', '5300', 'Gastos Financieros', 'expense'),
+      ('acc_5400', '5400', 'Impuestos y Tasas', 'expense');
+  `);
+
   // Migraciones para columnas faltantes en bases de datos existentes
   const migrations = [
     { table: 'users', column: 'anti_bypass_legal_text_id', type: 'TEXT' },
@@ -506,7 +681,13 @@ function initDatabase() {
     { table: 'users', column: 'anti_bypass_ip', type: 'TEXT' },
     { table: 'users', column: 'anti_bypass_user_agent', type: 'TEXT' },
     { table: 'users', column: 'is_blocked', type: 'INTEGER DEFAULT 0' },
-    { table: 'legal_texts', column: 'category', type: 'TEXT DEFAULT "legal"' }
+    { table: 'legal_texts', column: 'category', type: 'TEXT DEFAULT "legal"' },
+    { table: 'payments', column: 'taxable_base', type: 'REAL DEFAULT 0' },
+    { table: 'payments', column: 'iva_amount', type: 'REAL DEFAULT 0' },
+    { table: 'payments', column: 'it_amount', type: 'REAL DEFAULT 0' },
+    { table: 'invoices', column: 'taxable_base', type: 'REAL DEFAULT 0' },
+    { table: 'invoices', column: 'iva_amount', type: 'REAL DEFAULT 0' },
+    { table: 'invoices', column: 'it_amount', type: 'REAL DEFAULT 0' }
   ];
 
   // Backfill null categories to 'legal'
