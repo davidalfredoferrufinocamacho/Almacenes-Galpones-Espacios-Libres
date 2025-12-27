@@ -19,6 +19,7 @@ The project uses a Node.js 20 backend with Express.js and SQLite (better-sqlite3
 *   **Contract Extensions/Annexes:** Extensions do not modify the original contract but create separate annex documents. These annexes reference the original contract, specify the extension period, and freeze relevant legal texts at the time of creation.
 *   **Anti-Bypass Clause:** A unified anti-bypass clause is enforced for both guests and hosts to prevent direct dealings outside the platform, protecting commission structures. This clause is a core part of legal texts and reaffirmed in extensions.
 *   **Admin Panel:** A comprehensive admin interface provides tools for managing users, spaces, reservations, contracts, payments, invoices, system configuration, audit logs, and an accounting summary.
+*   **Map Search:** Interactive map search using Leaflet/react-leaflet allows users to find spaces by geographic location. Spaces with latitude/longitude coordinates are displayed as pins on a map centered on Bolivia. The GET /api/spaces/map endpoint filters by geographic bounds.
 
 **UI/UX Decisions:**
 The project structure indicates a clear separation between `client/` (frontend) and `server/` (backend), suggesting a modern web application design with a focus on a responsive and interactive user experience provided by React.
@@ -33,3 +34,4 @@ The project structure indicates a clear separation between `client/` (frontend) 
 *   **SMS/WhatsApp:** Currently MOCK implementations; future integration with actual messaging services is implied.
 *   **Payment Gateway:** Not explicitly detailed but implied by payment and escrow features.
 *   **PDF Generation Libraries:** Implied by the functionality to generate contract and invoice PDFs.
+*   **Map Libraries:** Leaflet and react-leaflet for interactive map visualization.
