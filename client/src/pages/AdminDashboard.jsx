@@ -627,12 +627,25 @@ function AdminReservations() {
   const [editForm, setEditForm] = useState({})
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
 
   const loadReservations = () => {
     api.get('/admin/reservations').then(r => setReservations(r.data)).finally(() => setLoading(false))
   }
 
   useEffect(() => { loadReservations() }, [])
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }))
+  }
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) return ' ↕'
+    return sortConfig.direction === 'asc' ? ' ↑' : ' ↓'
+  }
 
   const openEditModal = (reservation) => {
     setEditingReservation(reservation)
@@ -687,16 +700,33 @@ function AdminReservations() {
     return <span style={{background: colors[status] || '#6c757d', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.75rem'}}>{labels[status] || status}</span>
   }
 
-  const filteredReservations = reservations.filter(r => {
-    if (filterStatus && r.status !== filterStatus) return false
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      return r.space_title?.toLowerCase().includes(term) ||
-             r.guest_email?.toLowerCase().includes(term) ||
-             r.host_email?.toLowerCase().includes(term)
-    }
-    return true
-  })
+  const filteredReservations = reservations
+    .filter(r => {
+      if (filterStatus && r.status !== filterStatus) return false
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        return r.space_title?.toLowerCase().includes(term) ||
+               r.guest_email?.toLowerCase().includes(term) ||
+               r.host_email?.toLowerCase().includes(term)
+      }
+      return true
+    })
+    .sort((a, b) => {
+      if (!sortConfig.key) return 0
+      let aVal = a[sortConfig.key]
+      let bVal = b[sortConfig.key]
+      if (sortConfig.key === 'space') aVal = a.space_title || ''
+      if (sortConfig.key === 'space') bVal = b.space_title || ''
+      if (sortConfig.key === 'guest') aVal = a.guest_email || ''
+      if (sortConfig.key === 'guest') bVal = b.guest_email || ''
+      if (sortConfig.key === 'host') aVal = a.host_email || ''
+      if (sortConfig.key === 'host') bVal = b.host_email || ''
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase()
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase()
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+      return 0
+    })
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
@@ -728,13 +758,13 @@ function AdminReservations() {
       <table className="admin-table">
         <thead>
           <tr>
-            <th>Espacio</th>
-            <th>Guest</th>
-            <th>Host</th>
-            <th>m²</th>
-            <th>Total</th>
-            <th>Anticipo</th>
-            <th>Estado</th>
+            <th onClick={() => handleSort('space')} style={{cursor: 'pointer', userSelect: 'none'}}>Espacio{getSortIcon('space')}</th>
+            <th onClick={() => handleSort('guest')} style={{cursor: 'pointer', userSelect: 'none'}}>Guest{getSortIcon('guest')}</th>
+            <th onClick={() => handleSort('host')} style={{cursor: 'pointer', userSelect: 'none'}}>Host{getSortIcon('host')}</th>
+            <th onClick={() => handleSort('sqm_requested')} style={{cursor: 'pointer', userSelect: 'none'}}>m²{getSortIcon('sqm_requested')}</th>
+            <th onClick={() => handleSort('total_amount')} style={{cursor: 'pointer', userSelect: 'none'}}>Total{getSortIcon('total_amount')}</th>
+            <th onClick={() => handleSort('deposit_amount')} style={{cursor: 'pointer', userSelect: 'none'}}>Anticipo{getSortIcon('deposit_amount')}</th>
+            <th onClick={() => handleSort('status')} style={{cursor: 'pointer', userSelect: 'none'}}>Estado{getSortIcon('status')}</th>
             <th>Acciones</th>
           </tr>
         </thead>
