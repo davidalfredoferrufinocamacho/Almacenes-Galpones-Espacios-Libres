@@ -64,6 +64,28 @@ router.get('/intermediacion', (req, res) => {
   }
 });
 
+router.get('/anti-bypass', (req, res) => {
+  try {
+    const text = getActiveLegalText('anti_bypass_guest');
+    if (!text || text.id === null) {
+      return res.status(404).json({ 
+        error: '[TEXTO LEGAL NO CONFIGURADO: anti-bypass] Contacte al administrador.' 
+      });
+    }
+    res.json({
+      type: 'anti_bypass',
+      title: 'Clausula Anti-Bypass',
+      content: text.content,
+      version: text.version,
+      updated_at: text.effective_date,
+      legal_text_id: text.id
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener clausula anti-bypass' });
+  }
+});
+
 router.get('/anti-bypass/:role', (req, res) => {
   try {
     const role = req.params.role.toUpperCase();

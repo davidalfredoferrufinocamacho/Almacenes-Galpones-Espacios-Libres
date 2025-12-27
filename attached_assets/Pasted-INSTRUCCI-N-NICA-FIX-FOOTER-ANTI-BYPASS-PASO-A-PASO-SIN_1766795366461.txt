@@ -1,0 +1,123 @@
+INSTRUCCIÓN ÚNICA — FIX FOOTER ANTI-BYPASS (PASO A PASO, SIN DESVIACIONES)
+
+Contexto:
+- En el footer aparece: “[TEXTO LEGAL NO CONFIGURADO: anti-bypass] Version: 0.0 Ultima actualizacion: N/A”
+- Auditoría confirma causa raíz:
+  * Backend tiene endpoint: GET /api/legal/anti-bypass/:role (requiere guest/host)
+  * Frontend llama: GET /api/legal/anti-bypass (sin rol)
+  * Esto cae al genérico /:type y busca type='anti-bypass' (inexistente) => placeholder
+- El footer NO puede depender de rol, porque debe funcionar incluso sin login.
+- Por tanto, necesitamos un texto legal UNIFICADO para footer con type='anti_bypass' y un endpoint sin rol.
+
+REGLAS ABSOLUTAS:
+- NO tocar lógica de citas/contratos/extensiones ni anti_bypass_guest/anti_bypass_host.
+- NO hardcodear el texto legal en el frontend.
+- NO push a GitHub.
+- Ejecutar PASO por PASO y reportar evidencia al final.
+
+========================
+PASO 1 — BACKEND: crear/asegurar texto legal UNIFICADO (type = anti_bypass)
+========================
+1) En la tabla legal_texts debe existir un registro ACTIVO:
+   - type: 'anti_bypass'
+   - title: 'Cláusula Anti-Bypass'
+   - version: '1.0'
+   - is_active: 1
+   - content: (usar la cláusula oficial unificada ya definida en el proyecto; NO placeholder)
+2) Si NO existe, crearlo en el seed (server/config/database.js) para futuras instalaciones.
+3) Si la DB existente no lo tiene, insertarlo/activarlo mediante query SQL al iniciar (migración) o script controlado.
+
+EVIDENCIA requerida para PASO 1:
+- Ejecutar SELECT y mostrar el registro activo:
+  SELECT id, type, title, version, is_active, updated_at
+  FROM legal_texts
+  WHERE type='anti_bypass' AND is_active=1;
+
+========================
+PASO 2 — BACKEND: endpoint sin rol para footer
+========================
+Crear o ajustar endpoint para que exista EXACTAMENTE:
+GET /api/legal/anti-bypass
+
+Comportamiento:
+- Debe devolver el texto legal del type='anti_bypass' ACTIVO
+- Respuesta JSON debe incluir:
+  { type, title, content, version, updated_at, legal_text_id }
+
+Errores:
+- Si NO existe texto activo anti_bypass => responder 404 con:
+  { error: '[TEXTO LEGAL NO CONFIGURADO: anti-bypass] Contacte al administrador.' }
+
+IMPORTANTE:
+- NO cambiar ni eliminar el endpoint con rol /api/legal/anti-bypass/:role
+- Este nuevo endpoint es SOLO para uso general (footer y páginas públicas)
+
+EVIDENCIA requerida para PASO 2:
+- Mostrar response real:
+  curl /api/legal/anti-bypass
+  Debe devolver content real, version 1.0, updated_at válido
+- Mostrar 404 solo si no hubiera texto (pero en nuestro caso debe haber texto real)
+
+========================
+PASO 3 — FRONTEND: conectar footer a endpoint correcto
+========================
+1) Localizar el código en:
+   - client/src/components/Footer.jsx
+   - y/o la página legal que carga anti-bypass (Legal.jsx)
+2) Reemplazar la llamada actual incorrecta:
+   api.get('/legal/anti-bypass')
+   que hoy devuelve placeholder por mismatch,
+   para que llame explícitamente al endpoint nuevo:
+   api.get('/legal/anti-bypass')  (ahora válido porque backend lo soporta sin rol)
+
+3) Render en footer debe mostrar:
+- título
+- versión real (no 0.0)
+- última actualización real (no N/A)
+- contenido (o link a página donde se vea completo)
+
+Fallback UI:
+- SOLO si la API devuelve 404:
+  mostrar exactamente:
+  “[TEXTO LEGAL NO CONFIGURADO: anti-bypass] Contacte al administrador.”
+  (sin version 0.0 y sin N/A)
+
+EVIDENCIA requerida para PASO 3:
+- Screenshot o descripción clara:
+  - abrir app SIN login
+  - footer ya NO muestra placeholder
+  - muestra versión real y updated_at real
+
+========================
+PASO 4 — TEST FINAL OBLIGATORIO (con evidencia)
+========================
+1) Test API:
+   GET /api/legal/anti-bypass
+   Debe devolver:
+   - content real
+   - version != '0.0'
+   - updated_at != null
+
+2) Test UI (sin login):
+   - Abrir home
+   - Ver footer
+   - Confirmar que NO aparece placeholder
+
+3) Test UI (con login opcional):
+   - Confirmar que sigue igual (no depende de rol)
+
+========================
+PASO 5 — REPORTE FINAL (obligatorio)
+========================
+Al terminar, responder SOLO con este formato:
+
+PASO 1: OK / ERROR (con evidencia SQL)
+PASO 2: OK / ERROR (con curl response)
+PASO 3: OK / ERROR (con screenshot/descripción)
+PASO 4: OK / ERROR (evidencia)
+Archivos modificados: [lista exacta]
+Notas: (si hubo migración, indicar SQL aplicado)
+
+NO hacer nada más.
+NO proponer mejoras.
+DETENERSE.
