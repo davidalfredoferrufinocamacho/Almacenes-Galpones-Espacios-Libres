@@ -100,6 +100,58 @@ router.put('/me/identity', authenticateToken, [
   }
 });
 
+router.put('/me/accept-anti-bypass', authenticateToken, (req, res) => {
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+
+    if (user.anti_bypass_accepted) {
+      return res.status(400).json({ error: 'Ya has aceptado la clausula anti-bypass' });
+    }
+
+    const legalType = user.role === 'HOST' ? 'anti_bypass_host' : 'anti_bypass_guest';
+    const legalText = db.prepare(`
+      SELECT id, type, title, content, version FROM legal_texts 
+      WHERE type = ? AND is_active = 1
+    `).get(legalType);
+
+    if (!legalText) {
+      return res.status(500).json({ error: 'Texto legal anti-bypass no configurado' });
+    }
+
+    const clientInfo = getClientInfo(req);
+
+    db.prepare(`
+      UPDATE users SET 
+        anti_bypass_accepted = 1,
+        anti_bypass_accepted_at = CURRENT_TIMESTAMP,
+        anti_bypass_legal_version = ?,
+        anti_bypass_ip = ?,
+        anti_bypass_user_agent = ?
+      WHERE id = ?
+    `).run(legalText.version, clientInfo.ip_address, clientInfo.user_agent, req.user.id);
+
+    logAudit(req.user.id, 'ANTI_BYPASS_ACCEPTED', 'users', req.user.id, 
+      { anti_bypass_accepted: 0 },
+      { 
+        anti_bypass_accepted: 1,
+        legal_text_id: legalText.id,
+        legal_version: legalText.version,
+        ...clientInfo
+      },
+      req
+    );
+
+    res.json({ 
+      message: 'Clausula anti-bypass aceptada exitosamente',
+      accepted_at: new Date().toISOString(),
+      version: legalText.version
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al aceptar clausula' });
+  }
+});
+
 router.put('/me/role', authenticateToken, [
   body('role').isIn(['GUEST', 'HOST'])
 ], (req, res) => {

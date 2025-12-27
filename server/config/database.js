@@ -474,6 +474,25 @@ function initDatabase() {
       ('tpl_invoice_generated', 'invoice_generated', 'email', 'Factura generada - {{invoice_number}}', 'Hola {{recipient_name}},\n\nSe ha generado una factura para tu contrato.\n\nNumero de factura: {{invoice_number}}\nContrato: {{contract_number}}\nMonto total: Bs. {{total_amount}}\n\nPuedes descargar el PDF desde la plataforma.\n\nSaludos,\n{{platform_name}}', 1);
   `);
 
+  // Migraciones para columnas faltantes en bases de datos existentes
+  const migrations = [
+    { table: 'users', column: 'anti_bypass_legal_version', type: 'TEXT' },
+    { table: 'users', column: 'anti_bypass_ip', type: 'TEXT' },
+    { table: 'users', column: 'anti_bypass_user_agent', type: 'TEXT' }
+  ];
+
+  for (const m of migrations) {
+    try {
+      const cols = db.prepare(`PRAGMA table_info(${m.table})`).all();
+      if (!cols.find(c => c.name === m.column)) {
+        db.exec(`ALTER TABLE ${m.table} ADD COLUMN ${m.column} ${m.type}`);
+        console.log(`Migracion: agregada columna ${m.column} a ${m.table}`);
+      }
+    } catch (e) {
+      console.log(`Migracion ${m.column}: ${e.message}`);
+    }
+  }
+
   console.log('Base de datos inicializada correctamente');
 }
 
