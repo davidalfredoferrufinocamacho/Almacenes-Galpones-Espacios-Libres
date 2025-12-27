@@ -237,16 +237,183 @@ router.delete('/users/:id', (req, res) => {
 router.get('/spaces', (req, res) => {
   try {
     const spaces = db.prepare(`
-      SELECT s.*, u.email as host_email, u.first_name as host_first_name, u.last_name as host_last_name
+      SELECT s.*, u.email as host_email, u.first_name as host_first_name, u.last_name as host_last_name,
+             u.is_blocked as host_blocked
       FROM spaces s
       JOIN users u ON s.host_id = u.id
       ORDER BY s.created_at DESC
     `).all();
 
-    res.json(spaces);
+    const spacesWithOccupancy = spaces.map(space => {
+      const activeContracts = db.prepare(`
+        SELECT COALESCE(SUM(c.sqm), 0) as rented_sqm
+        FROM contracts c
+        WHERE c.space_id = ? AND c.status IN ('signed', 'active') AND c.end_date >= date('now')
+      `).get(space.id);
+      
+      const rentedSqm = activeContracts?.rented_sqm || 0;
+      const upcomingExpiry = db.prepare(`
+        SELECT MIN(end_date) as next_expiry
+        FROM contracts
+        WHERE space_id = ? AND status IN ('signed', 'active') AND end_date >= date('now')
+      `).get(space.id);
+
+      return {
+        ...space,
+        rented_sqm: rentedSqm,
+        free_sqm: space.total_sqm - rentedSqm,
+        occupancy_percent: space.total_sqm > 0 ? Math.round((rentedSqm / space.total_sqm) * 100) : 0,
+        next_contract_expiry: upcomingExpiry?.next_expiry || null
+      };
+    });
+
+    res.json(spacesWithOccupancy);
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener espacios' });
+  }
+});
+
+router.put('/spaces/:id', [
+  body('title').optional().trim().notEmpty(),
+  body('description').optional().trim(),
+  body('price_per_sqm_day').optional().isFloat({ min: 0 }),
+  body('price_per_sqm_week').optional().isFloat({ min: 0 }),
+  body('price_per_sqm_month').optional().isFloat({ min: 0 }),
+  body('total_sqm').optional().isFloat({ min: 1 }),
+  body('available_sqm').optional().isFloat({ min: 0 }),
+  body('city').optional().trim(),
+  body('department').optional().trim(),
+  body('address').optional().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(req.params.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const hasActiveContracts = db.prepare(`
+      SELECT COUNT(*) as count FROM contracts 
+      WHERE space_id = ? AND status IN ('signed', 'active') AND end_date >= date('now')
+    `).get(req.params.id);
+
+    if (hasActiveContracts.count > 0 && (req.body.total_sqm || req.body.price_per_sqm_day || req.body.price_per_sqm_week || req.body.price_per_sqm_month)) {
+      return res.status(400).json({ error: 'No se puede modificar m2 o precios con contratos activos' });
+    }
+
+    const { title, description, price_per_sqm_day, price_per_sqm_week, price_per_sqm_month, 
+            total_sqm, available_sqm, city, department, address } = req.body;
+    const oldData = { ...space };
+
+    const updates = [];
+    const values = [];
+
+    if (title !== undefined) { updates.push('title = ?'); values.push(title); }
+    if (description !== undefined) { updates.push('description = ?'); values.push(description); }
+    if (price_per_sqm_day !== undefined) { updates.push('price_per_sqm_day = ?'); values.push(price_per_sqm_day); }
+    if (price_per_sqm_week !== undefined) { updates.push('price_per_sqm_week = ?'); values.push(price_per_sqm_week); }
+    if (price_per_sqm_month !== undefined) { updates.push('price_per_sqm_month = ?'); values.push(price_per_sqm_month); }
+    if (total_sqm !== undefined) { updates.push('total_sqm = ?'); values.push(total_sqm); }
+    if (available_sqm !== undefined) { updates.push('available_sqm = ?'); values.push(available_sqm); }
+    if (city !== undefined) { updates.push('city = ?'); values.push(city); }
+    if (department !== undefined) { updates.push('department = ?'); values.push(department); }
+    if (address !== undefined) { updates.push('address = ?'); values.push(address); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay datos para actualizar' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(req.params.id);
+
+    db.prepare(`UPDATE spaces SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    logAudit(req.user.id, 'SPACE_EDITED', 'spaces', req.params.id, oldData, req.body, req);
+
+    res.json({ message: 'Espacio actualizado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al editar espacio' });
+  }
+});
+
+router.put('/spaces/:id/status', [
+  body('status').isIn(['draft', 'published', 'paused', 'deleted'])
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(req.params.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const oldStatus = space.status;
+    const newStatus = req.body.status;
+
+    if (newStatus === 'published') {
+      const host = db.prepare('SELECT is_blocked, anti_bypass_accepted FROM users WHERE id = ?').get(space.host_id);
+      if (host.is_blocked) {
+        return res.status(400).json({ error: 'El HOST está bloqueado, no puede publicar espacios' });
+      }
+      if (!host.anti_bypass_accepted) {
+        return res.status(400).json({ error: 'El HOST no ha aceptado la cláusula anti-bypass' });
+      }
+    }
+
+    db.prepare('UPDATE spaces SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(newStatus, req.params.id);
+
+    logAudit(req.user.id, 'SPACE_STATUS_CHANGED', 'spaces', req.params.id, 
+      { status: oldStatus }, { status: newStatus }, req);
+
+    res.json({ message: `Estado cambiado de ${oldStatus} a ${newStatus}` });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al cambiar estado del espacio' });
+  }
+});
+
+router.delete('/spaces/:id', (req, res) => {
+  try {
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(req.params.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const hasContracts = db.prepare(`
+      SELECT COUNT(*) as count FROM contracts WHERE space_id = ?
+    `).get(req.params.id);
+
+    if (hasContracts.count > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar espacio con historial de contratos. Desactívelo en su lugar.' });
+    }
+
+    const hasReservations = db.prepare(`
+      SELECT COUNT(*) as count FROM reservations WHERE space_id = ?
+    `).get(req.params.id);
+
+    if (hasReservations.count > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar espacio con historial de reservaciones. Desactívelo en su lugar.' });
+    }
+
+    db.prepare('DELETE FROM space_photos WHERE space_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM spaces WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'SPACE_DELETED', 'spaces', req.params.id, space, null, req);
+
+    res.json({ message: 'Espacio eliminado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar espacio' });
   }
 });
 

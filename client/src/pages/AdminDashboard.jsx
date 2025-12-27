@@ -321,40 +321,250 @@ function AdminUsers() {
 function AdminSpaces() {
   const [spaces, setSpaces] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState({ status: '', city: '', occupancy: '' })
+  const [editingSpace, setEditingSpace] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
-  useEffect(() => {
+  const loadSpaces = () => {
     api.get('/admin/spaces').then(r => setSpaces(r.data)).finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadSpaces() }, [])
+
+  const changeStatus = async (spaceId, newStatus) => {
+    if (!confirm(`¿Cambiar estado a ${newStatus}?`)) return
+    try {
+      await api.put(`/admin/spaces/${spaceId}/status`, { status: newStatus })
+      loadSpaces()
+      alert('Estado actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al cambiar estado')
+    }
+  }
+
+  const deleteSpace = async (spaceId, title) => {
+    if (!confirm(`¿Eliminar permanentemente "${title}"? Esta acción no se puede deshacer.`)) return
+    try {
+      await api.delete(`/admin/spaces/${spaceId}`)
+      loadSpaces()
+      alert('Espacio eliminado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar espacio')
+    }
+  }
+
+  const openEditModal = (space) => {
+    setEditingSpace(space)
+    setEditForm({
+      title: space.title || '',
+      description: space.description || '',
+      address: space.address || '',
+      city: space.city || '',
+      department: space.department || '',
+      total_sqm: space.total_sqm || 0,
+      available_sqm: space.available_sqm || 0,
+      price_per_sqm_day: space.price_per_sqm_day || '',
+      price_per_sqm_week: space.price_per_sqm_week || '',
+      price_per_sqm_month: space.price_per_sqm_month || ''
+    })
+  }
+
+  const saveEdit = async () => {
+    try {
+      const dataToSend = {}
+      if (editForm.title !== editingSpace.title) dataToSend.title = editForm.title
+      if (editForm.description !== editingSpace.description) dataToSend.description = editForm.description
+      if (editForm.address !== editingSpace.address) dataToSend.address = editForm.address
+      if (editForm.city !== editingSpace.city) dataToSend.city = editForm.city
+      if (editForm.department !== editingSpace.department) dataToSend.department = editForm.department
+      if (editForm.total_sqm !== editingSpace.total_sqm) dataToSend.total_sqm = editForm.total_sqm
+      if (editForm.available_sqm !== editingSpace.available_sqm) dataToSend.available_sqm = editForm.available_sqm
+      if (editForm.price_per_sqm_day !== '' && editForm.price_per_sqm_day != editingSpace.price_per_sqm_day) dataToSend.price_per_sqm_day = parseFloat(editForm.price_per_sqm_day)
+      if (editForm.price_per_sqm_week !== '' && editForm.price_per_sqm_week != editingSpace.price_per_sqm_week) dataToSend.price_per_sqm_week = parseFloat(editForm.price_per_sqm_week)
+      if (editForm.price_per_sqm_month !== '' && editForm.price_per_sqm_month != editingSpace.price_per_sqm_month) dataToSend.price_per_sqm_month = parseFloat(editForm.price_per_sqm_month)
+      
+      if (Object.keys(dataToSend).length === 0) {
+        alert('No hay cambios para guardar')
+        return
+      }
+      
+      await api.put(`/admin/spaces/${editingSpace.id}`, dataToSend)
+      setEditingSpace(null)
+      loadSpaces()
+      alert('Espacio actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al editar espacio')
+    }
+  }
+
+  const getOccupancyColor = (percent) => {
+    if (percent >= 80) return '#dc3545'
+    if (percent >= 50) return '#ffc107'
+    return '#28a745'
+  }
+
+  const getStatusBadge = (status) => {
+    const colors = { published: '#28a745', paused: '#ffc107', draft: '#6c757d', deleted: '#dc3545' }
+    const labels = { published: 'Publicado', paused: 'Pausado', draft: 'Borrador', deleted: 'Eliminado' }
+    return <span style={{background: colors[status] || '#6c757d', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.75rem'}}>{labels[status] || status}</span>
+  }
+
+  const cities = [...new Set(spaces.map(s => s.city))].filter(Boolean)
+
+  const filteredSpaces = spaces.filter(s => {
+    if (filter.status && s.status !== filter.status) return false
+    if (filter.city && s.city !== filter.city) return false
+    if (filter.occupancy === 'free' && s.occupancy_percent > 0) return false
+    if (filter.occupancy === 'partial' && (s.occupancy_percent === 0 || s.occupancy_percent >= 100)) return false
+    if (filter.occupancy === 'full' && s.occupancy_percent < 100) return false
+    return true
+  })
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
       <h1>Espacios</h1>
+      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap'}}>
+        <select value={filter.status} onChange={e => setFilter({...filter, status: e.target.value})} style={{padding: '0.5rem'}}>
+          <option value="">Todos los estados</option>
+          <option value="published">Publicado</option>
+          <option value="paused">Pausado</option>
+          <option value="draft">Borrador</option>
+        </select>
+        <select value={filter.city} onChange={e => setFilter({...filter, city: e.target.value})} style={{padding: '0.5rem'}}>
+          <option value="">Todas las ciudades</option>
+          {cities.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={filter.occupancy} onChange={e => setFilter({...filter, occupancy: e.target.value})} style={{padding: '0.5rem'}}>
+          <option value="">Toda ocupacion</option>
+          <option value="free">100% Libre</option>
+          <option value="partial">Parcialmente ocupado</option>
+          <option value="full">100% Ocupado</option>
+        </select>
+      </div>
       <table className="admin-table">
         <thead>
           <tr>
             <th>Titulo</th>
             <th>Tipo</th>
             <th>Ciudad</th>
-            <th>m²</th>
+            <th>Ocupacion</th>
             <th>Estado</th>
             <th>Host</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          {spaces.map(space => (
-            <tr key={space.id}>
-              <td>{space.title}</td>
+          {filteredSpaces.map(space => (
+            <tr key={space.id} className={space.host_blocked ? 'user-blocked' : ''}>
+              <td>
+                {space.title}
+                {space.next_contract_expiry && (
+                  <div style={{fontSize: '0.7rem', color: '#856404', marginTop: '2px'}}>
+                    Vence: {new Date(space.next_contract_expiry).toLocaleDateString()}
+                  </div>
+                )}
+              </td>
               <td>{space.space_type}</td>
               <td>{space.city}</td>
-              <td>{space.available_sqm}</td>
-              <td>{space.status}</td>
-              <td>{space.host_email}</td>
+              <td style={{minWidth: '150px'}}>
+                <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                  <div style={{flex: 1, height: '12px', background: '#e9ecef', borderRadius: '6px', overflow: 'hidden'}}>
+                    <div style={{width: `${space.occupancy_percent}%`, height: '100%', background: getOccupancyColor(space.occupancy_percent), transition: 'width 0.3s'}}></div>
+                  </div>
+                  <span style={{fontSize: '0.75rem', whiteSpace: 'nowrap'}}>
+                    {space.rented_sqm}/{space.total_sqm} m²
+                  </span>
+                </div>
+                <div style={{fontSize: '0.7rem', color: '#666', marginTop: '2px'}}>
+                  {space.occupancy_percent}% ocupado - {space.free_sqm} m² libres
+                </div>
+              </td>
+              <td>{getStatusBadge(space.status)}</td>
+              <td>
+                {space.host_email}
+                {space.host_blocked && <span className="blocked-badge">HOST BLOQ</span>}
+              </td>
+              <td>
+                <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                  <button onClick={() => openEditModal(space)} className="btn btn-sm btn-secondary">Editar</button>
+                  <select 
+                    value={space.status} 
+                    onChange={e => changeStatus(space.id, e.target.value)} 
+                    style={{padding: '0.25rem', fontSize: '0.75rem'}}
+                  >
+                    <option value="draft">Borrador</option>
+                    <option value="published">Publicar</option>
+                    <option value="paused">Pausar</option>
+                  </select>
+                  <button onClick={() => deleteSpace(space.id, space.title)} className="btn btn-sm btn-danger">Eliminar</button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {editingSpace && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth: '600px'}}>
+            <h3>Editar Espacio</h3>
+            <p style={{color: '#666', marginBottom: '1rem'}}>ID: {editingSpace.id}</p>
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
+              <div style={{gridColumn: '1 / -1'}}>
+                <label>Titulo:</label>
+                <input type="text" value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div style={{gridColumn: '1 / -1'}}>
+                <label>Descripcion:</label>
+                <textarea value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem', minHeight: '80px'}} />
+              </div>
+              <div style={{gridColumn: '1 / -1'}}>
+                <label>Direccion:</label>
+                <input type="text" value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div>
+                <label>Ciudad:</label>
+                <input type="text" value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div>
+                <label>Departamento:</label>
+                <input type="text" value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div>
+                <label>Total m²:</label>
+                <input type="number" value={editForm.total_sqm} onChange={e => setEditForm({...editForm, total_sqm: parseFloat(e.target.value) || 0})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div>
+                <label>Disponible m²:</label>
+                <input type="number" value={editForm.available_sqm} onChange={e => setEditForm({...editForm, available_sqm: parseFloat(e.target.value) || 0})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div>
+                <label>Precio/m²/dia (Bs.):</label>
+                <input type="number" step="0.01" value={editForm.price_per_sqm_day} onChange={e => setEditForm({...editForm, price_per_sqm_day: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div>
+                <label>Precio/m²/semana (Bs.):</label>
+                <input type="number" step="0.01" value={editForm.price_per_sqm_week} onChange={e => setEditForm({...editForm, price_per_sqm_week: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div>
+                <label>Precio/m²/mes (Bs.):</label>
+                <input type="number" step="0.01" value={editForm.price_per_sqm_month} onChange={e => setEditForm({...editForm, price_per_sqm_month: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+            </div>
+            {editingSpace.occupancy_percent > 0 && (
+              <div style={{marginTop: '1rem', padding: '0.75rem', background: '#fff3cd', borderRadius: '4px', fontSize: '0.85rem'}}>
+                Nota: No se pueden modificar precios ni m² totales mientras haya contratos activos.
+              </div>
+            )}
+            <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem'}}>
+              <button onClick={() => setEditingSpace(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
