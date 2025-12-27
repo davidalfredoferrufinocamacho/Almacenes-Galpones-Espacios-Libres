@@ -166,7 +166,12 @@ router.delete('/me', authenticateToken, [
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
 
     if (user.role === 'ADMIN') {
-      return res.status(400).json({ error: 'Un ADMIN no puede eliminar su cuenta desde este endpoint' });
+      const clientInfo = getClientInfo(req);
+      logAudit(req.user.id, 'ADMIN_SELF_DELETE_BLOCKED', 'users', req.user.id, null, {
+        reason: 'ADMIN cannot delete own account',
+        ...clientInfo
+      }, req);
+      return res.status(403).json({ error: 'Un ADMIN no puede eliminar su propia cuenta' });
     }
 
     const activeContracts = db.prepare(`
