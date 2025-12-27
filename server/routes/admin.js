@@ -540,6 +540,76 @@ router.get('/contracts', (req, res) => {
   }
 });
 
+router.put('/contracts/:id', [
+  body('status').optional().isIn(['pending', 'signed', 'active', 'completed', 'cancelled', 'terminated']),
+  body('notes').optional().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
+    if (!contract) {
+      return res.status(404).json({ error: 'Contrato no encontrado' });
+    }
+
+    const { status, notes } = req.body;
+    const oldData = { status: contract.status, notes: contract.notes };
+
+    const updates = [];
+    const values = [];
+
+    if (status !== undefined) { updates.push('status = ?'); values.push(status); }
+    if (notes !== undefined) { updates.push('notes = ?'); values.push(notes); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay datos para actualizar' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(req.params.id);
+
+    db.prepare(`UPDATE contracts SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    logAudit(req.user.id, 'CONTRACT_EDITED', 'contracts', req.params.id, oldData, req.body, req);
+
+    res.json({ message: 'Contrato actualizado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al editar contrato' });
+  }
+});
+
+router.delete('/contracts/:id', (req, res) => {
+  try {
+    const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
+    if (!contract) {
+      return res.status(404).json({ error: 'Contrato no encontrado' });
+    }
+
+    if (contract.status === 'signed' || contract.status === 'active') {
+      return res.status(400).json({ error: 'No se puede eliminar contrato firmado o activo. Cancele o termine el contrato.' });
+    }
+
+    const hasPayments = db.prepare('SELECT COUNT(*) as count FROM payments WHERE reservation_id = (SELECT reservation_id FROM contracts WHERE id = ?)').get(req.params.id);
+    if (hasPayments.count > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar contrato con pagos asociados' });
+    }
+
+    db.prepare('DELETE FROM contract_extensions WHERE contract_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM contracts WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'CONTRACT_DELETED', 'contracts', req.params.id, contract, null, req);
+
+    res.json({ message: 'Contrato eliminado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar contrato' });
+  }
+});
+
 router.get('/payments', (req, res) => {
   try {
     const payments = db.prepare(`
@@ -559,6 +629,76 @@ router.get('/payments', (req, res) => {
   }
 });
 
+router.put('/payments/:id', [
+  body('status').optional().isIn(['pending', 'completed', 'failed', 'refunded']),
+  body('escrow_status').optional().isIn(['held', 'released', 'refunded']),
+  body('notes').optional().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ error: 'Pago no encontrado' });
+    }
+
+    const { status, escrow_status, notes } = req.body;
+    const oldData = { status: payment.status, escrow_status: payment.escrow_status, notes: payment.notes };
+
+    const updates = [];
+    const values = [];
+
+    if (status !== undefined) { updates.push('status = ?'); values.push(status); }
+    if (escrow_status !== undefined) { updates.push('escrow_status = ?'); values.push(escrow_status); }
+    if (notes !== undefined) { updates.push('notes = ?'); values.push(notes); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay datos para actualizar' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(req.params.id);
+
+    db.prepare(`UPDATE payments SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    logAudit(req.user.id, 'PAYMENT_EDITED', 'payments', req.params.id, oldData, req.body, req);
+
+    res.json({ message: 'Pago actualizado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al editar pago' });
+  }
+});
+
+router.delete('/payments/:id', (req, res) => {
+  try {
+    const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ error: 'Pago no encontrado' });
+    }
+
+    if (payment.status === 'completed') {
+      return res.status(400).json({ error: 'No se puede eliminar pago completado. Use reembolso en su lugar.' });
+    }
+
+    if (payment.escrow_status === 'held') {
+      return res.status(400).json({ error: 'No se puede eliminar pago con escrow retenido. Libere o reembolse el escrow primero.' });
+    }
+
+    db.prepare('DELETE FROM payments WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'PAYMENT_DELETED', 'payments', req.params.id, payment, null, req);
+
+    res.json({ message: 'Pago eliminado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar pago' });
+  }
+});
+
 router.get('/invoices', (req, res) => {
   try {
     const invoices = db.prepare(`
@@ -572,6 +712,70 @@ router.get('/invoices', (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener facturas' });
+  }
+});
+
+router.put('/invoices/:id', [
+  body('status').optional().isIn(['draft', 'issued', 'paid', 'cancelled']),
+  body('notes').optional().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+    if (!invoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+
+    const { status, notes } = req.body;
+    const oldData = { status: invoice.status, notes: invoice.notes };
+
+    const updates = [];
+    const values = [];
+
+    if (status !== undefined) { updates.push('status = ?'); values.push(status); }
+    if (notes !== undefined) { updates.push('notes = ?'); values.push(notes); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay datos para actualizar' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(req.params.id);
+
+    db.prepare(`UPDATE invoices SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    logAudit(req.user.id, 'INVOICE_EDITED', 'invoices', req.params.id, oldData, req.body, req);
+
+    res.json({ message: 'Factura actualizada correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al editar factura' });
+  }
+});
+
+router.delete('/invoices/:id', (req, res) => {
+  try {
+    const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+    if (!invoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+
+    if (invoice.status === 'issued' || invoice.status === 'paid') {
+      return res.status(400).json({ error: 'No se puede eliminar factura emitida o pagada. Cancele la factura.' });
+    }
+
+    db.prepare('DELETE FROM invoices WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'INVOICE_DELETED', 'invoices', req.params.id, invoice, null, req);
+
+    res.json({ message: 'Factura eliminada correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar factura' });
   }
 });
 

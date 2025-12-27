@@ -843,10 +843,26 @@ function AdminContracts() {
   const [loading, setLoading] = useState(true)
   const [extensions, setExtensions] = useState({})
   const [showExtensions, setShowExtensions] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
+  const [editingContract, setEditingContract] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
-  useEffect(() => {
+  const loadContracts = () => {
     api.get('/admin/contracts').then(r => setContracts(r.data)).finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadContracts() }, [])
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }))
+  }
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) return ' ↕'
+    return sortConfig.direction === 'asc' ? ' ↑' : ' ↓'
+  }
 
   const downloadPdf = async (id) => {
     try {
@@ -864,10 +880,7 @@ function AdminContracts() {
   }
 
   const loadExtensions = async (contractId) => {
-    if (showExtensions === contractId) {
-      setShowExtensions(null)
-      return
-    }
+    if (showExtensions === contractId) { setShowExtensions(null); return }
     try {
       const r = await api.get(`/admin/contracts/${contractId}/extensions`)
       setExtensions({ ...extensions, [contractId]: r.data.extensions || [] })
@@ -877,26 +890,99 @@ function AdminContracts() {
     }
   }
 
+  const openEditModal = (contract) => {
+    setEditingContract(contract)
+    setEditForm({ status: contract.status, notes: contract.notes || '' })
+  }
+
+  const saveEdit = async () => {
+    try {
+      const dataToSend = {}
+      if (editForm.status !== editingContract.status) dataToSend.status = editForm.status
+      if (editForm.notes !== (editingContract.notes || '')) dataToSend.notes = editForm.notes
+      if (Object.keys(dataToSend).length === 0) { alert('No hay cambios'); return }
+      await api.put(`/admin/contracts/${editingContract.id}`, dataToSend)
+      setEditingContract(null)
+      loadContracts()
+      alert('Contrato actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al editar contrato')
+    }
+  }
+
+  const deleteContract = async (id, number) => {
+    if (!confirm(`¿Eliminar contrato ${number}?`)) return
+    try {
+      await api.delete(`/admin/contracts/${id}`)
+      loadContracts()
+      alert('Contrato eliminado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar contrato')
+    }
+  }
+
+  const getStatusBadge = (status) => {
+    const colors = { pending: '#6c757d', signed: '#17a2b8', active: '#28a745', completed: '#28a745', cancelled: '#dc3545', terminated: '#dc3545' }
+    const labels = { pending: 'Pendiente', signed: 'Firmado', active: 'Activo', completed: 'Completado', cancelled: 'Cancelado', terminated: 'Terminado' }
+    return <span style={{background: colors[status] || '#6c757d', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.75rem'}}>{labels[status] || status}</span>
+  }
+
+  const sortKeyMap = { contract_number: 'contract_number', space_title: 'space_title', guest_email: 'guest_email', host_email: 'host_email', total_amount: 'total_amount', commission_amount: 'commission_amount', status: 'status' }
+
+  const filteredContracts = contracts
+    .filter(c => {
+      if (filterStatus && c.status !== filterStatus) return false
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        return c.contract_number?.toLowerCase().includes(term) || c.space_title?.toLowerCase().includes(term) ||
+               c.guest_email?.toLowerCase().includes(term) || c.host_email?.toLowerCase().includes(term)
+      }
+      return true
+    })
+    .sort((a, b) => {
+      if (!sortConfig.key) return 0
+      const key = sortKeyMap[sortConfig.key] || sortConfig.key
+      let aVal = a[key], bVal = b[key]
+      if (typeof aVal === 'string') aVal = aVal?.toLowerCase() || ''
+      if (typeof bVal === 'string') bVal = bVal?.toLowerCase() || ''
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+      return 0
+    })
+
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
       <h1>Contratos</h1>
+      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center'}}>
+        <input type="text" placeholder="Buscar por numero, espacio, guest, host..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{padding: '0.5rem', minWidth: '250px', border: '1px solid #ddd', borderRadius: '4px'}} />
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{padding: '0.5rem'}}>
+          <option value="">Todos los estados</option>
+          <option value="pending">Pendiente</option>
+          <option value="signed">Firmado</option>
+          <option value="active">Activo</option>
+          <option value="completed">Completado</option>
+          <option value="cancelled">Cancelado</option>
+          <option value="terminated">Terminado</option>
+        </select>
+        <span style={{marginLeft: 'auto', color: '#666', fontSize: '0.85rem'}}>{filteredContracts.length} de {contracts.length} contratos</span>
+      </div>
       <table className="admin-table">
         <thead>
           <tr>
-            <th>Numero</th>
-            <th>Espacio</th>
-            <th>Guest</th>
-            <th>Host</th>
-            <th>Total</th>
-            <th>Comision</th>
-            <th>Estado</th>
+            <th onClick={() => handleSort('contract_number')} style={{cursor: 'pointer', userSelect: 'none'}}>Numero{getSortIcon('contract_number')}</th>
+            <th onClick={() => handleSort('space_title')} style={{cursor: 'pointer', userSelect: 'none'}}>Espacio{getSortIcon('space_title')}</th>
+            <th onClick={() => handleSort('guest_email')} style={{cursor: 'pointer', userSelect: 'none'}}>Guest{getSortIcon('guest_email')}</th>
+            <th onClick={() => handleSort('host_email')} style={{cursor: 'pointer', userSelect: 'none'}}>Host{getSortIcon('host_email')}</th>
+            <th onClick={() => handleSort('total_amount')} style={{cursor: 'pointer', userSelect: 'none'}}>Total{getSortIcon('total_amount')}</th>
+            <th onClick={() => handleSort('commission_amount')} style={{cursor: 'pointer', userSelect: 'none'}}>Comision{getSortIcon('commission_amount')}</th>
+            <th onClick={() => handleSort('status')} style={{cursor: 'pointer', userSelect: 'none'}}>Estado{getSortIcon('status')}</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          {contracts.map(c => (
+          {filteredContracts.map(c => (
             <>
               <tr key={c.id}>
                 <td>{c.contract_number}</td>
@@ -905,12 +991,14 @@ function AdminContracts() {
                 <td>{c.host_email}</td>
                 <td>Bs. {(c.total_amount || 0).toFixed(2)}</td>
                 <td>Bs. {(c.commission_amount || 0).toFixed(2)}</td>
-                <td>{c.status}</td>
+                <td>{getStatusBadge(c.status)}</td>
                 <td>
-                  <button onClick={() => downloadPdf(c.id)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>PDF</button>
-                  <button onClick={() => loadExtensions(c.id)} className="btn btn-sm btn-secondary">
-                    {showExtensions === c.id ? 'Ocultar' : 'Extensiones'}
-                  </button>
+                  <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                    <button onClick={() => downloadPdf(c.id)} className="btn btn-sm btn-secondary">PDF</button>
+                    <button onClick={() => openEditModal(c)} className="btn btn-sm btn-secondary">Editar</button>
+                    <button onClick={() => loadExtensions(c.id)} className="btn btn-sm btn-secondary">{showExtensions === c.id ? 'Ocultar' : 'Ext'}</button>
+                    <button onClick={() => deleteContract(c.id, c.contract_number)} className="btn btn-sm btn-danger">Eliminar</button>
+                  </div>
                 </td>
               </tr>
               {showExtensions === c.id && extensions[c.id] && (
@@ -935,6 +1023,32 @@ function AdminContracts() {
           ))}
         </tbody>
       </table>
+      {editingContract && (
+        <div className="modal-overlay" onClick={() => setEditingContract(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Editar Contrato {editingContract.contract_number}</h2>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Estado:</label>
+              <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}}>
+                <option value="pending">Pendiente</option>
+                <option value="signed">Firmado</option>
+                <option value="active">Activo</option>
+                <option value="completed">Completado</option>
+                <option value="cancelled">Cancelado</option>
+                <option value="terminated">Terminado</option>
+              </select>
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Notas:</label>
+              <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem', minHeight: '80px'}} />
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setEditingContract(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -942,42 +1056,166 @@ function AdminContracts() {
 function AdminPayments() {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
+  const [editingPayment, setEditingPayment] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
-  useEffect(() => {
+  const loadPayments = () => {
     api.get('/admin/payments').then(r => setPayments(r.data)).finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadPayments() }, [])
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }))
+  }
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) return ' ↕'
+    return sortConfig.direction === 'asc' ? ' ↑' : ' ↓'
+  }
+
+  const openEditModal = (payment) => {
+    setEditingPayment(payment)
+    setEditForm({ status: payment.status, escrow_status: payment.escrow_status || '', notes: payment.notes || '' })
+  }
+
+  const saveEdit = async () => {
+    try {
+      const dataToSend = {}
+      if (editForm.status !== editingPayment.status) dataToSend.status = editForm.status
+      if (editForm.escrow_status !== (editingPayment.escrow_status || '')) dataToSend.escrow_status = editForm.escrow_status
+      if (editForm.notes !== (editingPayment.notes || '')) dataToSend.notes = editForm.notes
+      if (Object.keys(dataToSend).length === 0) { alert('No hay cambios'); return }
+      await api.put(`/admin/payments/${editingPayment.id}`, dataToSend)
+      setEditingPayment(null)
+      loadPayments()
+      alert('Pago actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al editar pago')
+    }
+  }
+
+  const deletePayment = async (id) => {
+    if (!confirm('¿Eliminar este pago?')) return
+    try {
+      await api.delete(`/admin/payments/${id}`)
+      loadPayments()
+      alert('Pago eliminado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar pago')
+    }
+  }
+
+  const getStatusBadge = (status) => {
+    const colors = { pending: '#ffc107', completed: '#28a745', failed: '#dc3545', refunded: '#17a2b8' }
+    const labels = { pending: 'Pendiente', completed: 'Completado', failed: 'Fallido', refunded: 'Reembolsado' }
+    return <span style={{background: colors[status] || '#6c757d', color: status === 'pending' ? '#000' : 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.75rem'}}>{labels[status] || status}</span>
+  }
+
+  const filteredPayments = payments
+    .filter(p => {
+      if (filterStatus && p.status !== filterStatus) return false
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        return p.user_email?.toLowerCase().includes(term) || p.space_title?.toLowerCase().includes(term) || p.payment_type?.toLowerCase().includes(term)
+      }
+      return true
+    })
+    .sort((a, b) => {
+      if (!sortConfig.key) return 0
+      let aVal = a[sortConfig.key], bVal = b[sortConfig.key]
+      if (typeof aVal === 'string') aVal = aVal?.toLowerCase() || ''
+      if (typeof bVal === 'string') bVal = bVal?.toLowerCase() || ''
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+      return 0
+    })
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
       <h1>Pagos</h1>
+      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center'}}>
+        <input type="text" placeholder="Buscar por usuario, espacio, tipo..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{padding: '0.5rem', minWidth: '250px', border: '1px solid #ddd', borderRadius: '4px'}} />
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{padding: '0.5rem'}}>
+          <option value="">Todos los estados</option>
+          <option value="pending">Pendiente</option>
+          <option value="completed">Completado</option>
+          <option value="failed">Fallido</option>
+          <option value="refunded">Reembolsado</option>
+        </select>
+        <span style={{marginLeft: 'auto', color: '#666', fontSize: '0.85rem'}}>{filteredPayments.length} de {payments.length} pagos</span>
+      </div>
       <table className="admin-table">
         <thead>
           <tr>
-            <th>Usuario</th>
-            <th>Tipo</th>
-            <th>Monto</th>
-            <th>Metodo</th>
-            <th>Estado</th>
-            <th>Escrow</th>
-            <th>Fecha</th>
+            <th onClick={() => handleSort('user_email')} style={{cursor: 'pointer', userSelect: 'none'}}>Usuario{getSortIcon('user_email')}</th>
+            <th onClick={() => handleSort('payment_type')} style={{cursor: 'pointer', userSelect: 'none'}}>Tipo{getSortIcon('payment_type')}</th>
+            <th onClick={() => handleSort('amount')} style={{cursor: 'pointer', userSelect: 'none'}}>Monto{getSortIcon('amount')}</th>
+            <th onClick={() => handleSort('payment_method')} style={{cursor: 'pointer', userSelect: 'none'}}>Metodo{getSortIcon('payment_method')}</th>
+            <th onClick={() => handleSort('status')} style={{cursor: 'pointer', userSelect: 'none'}}>Estado{getSortIcon('status')}</th>
+            <th onClick={() => handleSort('escrow_status')} style={{cursor: 'pointer', userSelect: 'none'}}>Escrow{getSortIcon('escrow_status')}</th>
+            <th onClick={() => handleSort('created_at')} style={{cursor: 'pointer', userSelect: 'none'}}>Fecha{getSortIcon('created_at')}</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          {payments.map(p => (
+          {filteredPayments.map(p => (
             <tr key={p.id}>
               <td>{p.user_email}</td>
               <td>{p.payment_type}</td>
-              <td>Bs. {p.amount.toFixed(2)}</td>
+              <td>Bs. {(p.amount || 0).toFixed(2)}</td>
               <td>{p.payment_method}</td>
-              <td>{p.status}</td>
+              <td>{getStatusBadge(p.status)}</td>
               <td>{p.escrow_status || '-'}</td>
               <td>{new Date(p.created_at).toLocaleDateString()}</td>
+              <td>
+                <div style={{display: 'flex', gap: '0.25rem'}}>
+                  <button onClick={() => openEditModal(p)} className="btn btn-sm btn-secondary">Editar</button>
+                  <button onClick={() => deletePayment(p.id)} className="btn btn-sm btn-danger">Eliminar</button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {editingPayment && (
+        <div className="modal-overlay" onClick={() => setEditingPayment(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Editar Pago</h2>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Estado:</label>
+              <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}}>
+                <option value="pending">Pendiente</option>
+                <option value="completed">Completado</option>
+                <option value="failed">Fallido</option>
+                <option value="refunded">Reembolsado</option>
+              </select>
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Escrow:</label>
+              <select value={editForm.escrow_status} onChange={e => setEditForm({...editForm, escrow_status: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}}>
+                <option value="">Sin escrow</option>
+                <option value="held">Retenido</option>
+                <option value="released">Liberado</option>
+                <option value="refunded">Reembolsado</option>
+              </select>
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Notas:</label>
+              <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem', minHeight: '80px'}} />
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setEditingPayment(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1074,10 +1312,26 @@ function AdminMessages() {
 function AdminInvoices() {
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
+  const [editingInvoice, setEditingInvoice] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
-  useEffect(() => {
+  const loadInvoices = () => {
     api.get('/admin/invoices').then(r => setInvoices(r.data)).finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadInvoices() }, [])
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }))
+  }
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) return ' ↕'
+    return sortConfig.direction === 'asc' ? ' ↑' : ' ↓'
+  }
 
   const downloadPdf = async (id) => {
     try {
@@ -1094,43 +1348,141 @@ function AdminInvoices() {
     }
   }
 
+  const openEditModal = (invoice) => {
+    setEditingInvoice(invoice)
+    setEditForm({ status: invoice.status || 'issued', notes: invoice.notes || '' })
+  }
+
+  const saveEdit = async () => {
+    try {
+      const dataToSend = {}
+      if (editForm.status !== (editingInvoice.status || 'issued')) dataToSend.status = editForm.status
+      if (editForm.notes !== (editingInvoice.notes || '')) dataToSend.notes = editForm.notes
+      if (Object.keys(dataToSend).length === 0) { alert('No hay cambios'); return }
+      await api.put(`/admin/invoices/${editingInvoice.id}`, dataToSend)
+      setEditingInvoice(null)
+      loadInvoices()
+      alert('Factura actualizada')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al editar factura')
+    }
+  }
+
+  const deleteInvoice = async (id, number) => {
+    if (!confirm(`¿Eliminar factura ${number}?`)) return
+    try {
+      await api.delete(`/admin/invoices/${id}`)
+      loadInvoices()
+      alert('Factura eliminada')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar factura')
+    }
+  }
+
+  const getStatusBadge = (status) => {
+    const colors = { draft: '#6c757d', issued: '#17a2b8', paid: '#28a745', cancelled: '#dc3545' }
+    const labels = { draft: 'Borrador', issued: 'Emitida', paid: 'Pagada', cancelled: 'Cancelada' }
+    return <span style={{background: colors[status] || '#6c757d', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.75rem'}}>{labels[status] || status || 'Emitida'}</span>
+  }
+
+  const filteredInvoices = invoices
+    .filter(inv => {
+      if (filterStatus && inv.status !== filterStatus) return false
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        return inv.invoice_number?.toLowerCase().includes(term) || inv.contract_number?.toLowerCase().includes(term) ||
+               inv.recipient_email?.toLowerCase().includes(term) || inv.invoice_type?.toLowerCase().includes(term)
+      }
+      return true
+    })
+    .sort((a, b) => {
+      if (!sortConfig.key) return 0
+      let aVal = a[sortConfig.key], bVal = b[sortConfig.key]
+      if (typeof aVal === 'string') aVal = aVal?.toLowerCase() || ''
+      if (typeof bVal === 'string') bVal = bVal?.toLowerCase() || ''
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+      return 0
+    })
+
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
       <h1>Facturas</h1>
       <p className="disclaimer-box">[FACTURA NO FISCAL] Las facturas son documentos informativos. Para factura fiscal valida, se requiere integracion SIAT pendiente.</p>
-      {invoices.length === 0 ? (
+      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center'}}>
+        <input type="text" placeholder="Buscar por numero, contrato, tipo..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{padding: '0.5rem', minWidth: '250px', border: '1px solid #ddd', borderRadius: '4px'}} />
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{padding: '0.5rem'}}>
+          <option value="">Todos los estados</option>
+          <option value="draft">Borrador</option>
+          <option value="issued">Emitida</option>
+          <option value="paid">Pagada</option>
+          <option value="cancelled">Cancelada</option>
+        </select>
+        <span style={{marginLeft: 'auto', color: '#666', fontSize: '0.85rem'}}>{filteredInvoices.length} de {invoices.length} facturas</span>
+      </div>
+      {filteredInvoices.length === 0 ? (
         <p>No hay facturas registradas</p>
       ) : (
         <table className="admin-table">
           <thead>
             <tr>
-              <th>Numero</th>
-              <th>Tipo</th>
-              <th>Contrato</th>
-              <th>Monto</th>
-              <th>Comision</th>
-              <th>Fecha</th>
+              <th onClick={() => handleSort('invoice_number')} style={{cursor: 'pointer', userSelect: 'none'}}>Numero{getSortIcon('invoice_number')}</th>
+              <th onClick={() => handleSort('invoice_type')} style={{cursor: 'pointer', userSelect: 'none'}}>Tipo{getSortIcon('invoice_type')}</th>
+              <th onClick={() => handleSort('contract_number')} style={{cursor: 'pointer', userSelect: 'none'}}>Contrato{getSortIcon('contract_number')}</th>
+              <th onClick={() => handleSort('total_amount')} style={{cursor: 'pointer', userSelect: 'none'}}>Monto{getSortIcon('total_amount')}</th>
+              <th onClick={() => handleSort('commission_amount')} style={{cursor: 'pointer', userSelect: 'none'}}>Comision{getSortIcon('commission_amount')}</th>
+              <th onClick={() => handleSort('status')} style={{cursor: 'pointer', userSelect: 'none'}}>Estado{getSortIcon('status')}</th>
+              <th onClick={() => handleSort('created_at')} style={{cursor: 'pointer', userSelect: 'none'}}>Fecha{getSortIcon('created_at')}</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {invoices.map(inv => (
+            {filteredInvoices.map(inv => (
               <tr key={inv.id}>
                 <td>{inv.invoice_number}</td>
                 <td>{inv.invoice_type}</td>
                 <td>{inv.contract_number || '-'}</td>
                 <td>Bs. {(inv.total_amount || 0).toFixed(2)}</td>
                 <td>Bs. {(inv.commission_amount || 0).toFixed(2)}</td>
+                <td>{getStatusBadge(inv.status)}</td>
                 <td>{new Date(inv.created_at).toLocaleDateString()}</td>
                 <td>
-                  <button onClick={() => downloadPdf(inv.id)} className="btn btn-sm btn-secondary">PDF</button>
+                  <div style={{display: 'flex', gap: '0.25rem'}}>
+                    <button onClick={() => downloadPdf(inv.id)} className="btn btn-sm btn-secondary">PDF</button>
+                    <button onClick={() => openEditModal(inv)} className="btn btn-sm btn-secondary">Editar</button>
+                    <button onClick={() => deleteInvoice(inv.id, inv.invoice_number)} className="btn btn-sm btn-danger">Eliminar</button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+      {editingInvoice && (
+        <div className="modal-overlay" onClick={() => setEditingInvoice(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Editar Factura {editingInvoice.invoice_number}</h2>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Estado:</label>
+              <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}}>
+                <option value="draft">Borrador</option>
+                <option value="issued">Emitida</option>
+                <option value="paid">Pagada</option>
+                <option value="cancelled">Cancelada</option>
+              </select>
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Notas:</label>
+              <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem', minHeight: '80px'}} />
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setEditingInvoice(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
