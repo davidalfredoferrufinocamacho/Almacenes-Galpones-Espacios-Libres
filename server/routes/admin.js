@@ -438,6 +438,87 @@ router.get('/reservations', (req, res) => {
   }
 });
 
+router.put('/reservations/:id', [
+  body('status').optional().isIn(['pending', 'confirmed', 'deposit_paid', 'contract_signed', 'completed', 'cancelled', 'rejected']),
+  body('sqm_requested').optional().isFloat({ min: 1 }),
+  body('notes').optional().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const reservation = db.prepare('SELECT * FROM reservations WHERE id = ?').get(req.params.id);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservacion no encontrada' });
+    }
+
+    const hasContract = db.prepare('SELECT COUNT(*) as count FROM contracts WHERE reservation_id = ?').get(req.params.id);
+    if (hasContract.count > 0) {
+      return res.status(400).json({ error: 'No se puede editar reservacion con contrato generado' });
+    }
+
+    if (reservation.status === 'deposit_paid' && req.body.sqm_requested) {
+      return res.status(400).json({ error: 'No se puede modificar m2 despues del pago de anticipo' });
+    }
+
+    const { status, sqm_requested, notes } = req.body;
+    const oldData = { ...reservation };
+
+    const updates = [];
+    const values = [];
+
+    if (status !== undefined) { updates.push('status = ?'); values.push(status); }
+    if (sqm_requested !== undefined) { updates.push('sqm_requested = ?'); values.push(sqm_requested); }
+    if (notes !== undefined) { updates.push('notes = ?'); values.push(notes); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay datos para actualizar' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(req.params.id);
+
+    db.prepare(`UPDATE reservations SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    logAudit(req.user.id, 'RESERVATION_EDITED', 'reservations', req.params.id, oldData, req.body, req);
+
+    res.json({ message: 'Reservacion actualizada correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al editar reservacion' });
+  }
+});
+
+router.delete('/reservations/:id', (req, res) => {
+  try {
+    const reservation = db.prepare('SELECT * FROM reservations WHERE id = ?').get(req.params.id);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservacion no encontrada' });
+    }
+
+    const hasContract = db.prepare('SELECT COUNT(*) as count FROM contracts WHERE reservation_id = ?').get(req.params.id);
+    if (hasContract.count > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar reservacion con contrato. Cancele la reservacion en su lugar.' });
+    }
+
+    const hasPayments = db.prepare('SELECT COUNT(*) as count FROM payments WHERE reservation_id = ?').get(req.params.id);
+    if (hasPayments.count > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar reservacion con pagos registrados. Cancele la reservacion en su lugar.' });
+    }
+
+    db.prepare('DELETE FROM reservations WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'RESERVATION_DELETED', 'reservations', req.params.id, reservation, null, req);
+
+    res.json({ message: 'Reservacion eliminada correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar reservacion' });
+  }
+});
+
 router.get('/contracts', (req, res) => {
   try {
     const contracts = db.prepare(`

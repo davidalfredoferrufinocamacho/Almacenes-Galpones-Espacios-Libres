@@ -623,40 +623,187 @@ function AdminSpaces() {
 function AdminReservations() {
   const [reservations, setReservations] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editingReservation, setEditingReservation] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
 
-  useEffect(() => {
+  const loadReservations = () => {
     api.get('/admin/reservations').then(r => setReservations(r.data)).finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadReservations() }, [])
+
+  const openEditModal = (reservation) => {
+    setEditingReservation(reservation)
+    setEditForm({
+      status: reservation.status,
+      sqm_requested: reservation.sqm_requested,
+      notes: reservation.notes || ''
+    })
+  }
+
+  const saveEdit = async () => {
+    try {
+      const dataToSend = {}
+      if (editForm.status !== editingReservation.status) dataToSend.status = editForm.status
+      if (editForm.sqm_requested !== editingReservation.sqm_requested) dataToSend.sqm_requested = editForm.sqm_requested
+      if (editForm.notes !== (editingReservation.notes || '')) dataToSend.notes = editForm.notes
+
+      if (Object.keys(dataToSend).length === 0) {
+        alert('No hay cambios para guardar')
+        return
+      }
+
+      await api.put(`/admin/reservations/${editingReservation.id}`, dataToSend)
+      setEditingReservation(null)
+      loadReservations()
+      alert('Reservacion actualizada')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al editar reservacion')
+    }
+  }
+
+  const deleteReservation = async (id, spaceTitle) => {
+    if (!confirm(`¿Eliminar reservacion para "${spaceTitle}"? Esta accion no se puede deshacer.`)) return
+    try {
+      await api.delete(`/admin/reservations/${id}`)
+      loadReservations()
+      alert('Reservacion eliminada')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar reservacion')
+    }
+  }
+
+  const getStatusBadge = (status) => {
+    const colors = { 
+      pending: '#6c757d', confirmed: '#17a2b8', deposit_paid: '#ffc107', 
+      contract_signed: '#28a745', completed: '#28a745', cancelled: '#dc3545', rejected: '#dc3545' 
+    }
+    const labels = { 
+      pending: 'Pendiente', confirmed: 'Confirmada', deposit_paid: 'Anticipo Pagado',
+      contract_signed: 'Contrato Firmado', completed: 'Completada', cancelled: 'Cancelada', rejected: 'Rechazada'
+    }
+    return <span style={{background: colors[status] || '#6c757d', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.75rem'}}>{labels[status] || status}</span>
+  }
+
+  const filteredReservations = reservations.filter(r => {
+    if (filterStatus && r.status !== filterStatus) return false
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      return r.space_title?.toLowerCase().includes(term) ||
+             r.guest_email?.toLowerCase().includes(term) ||
+             r.host_email?.toLowerCase().includes(term)
+    }
+    return true
+  })
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
       <h1>Reservaciones</h1>
+      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center'}}>
+        <input 
+          type="text" 
+          placeholder="Buscar por espacio, guest, host..." 
+          value={searchTerm} 
+          onChange={e => setSearchTerm(e.target.value)} 
+          style={{padding: '0.5rem', minWidth: '220px', border: '1px solid #ddd', borderRadius: '4px'}}
+        />
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{padding: '0.5rem'}}>
+          <option value="">Todos los estados</option>
+          <option value="pending">Pendiente</option>
+          <option value="confirmed">Confirmada</option>
+          <option value="deposit_paid">Anticipo Pagado</option>
+          <option value="contract_signed">Contrato Firmado</option>
+          <option value="completed">Completada</option>
+          <option value="cancelled">Cancelada</option>
+          <option value="rejected">Rechazada</option>
+        </select>
+        <span style={{marginLeft: 'auto', color: '#666', fontSize: '0.85rem'}}>
+          {filteredReservations.length} de {reservations.length} reservaciones
+        </span>
+      </div>
       <table className="admin-table">
         <thead>
           <tr>
             <th>Espacio</th>
             <th>Guest</th>
+            <th>Host</th>
             <th>m²</th>
             <th>Total</th>
             <th>Anticipo</th>
             <th>Estado</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          {reservations.map(r => (
+          {filteredReservations.map(r => (
             <tr key={r.id}>
               <td>{r.space_title}</td>
               <td>{r.guest_email}</td>
+              <td>{r.host_email}</td>
               <td>{r.sqm_requested}</td>
-              <td>Bs. {r.total_amount.toFixed(2)}</td>
-              <td>Bs. {r.deposit_amount.toFixed(2)}</td>
-              <td>{r.status}</td>
+              <td>Bs. {r.total_amount?.toFixed(2) || '0.00'}</td>
+              <td>Bs. {r.deposit_amount?.toFixed(2) || '0.00'}</td>
+              <td>{getStatusBadge(r.status)}</td>
+              <td>
+                <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                  <button onClick={() => openEditModal(r)} className="btn btn-sm btn-secondary">Editar</button>
+                  <button onClick={() => deleteReservation(r.id, r.space_title)} className="btn btn-sm btn-danger">Eliminar</button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {editingReservation && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Editar Reservacion</h3>
+            <p style={{color: '#666', marginBottom: '1rem'}}>Espacio: {editingReservation.space_title}</p>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Estado:</label>
+              <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}}>
+                <option value="pending">Pendiente</option>
+                <option value="confirmed">Confirmada</option>
+                <option value="deposit_paid">Anticipo Pagado</option>
+                <option value="contract_signed">Contrato Firmado</option>
+                <option value="completed">Completada</option>
+                <option value="cancelled">Cancelada</option>
+                <option value="rejected">Rechazada</option>
+              </select>
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>m² Solicitados:</label>
+              <input 
+                type="number" 
+                value={editForm.sqm_requested} 
+                onChange={e => setEditForm({...editForm, sqm_requested: parseFloat(e.target.value) || 0})} 
+                style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}}
+                disabled={editingReservation.status === 'deposit_paid' || editingReservation.status === 'contract_signed'}
+              />
+              {(editingReservation.status === 'deposit_paid' || editingReservation.status === 'contract_signed') && (
+                <small style={{color: '#856404'}}>No se puede modificar despues del pago de anticipo</small>
+              )}
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Notas:</label>
+              <textarea 
+                value={editForm.notes} 
+                onChange={e => setEditForm({...editForm, notes: e.target.value})} 
+                style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem', minHeight: '80px'}}
+              />
+            </div>
+            <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setEditingReservation(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
