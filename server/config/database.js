@@ -25,6 +25,7 @@ function initDatabase() {
       department TEXT,
       is_verified INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1,
+      is_blocked INTEGER DEFAULT 0,
       anti_bypass_accepted INTEGER DEFAULT 0,
       anti_bypass_accepted_at TEXT,
       anti_bypass_legal_text_id TEXT,
@@ -480,7 +481,8 @@ function initDatabase() {
     { table: 'users', column: 'anti_bypass_legal_text_id', type: 'TEXT' },
     { table: 'users', column: 'anti_bypass_legal_version', type: 'TEXT' },
     { table: 'users', column: 'anti_bypass_ip', type: 'TEXT' },
-    { table: 'users', column: 'anti_bypass_user_agent', type: 'TEXT' }
+    { table: 'users', column: 'anti_bypass_user_agent', type: 'TEXT' },
+    { table: 'users', column: 'is_blocked', type: 'INTEGER DEFAULT 0' }
   ];
 
   for (const m of migrations) {

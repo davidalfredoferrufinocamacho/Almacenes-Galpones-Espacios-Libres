@@ -295,6 +295,48 @@
   background: #c82333;
 }
 
+.btn-warning {
+  background: #ffc107;
+  color: #212529;
+}
+
+.btn-warning:hover {
+  background: #e0a800;
+}
+
+.btn-info {
+  background: #17a2b8;
+  color: white;
+}
+
+.btn-info:hover {
+  background: #138496;
+}
+
+.btn-dark {
+  background: #343a40;
+  color: white;
+}
+
+.btn-dark:hover {
+  background: #23272b;
+}
+
+.user-blocked {
+  background: #fff3f3 !important;
+}
+
+.blocked-badge {
+  display: inline-block;
+  background: #dc3545;
+  color: white;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  margin-left: 0.5rem;
+  font-weight: bold;
+}
+
 .filters-row input {
   padding: 0.5rem;
   border: 1px solid #ddd;

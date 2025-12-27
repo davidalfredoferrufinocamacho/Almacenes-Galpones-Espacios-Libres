@@ -55,7 +55,7 @@ router.get('/users', (req, res) => {
   try {
     const users = db.prepare(`
       SELECT id, email, role, person_type, first_name, last_name, company_name,
-             ci, nit, phone, city, department, is_verified, is_active,
+             ci, nit, phone, city, department, is_verified, is_active, is_blocked,
              anti_bypass_accepted, created_at
       FROM users
       ORDER BY created_at DESC
@@ -138,6 +138,99 @@ router.put('/users/:id/role', [
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al cambiar rol de usuario' });
+  }
+});
+
+router.put('/users/:id', [
+  body('first_name').optional().trim().notEmpty(),
+  body('last_name').optional().trim().notEmpty(),
+  body('phone').optional().trim(),
+  body('city').optional().trim(),
+  body('is_blocked').optional().isBoolean()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    if (user.role === 'ADMIN' && req.params.id !== req.user.id) {
+      return res.status(403).json({ error: 'No se puede editar a otro administrador' });
+    }
+
+    const { first_name, last_name, phone, city, is_blocked } = req.body;
+    const oldData = { first_name: user.first_name, last_name: user.last_name, phone: user.phone, city: user.city, is_blocked: user.is_blocked };
+
+    const updates = [];
+    const values = [];
+
+    if (first_name !== undefined) { updates.push('first_name = ?'); values.push(first_name); }
+    if (last_name !== undefined) { updates.push('last_name = ?'); values.push(last_name); }
+    if (phone !== undefined) { updates.push('phone = ?'); values.push(phone); }
+    if (city !== undefined) { updates.push('city = ?'); values.push(city); }
+    if (is_blocked !== undefined) { updates.push('is_blocked = ?'); values.push(is_blocked ? 1 : 0); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay datos para actualizar' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(req.params.id);
+
+    db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    logAudit(req.user.id, 'USER_EDITED', 'users', req.params.id, oldData, req.body, req);
+
+    res.json({ message: 'Usuario actualizado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al editar usuario' });
+  }
+});
+
+router.delete('/users/:id', (req, res) => {
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    if (user.role === 'ADMIN') {
+      return res.status(403).json({ error: 'No se puede eliminar a un administrador' });
+    }
+
+    if (req.params.id === req.user.id) {
+      return res.status(403).json({ error: 'No puedes eliminarte a ti mismo' });
+    }
+
+    const hasContracts = db.prepare('SELECT COUNT(*) as count FROM contracts WHERE guest_id = ? OR host_id = ?').get(req.params.id, req.params.id);
+    if (hasContracts.count > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar usuario con contratos activos. Desactivelo en su lugar.' });
+    }
+
+    const hasReservations = db.prepare('SELECT COUNT(*) as count FROM reservations WHERE guest_id = ? OR host_id = ?').get(req.params.id, req.params.id);
+    if (hasReservations.count > 0) {
+      db.prepare('DELETE FROM reservations WHERE guest_id = ? OR host_id = ?').run(req.params.id, req.params.id);
+    }
+
+    const hasSpaces = db.prepare('SELECT COUNT(*) as count FROM spaces WHERE host_id = ?').get(req.params.id);
+    if (hasSpaces.count > 0) {
+      db.prepare('DELETE FROM spaces WHERE host_id = ?').run(req.params.id);
+    }
+
+    db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'USER_DELETED', 'users', req.params.id, user, null, req);
+
+    res.json({ message: 'Usuario eliminado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar usuario' });
   }
 });
 

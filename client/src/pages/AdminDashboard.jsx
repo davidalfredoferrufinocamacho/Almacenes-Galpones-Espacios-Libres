@@ -136,6 +136,8 @@ function AdminUsers() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState({ role: '', status: '' })
+  const [editingUser, setEditingUser] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
   const loadUsers = () => {
     api.get('/admin/users').then(r => setUsers(r.data)).finally(() => setLoading(false))
@@ -152,6 +154,16 @@ function AdminUsers() {
     }
   }
 
+  const toggleBlock = async (userId, currentBlocked) => {
+    try {
+      await api.put(`/admin/users/${userId}`, { is_blocked: !currentBlocked })
+      loadUsers()
+      alert(currentBlocked ? 'Usuario desbloqueado' : 'Usuario bloqueado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al bloquear usuario')
+    }
+  }
+
   const changeRole = async (userId, newRole) => {
     if (!confirm(`Cambiar rol a ${newRole}?`)) return
     try {
@@ -159,6 +171,38 @@ function AdminUsers() {
       loadUsers()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al cambiar rol')
+    }
+  }
+
+  const deleteUser = async (userId, email) => {
+    if (!confirm(`¿Eliminar permanentemente al usuario ${email}? Esta accion no se puede deshacer.`)) return
+    try {
+      await api.delete(`/admin/users/${userId}`)
+      loadUsers()
+      alert('Usuario eliminado correctamente')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar usuario')
+    }
+  }
+
+  const openEditModal = (user) => {
+    setEditingUser(user)
+    setEditForm({
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      phone: user.phone || '',
+      city: user.city || ''
+    })
+  }
+
+  const saveEdit = async () => {
+    try {
+      await api.put(`/admin/users/${editingUser.id}`, editForm)
+      setEditingUser(null)
+      loadUsers()
+      alert('Usuario actualizado correctamente')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al editar usuario')
     }
   }
 
@@ -200,8 +244,11 @@ function AdminUsers() {
         </thead>
         <tbody>
           {filteredUsers.map(user => (
-            <tr key={user.id}>
-              <td>{user.email}</td>
+            <tr key={user.id} className={user.is_blocked ? 'user-blocked' : ''}>
+              <td>
+                {user.email}
+                {user.is_blocked && <span className="blocked-badge">BLOQUEADO</span>}
+              </td>
               <td>
                 <select value={user.role} onChange={e => changeRole(user.id, e.target.value)} style={{padding: '0.25rem'}}>
                   <option value="GUEST">GUEST</option>
@@ -217,14 +264,56 @@ function AdminUsers() {
                 </span>
               </td>
               <td>
-                <button onClick={() => toggleStatus(user.id, user.is_active)} className={`btn btn-sm ${user.is_active ? 'btn-danger' : 'btn-success'}`}>
-                  {user.is_active ? 'Desactivar' : 'Activar'}
-                </button>
+                <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                  <button onClick={() => openEditModal(user)} className="btn btn-sm btn-secondary" title="Editar">
+                    Editar
+                  </button>
+                  <button onClick={() => toggleStatus(user.id, user.is_active)} className={`btn btn-sm ${user.is_active ? 'btn-warning' : 'btn-success'}`}>
+                    {user.is_active ? 'Desactivar' : 'Activar'}
+                  </button>
+                  <button onClick={() => toggleBlock(user.id, user.is_blocked)} className={`btn btn-sm ${user.is_blocked ? 'btn-info' : 'btn-dark'}`}>
+                    {user.is_blocked ? 'Desbloquear' : 'Bloquear'}
+                  </button>
+                  {user.role !== 'ADMIN' && (
+                    <button onClick={() => deleteUser(user.id, user.email)} className="btn btn-sm btn-danger" title="Eliminar">
+                      Eliminar
+                    </button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {editingUser && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Editar Usuario</h3>
+            <p style={{color: '#666', marginBottom: '1rem'}}>{editingUser.email}</p>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Nombre:</label>
+              <input type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Apellido:</label>
+              <input type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Telefono:</label>
+              <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Ciudad:</label>
+              <input type="text" value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setEditingUser(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
