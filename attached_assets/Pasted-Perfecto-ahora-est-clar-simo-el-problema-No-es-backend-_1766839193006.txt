@@ -1,0 +1,107 @@
+Perfecto, ahora está clarísimo el problema 👍
+No es backend, es FRONTEND / RUTAS / UI DEL ADMIN.
+
+Te dejo UNA SOLA ORDEN, CLARA, CERRADA Y EJECUTABLE para el agente.
+Cópiala y pégala tal cual.
+
+⸻
+
+🔴 ORDEN ÚNICA DE CORRECCIÓN — ADMIN NO VE FUNCIONES
+
+Problema confirmado:
+El usuario ADMIN (admin@almacenes-galpones-espacios-libres.com) inicia sesión correctamente, pero solo ve dashboards de solo lectura y NO aparecen las secciones ni acciones reales de administración (usuarios, hosts, textos legales, configuración, etc.), a pesar de que los endpoints backend existen y funcionan.
+
+TU TAREA ES HACER UNA DE ESTAS DOS COSAS (OBLIGATORIO):
+
+⸻
+
+✅ OPCIÓN A — CORREGIR EL PANEL ADMIN (RECOMENDADO)
+
+Corrige el frontend para que el ADMIN vea y pueda usar TODAS las funciones administrativas, cumpliendo exactamente lo siguiente:
+	1.	Sidebar / navegación ADMIN
+	•	Mostrar todas las secciones reales del admin:
+	•	Usuarios (gestión de GUEST / HOST / ADMIN)
+	•	Espacios
+	•	Reservas
+	•	Contratos
+	•	Pagos
+	•	Facturas
+	•	Configuración del sistema
+	•	Textos legales
+	•	Plantillas de notificación
+	•	Auditoría
+	•	Contabilidad / Balanza
+	•	Exportaciones
+	•	No solo “Dashboard”
+	2.	Acciones visibles y funcionales
+En cada sección deben existir botones reales, no solo tablas:
+	•	Usuarios: activar / desactivar / cambiar rol
+	•	Configuración: editar porcentajes (deposit, comisión)
+	•	Textos legales: crear / editar / activar
+	•	Exportaciones: descargar datos
+	•	Auditoría: filtros por fecha / tipo / usuario
+	3.	Rutas frontend
+Verifica y corrige:
+	•	/admin
+	•	/admin/users
+	•	/admin/config
+	•	/admin/legal-texts
+	•	/admin/audit
+	•	etc.
+Todas deben estar protegidas por:
+
+<ProtectedRoute roles={['ADMIN']} />
+
+
+	4.	Conexión UI → API
+Cada acción del admin debe llamar a los endpoints reales:
+	•	/api/admin/users
+	•	/api/admin/config
+	•	/api/admin/legal-texts
+	•	/api/admin/audit-log
+	•	etc.
+	5.	Evidencia obligatoria
+Entregar:
+	•	Screenshot o descripción clara del sidebar ADMIN completo
+	•	Ejemplo real de:
+	•	Cambio de rol desde UI
+	•	Cambio de configuración desde UI
+	•	Auditoría generada
+
+⸻
+
+❌ OPCIÓN B — DOCUMENTAR FLUJO OCULTO (SOLO SI EXISTE)
+
+Si el panel ADMIN ya existe pero requiere entrar de otra forma, entonces debes:
+	1.	Explicar exactamente:
+	•	URL correcta para entrar (ej: /admin/users, /admin/panel, etc.)
+	•	Qué menú hay que abrir
+	•	Qué rol o estado se requiere
+	2.	Mostrar evidencia de que:
+	•	El admin sí puede administrar hosts, clientes y sistema
+	•	No es solo un dashboard informativo
+
+⸻
+
+🚫 PROHIBIDO
+	•	Decir “el backend ya está”
+	•	Decir “las funciones existen pero no están conectadas”
+	•	Decir “funciona en teoría”
+	•	Avanzar a otra tarea sin resolver esto
+
+⸻
+
+🎯 DEFINICIÓN DE “ORDEN CUMPLIDA”
+
+Solo se considera resuelto cuando:
+	•	El ADMIN ve claramente todas las secciones
+	•	Puede modificar datos reales desde la UI
+	•	No necesita usar Postman / curl para administrar
+
+⸻
+
+Cuando el agente responda, yo te digo inmediatamente si:
+	•	✔️ quedó bien
+	•	❌ o sigue roto
+
+Aquí ya no hay ambigüedad.
