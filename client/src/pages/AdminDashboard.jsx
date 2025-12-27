@@ -2061,11 +2061,13 @@ function AdminAccounting() {
   const [loading, setLoading] = useState(true)
   const [editingEntry, setEditingEntry] = useState(null)
   const [editingShareholder, setEditingShareholder] = useState(null)
+  const [editingDividend, setEditingDividend] = useState(null)
   const [newEntry, setNewEntry] = useState({ entry_date: '', description: '', entry_type: 'income', debit_account: '1111', credit_account: '4100', amount: '' })
   const [newShareholder, setNewShareholder] = useState({ name: '', document_type: 'ci', document_number: '', email: '', share_percentage: '', capital_contributed: '' })
   const [showNewEntry, setShowNewEntry] = useState(false)
   const [showNewShareholder, setShowNewShareholder] = useState(false)
   const [year, setYear] = useState(new Date().getFullYear())
+  const [detailModal, setDetailModal] = useState(null)
 
   const loadData = async () => {
     setLoading(true)
@@ -2147,6 +2149,56 @@ function AdminAccounting() {
     }
   }
 
+  const deleteDividend = async (id) => {
+    if (!confirm('¿Eliminar esta distribución de dividendos?')) return
+    try {
+      await api.delete(`/admin/accounting/dividends/${id}`)
+      loadData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar')
+    }
+  }
+
+  const updateShareholder = async () => {
+    try {
+      await api.put(`/admin/accounting/shareholders/${editingShareholder.id}`, editingShareholder)
+      setEditingShareholder(null)
+      loadData()
+      alert('Socio actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al actualizar')
+    }
+  }
+
+  const updateEntry = async () => {
+    try {
+      await api.put(`/admin/accounting/entries/${editingEntry.id}`, editingEntry)
+      setEditingEntry(null)
+      loadData()
+      alert('Asiento actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al actualizar')
+    }
+  }
+
+  const updateDividend = async () => {
+    try {
+      await api.put(`/admin/accounting/dividends/${editingDividend.id}`, editingDividend)
+      setEditingDividend(null)
+      loadData()
+      alert('Dividendo actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al actualizar')
+    }
+  }
+
+  const currentMonth = new Date().getMonth() + 1
+  const currentMonthEntries = entries.filter(e => {
+    const entryMonth = new Date(e.entry_date).getMonth() + 1
+    const entryYear = new Date(e.entry_date).getFullYear()
+    return entryMonth === currentMonth && entryYear === year
+  })
+
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
   const entryTypes = { income: 'Ingreso', expense: 'Gasto', transfer: 'Transferencia', tax: 'Impuesto', dividend: 'Dividendo', capital: 'Capital', adjustment: 'Ajuste' }
 
@@ -2169,29 +2221,34 @@ function AdminAccounting() {
       {view === 'resumen' && dashboard && (
         <>
           <div className="stats-grid">
-            <div className="stat-card card">
+            <div className="stat-card card" onClick={() => setDetailModal('capital')} style={{cursor: 'pointer', transition: 'transform 0.2s'}} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
               <h3>Capital Total</h3>
               <p className="stat-number">Bs. {(dashboard.capital?.total || 0).toFixed(2)}</p>
               <span>{dashboard.capital?.shareholders_count || 0} socios activos</span>
+              <div style={{marginTop: '0.5rem', fontSize: '0.8rem', color: '#007bff'}}>Click para ver detalles</div>
             </div>
-            <div className="stat-card card">
+            <div className="stat-card card" onClick={() => setDetailModal('ingresos')} style={{cursor: 'pointer', transition: 'transform 0.2s'}} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
               <h3>Ingresos del Mes</h3>
               <p className="stat-number">Bs. {(dashboard.income?.current_month?.total || 0).toFixed(2)}</p>
               <span>{dashboard.income?.current_month?.count || 0} transacciones</span>
+              <div style={{marginTop: '0.5rem', fontSize: '0.8rem', color: '#007bff'}}>Click para ver detalles</div>
             </div>
-            <div className="stat-card card">
+            <div className="stat-card card" onClick={() => setDetailModal('iva')} style={{cursor: 'pointer', transition: 'transform 0.2s'}} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
               <h3>IVA por Pagar (Mes)</h3>
               <p className="stat-number" style={{color: '#dc3545'}}>Bs. {(dashboard.taxes?.current_month?.iva?.amount || 0).toFixed(2)}</p>
               <span>13% sobre Bs. {(dashboard.taxes?.current_month?.iva?.taxable_base || 0).toFixed(2)}</span>
+              <div style={{marginTop: '0.5rem', fontSize: '0.8rem', color: '#007bff'}}>Click para ver detalles</div>
             </div>
-            <div className="stat-card card">
+            <div className="stat-card card" onClick={() => setDetailModal('it')} style={{cursor: 'pointer', transition: 'transform 0.2s'}} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
               <h3>IT por Pagar (Mes)</h3>
               <p className="stat-number" style={{color: '#fd7e14'}}>Bs. {(dashboard.taxes?.current_month?.it?.amount || 0).toFixed(2)}</p>
               <span>3% sobre Bs. {(dashboard.taxes?.current_month?.it?.transaction_base || 0).toFixed(2)}</span>
+              <div style={{marginTop: '0.5rem', fontSize: '0.8rem', color: '#007bff'}}>Click para ver detalles</div>
             </div>
-            <div className="stat-card card">
+            <div className="stat-card card" onClick={() => setDetailModal('dividendos')} style={{cursor: 'pointer', transition: 'transform 0.2s'}} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
               <h3>Dividendos Pagados</h3>
               <p className="stat-number">Bs. {(dashboard.dividends?.total_paid || 0).toFixed(2)}</p>
+              <div style={{marginTop: '0.5rem', fontSize: '0.8rem', color: '#007bff'}}>Click para ver detalles</div>
             </div>
           </div>
 
@@ -2429,20 +2486,228 @@ function AdminAccounting() {
 
       {editingEntry && (
         <div className="modal-overlay" onClick={() => setEditingEntry(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
             <h2>Editar Asiento #{editingEntry.entry_number}</h2>
-            <p>Funcion de edicion en desarrollo</p>
-            <button onClick={() => setEditingEntry(null)} className="btn btn-secondary">Cerrar</button>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '0.75rem'}}>
+              <label>Fecha: <input type="date" value={editingEntry.entry_date || ''} onChange={e => setEditingEntry({...editingEntry, entry_date: e.target.value})} style={{width: '100%', padding: '0.5rem'}} /></label>
+              <label>Tipo: <select value={editingEntry.entry_type} onChange={e => setEditingEntry({...editingEntry, entry_type: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                {Object.entries(entryTypes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select></label>
+              <label>Monto: <input type="number" value={editingEntry.amount || ''} onChange={e => setEditingEntry({...editingEntry, amount: parseFloat(e.target.value)})} style={{width: '100%', padding: '0.5rem'}} /></label>
+              <label>Descripcion: <input type="text" value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} style={{width: '100%', padding: '0.5rem'}} /></label>
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem'}}>
+              <button onClick={updateEntry} className="btn btn-primary">Guardar</button>
+              <button onClick={() => setEditingEntry(null)} className="btn btn-secondary">Cancelar</button>
+            </div>
           </div>
         </div>
       )}
 
       {editingShareholder && (
         <div className="modal-overlay" onClick={() => setEditingShareholder(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
             <h2>Editar Socio: {editingShareholder.name}</h2>
-            <p>Funcion de edicion en desarrollo</p>
-            <button onClick={() => setEditingShareholder(null)} className="btn btn-secondary">Cerrar</button>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '0.75rem'}}>
+              <label>Nombre: <input type="text" value={editingShareholder.name || ''} onChange={e => setEditingShareholder({...editingShareholder, name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} /></label>
+              <label>Documento: <input type="text" value={editingShareholder.document_number || ''} onChange={e => setEditingShareholder({...editingShareholder, document_number: e.target.value})} style={{width: '100%', padding: '0.5rem'}} /></label>
+              <label>Email: <input type="email" value={editingShareholder.email || ''} onChange={e => setEditingShareholder({...editingShareholder, email: e.target.value})} style={{width: '100%', padding: '0.5rem'}} /></label>
+              <label>Participacion (%): <input type="number" value={editingShareholder.share_percentage || ''} onChange={e => setEditingShareholder({...editingShareholder, share_percentage: parseFloat(e.target.value)})} style={{width: '100%', padding: '0.5rem'}} /></label>
+              <label>Capital Aportado: <input type="number" value={editingShareholder.capital_contributed || ''} onChange={e => setEditingShareholder({...editingShareholder, capital_contributed: parseFloat(e.target.value)})} style={{width: '100%', padding: '0.5rem'}} /></label>
+              <label>Estado: <select value={editingShareholder.status || 'active'} onChange={e => setEditingShareholder({...editingShareholder, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                <option value="active">Activo</option>
+                <option value="inactive">Inactivo</option>
+              </select></label>
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem'}}>
+              <button onClick={updateShareholder} className="btn btn-primary">Guardar</button>
+              <button onClick={() => setEditingShareholder(null)} className="btn btn-secondary">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailModal === 'capital' && (
+        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '900px', maxHeight: '80vh', overflow: 'auto'}}>
+            <h2>Detalle de Capital - Socios/Accionistas</h2>
+            <p style={{color: '#666', marginBottom: '1rem'}}>Capital Total: <strong>Bs. {(capital.total_capital || 0).toFixed(2)}</strong></p>
+            <table className="admin-table">
+              <thead><tr><th>Nombre</th><th>Documento</th><th>Email</th><th>Participacion</th><th>Capital</th><th>Estado</th><th>Acciones</th></tr></thead>
+              <tbody>
+                {shareholders.map(s => (
+                  <tr key={s.id}>
+                    <td>{s.name}</td>
+                    <td>{s.document_type?.toUpperCase()}: {s.document_number}</td>
+                    <td>{s.email || '-'}</td>
+                    <td>{s.share_percentage}%</td>
+                    <td>Bs. {(s.capital_contributed || 0).toFixed(2)}</td>
+                    <td><span className={`status-badge status-${s.status}`}>{s.status === 'active' ? 'Activo' : 'Inactivo'}</span></td>
+                    <td>
+                      <div style={{display: 'flex', gap: '0.25rem'}}>
+                        <button onClick={() => { setDetailModal(null); setEditingShareholder(s); }} className="btn btn-sm btn-secondary">Editar</button>
+                        <button onClick={() => deleteShareholder(s.id)} className="btn btn-sm btn-danger">Eliminar</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {shareholders.length === 0 && <p style={{textAlign: 'center', color: '#666', padding: '1rem'}}>No hay socios registrados</p>}
+            <button onClick={() => setDetailModal(null)} className="btn btn-secondary" style={{marginTop: '1rem'}}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      {detailModal === 'ingresos' && (
+        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '900px', maxHeight: '80vh', overflow: 'auto'}}>
+            <h2>Ingresos del Mes - {monthNames[currentMonth - 1]} {year}</h2>
+            <p style={{color: '#666', marginBottom: '1rem'}}>Total: <strong>Bs. {(dashboard?.income?.current_month?.total || 0).toFixed(2)}</strong> ({currentMonthEntries.length} transacciones)</p>
+            <table className="admin-table">
+              <thead><tr><th>#</th><th>Fecha</th><th>Tipo</th><th>Descripcion</th><th>Monto</th><th>IVA</th><th>Acciones</th></tr></thead>
+              <tbody>
+                {currentMonthEntries.map(e => (
+                  <tr key={e.id}>
+                    <td>{e.entry_number}</td>
+                    <td>{e.entry_date}</td>
+                    <td>{entryTypes[e.entry_type] || e.entry_type}</td>
+                    <td>{e.description}</td>
+                    <td>Bs. {(e.amount || 0).toFixed(2)}</td>
+                    <td>Bs. {(e.iva_amount || 0).toFixed(2)}</td>
+                    <td>
+                      <div style={{display: 'flex', gap: '0.25rem'}}>
+                        <button onClick={() => { setDetailModal(null); setEditingEntry(e); }} className="btn btn-sm btn-secondary">Editar</button>
+                        {!e.is_reconciled && <button onClick={() => deleteEntry(e.id)} className="btn btn-sm btn-danger">Eliminar</button>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {currentMonthEntries.length === 0 && <p style={{textAlign: 'center', color: '#666', padding: '1rem'}}>No hay transacciones este mes</p>}
+            <button onClick={() => setDetailModal(null)} className="btn btn-secondary" style={{marginTop: '1rem'}}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      {detailModal === 'iva' && (
+        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '900px', maxHeight: '80vh', overflow: 'auto'}}>
+            <h2>IVA por Pagar - {monthNames[currentMonth - 1]} {year}</h2>
+            <div className="card" style={{padding: '1rem', marginBottom: '1rem', background: '#f8f9fa'}}>
+              <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', textAlign: 'center'}}>
+                <div><strong>Base Imponible</strong><br/>Bs. {(dashboard?.taxes?.current_month?.iva?.taxable_base || 0).toFixed(2)}</div>
+                <div><strong>Tasa IVA</strong><br/>13%</div>
+                <div><strong>IVA a Pagar</strong><br/><span style={{color: '#dc3545', fontSize: '1.2rem'}}>Bs. {(dashboard?.taxes?.current_month?.iva?.amount || 0).toFixed(2)}</span></div>
+              </div>
+            </div>
+            <h4>Transacciones del Mes con IVA</h4>
+            <table className="admin-table">
+              <thead><tr><th>Fecha</th><th>Descripcion</th><th>Base</th><th>IVA (13%)</th><th>Acciones</th></tr></thead>
+              <tbody>
+                {currentMonthEntries.filter(e => e.entry_type === 'income').map(e => (
+                  <tr key={e.id}>
+                    <td>{e.entry_date}</td>
+                    <td>{e.description}</td>
+                    <td>Bs. {(e.amount || 0).toFixed(2)}</td>
+                    <td>Bs. {((e.amount || 0) * 0.13).toFixed(2)}</td>
+                    <td>
+                      <button onClick={() => { setDetailModal(null); setEditingEntry(e); }} className="btn btn-sm btn-secondary">Editar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {currentMonthEntries.filter(e => e.entry_type === 'income').length === 0 && <p style={{textAlign: 'center', color: '#666', padding: '1rem'}}>No hay transacciones con IVA este mes</p>}
+            <button onClick={() => setDetailModal(null)} className="btn btn-secondary" style={{marginTop: '1rem'}}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      {detailModal === 'it' && (
+        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '900px', maxHeight: '80vh', overflow: 'auto'}}>
+            <h2>IT por Pagar - {monthNames[currentMonth - 1]} {year}</h2>
+            <div className="card" style={{padding: '1rem', marginBottom: '1rem', background: '#f8f9fa'}}>
+              <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', textAlign: 'center'}}>
+                <div><strong>Base Transacciones</strong><br/>Bs. {(dashboard?.taxes?.current_month?.it?.transaction_base || 0).toFixed(2)}</div>
+                <div><strong>Tasa IT</strong><br/>3%</div>
+                <div><strong>IT a Pagar</strong><br/><span style={{color: '#fd7e14', fontSize: '1.2rem'}}>Bs. {(dashboard?.taxes?.current_month?.it?.amount || 0).toFixed(2)}</span></div>
+              </div>
+            </div>
+            <h4>Transacciones del Mes con IT</h4>
+            <table className="admin-table">
+              <thead><tr><th>Fecha</th><th>Descripcion</th><th>Monto</th><th>IT (3%)</th><th>Acciones</th></tr></thead>
+              <tbody>
+                {currentMonthEntries.map(e => (
+                  <tr key={e.id}>
+                    <td>{e.entry_date}</td>
+                    <td>{e.description}</td>
+                    <td>Bs. {(e.amount || 0).toFixed(2)}</td>
+                    <td>Bs. {((e.amount || 0) * 0.03).toFixed(2)}</td>
+                    <td>
+                      <button onClick={() => { setDetailModal(null); setEditingEntry(e); }} className="btn btn-sm btn-secondary">Editar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {currentMonthEntries.length === 0 && <p style={{textAlign: 'center', color: '#666', padding: '1rem'}}>No hay transacciones este mes</p>}
+            <button onClick={() => setDetailModal(null)} className="btn btn-secondary" style={{marginTop: '1rem'}}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      {detailModal === 'dividendos' && (
+        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '900px', maxHeight: '80vh', overflow: 'auto'}}>
+            <h2>Dividendos Distribuidos</h2>
+            <p style={{color: '#666', marginBottom: '1rem'}}>Total Pagado: <strong>Bs. {(dashboard?.dividends?.total_paid || 0).toFixed(2)}</strong></p>
+            <table className="admin-table">
+              <thead><tr><th>Año Fiscal</th><th>Utilidad Total</th><th>Reserva Legal</th><th>Distribuible</th><th>Distribuido</th><th>Estado</th><th>Acciones</th></tr></thead>
+              <tbody>
+                {dividends.map(d => (
+                  <tr key={d.id}>
+                    <td>{d.fiscal_year}</td>
+                    <td>Bs. {(d.total_profit || 0).toFixed(2)}</td>
+                    <td>Bs. {(d.legal_reserve || 0).toFixed(2)}</td>
+                    <td>Bs. {(d.distributable_profit || 0).toFixed(2)}</td>
+                    <td>Bs. {(d.total_distributed || 0).toFixed(2)}</td>
+                    <td><span className={`status-badge status-${d.status}`}>{d.status}</span></td>
+                    <td>
+                      <div style={{display: 'flex', gap: '0.25rem'}}>
+                        <button onClick={() => { setDetailModal(null); setEditingDividend(d); }} className="btn btn-sm btn-secondary">Editar</button>
+                        {d.status !== 'paid' && <button onClick={() => deleteDividend(d.id)} className="btn btn-sm btn-danger">Eliminar</button>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {dividends.length === 0 && <p style={{textAlign: 'center', color: '#666', padding: '1rem'}}>No hay distribuciones de dividendos</p>}
+            <button onClick={() => setDetailModal(null)} className="btn btn-secondary" style={{marginTop: '1rem'}}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      {editingDividend && (
+        <div className="modal-overlay" onClick={() => setEditingDividend(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
+            <h2>Editar Dividendo - {editingDividend.fiscal_year}</h2>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '0.75rem'}}>
+              <label>Utilidad Total: <input type="number" value={editingDividend.total_profit || ''} onChange={e => setEditingDividend({...editingDividend, total_profit: parseFloat(e.target.value)})} style={{width: '100%', padding: '0.5rem'}} /></label>
+              <label>Reserva Legal: <input type="number" value={editingDividend.legal_reserve || ''} onChange={e => setEditingDividend({...editingDividend, legal_reserve: parseFloat(e.target.value)})} style={{width: '100%', padding: '0.5rem'}} /></label>
+              <label>Estado: <select value={editingDividend.status || 'pending'} onChange={e => setEditingDividend({...editingDividend, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                <option value="pending">Pendiente</option>
+                <option value="approved">Aprobado</option>
+                <option value="paid">Pagado</option>
+              </select></label>
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem'}}>
+              <button onClick={updateDividend} className="btn btn-primary">Guardar</button>
+              <button onClick={() => setEditingDividend(null)} className="btn btn-secondary">Cancelar</button>
+            </div>
           </div>
         </div>
       )}
