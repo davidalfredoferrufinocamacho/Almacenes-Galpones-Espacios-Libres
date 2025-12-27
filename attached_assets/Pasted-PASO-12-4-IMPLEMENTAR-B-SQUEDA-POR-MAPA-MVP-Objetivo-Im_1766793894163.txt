@@ -1,0 +1,70 @@
+PASO 12.4 — IMPLEMENTAR BÚSQUEDA POR MAPA (MVP)
+
+Objetivo:
+Implementar búsqueda por mapa funcional para espacios publicados:
+- Backend: endpoint por bounds
+- Frontend: mapa con pins
+- Guardado de lat/lng en creación/edición de espacios
+
+Restricciones:
+- NO geohash
+- NO clustering
+- NO pago/contratos/citas
+- NO SIAT
+- NO hablar de Git
+- NO push a GitHub
+
+A) BACKEND — Endpoint map
+1) Crear endpoint:
+GET /api/spaces/map
+Parámetros query obligatorios:
+- minLat, maxLat, minLng, maxLng
+Opcional:
+- space_type, department, city
+Reglas:
+- Solo retornar espacios status='published'
+- Solo retornar los que tengan latitude y longitude NOT NULL
+Respuesta: lista con:
+id, title, space_type, city, department, latitude, longitude, sqm_available, price_preview (puede ser min price/m2)
+
+2) Validaciones:
+- Si faltan bounds → 400
+- Si bounds inválidos → 400
+
+B) BACKEND — Guardado de coordenadas
+1) Confirmar que POST/PUT de spaces permiten guardar:
+- latitude
+- longitude
+2) Validar:
+- latitude entre -90 y 90
+- longitude entre -180 y 180
+
+C) FRONTEND — Página de mapa
+1) Instalar Leaflet (y react-leaflet si aplica).
+2) Crear página:
+- /map o /spaces/map
+3) Mostrar mapa con:
+- vista inicial (centrada en Bolivia)
+- al mover/zoom: pedir datos al backend usando bounds actuales
+- pins para cada espacio
+- al hacer click en pin: mostrar popup con título + link al detalle del espacio
+
+D) FRONTEND — UI mínima para capturar lat/lng
+En el formulario de crear/editar espacio:
+- agregar 2 inputs: latitude y longitude
+- enviar al backend
+(Nota: no hace falta selector con mapa todavía, solo inputs)
+
+E) TEST OBLIGATORIO (con evidencia)
+1) Crear/editar un espacio publicado con lat/lng válidos
+2) Llamar GET /api/spaces/map con bounds que lo incluyan → debe devolverlo
+3) Llamar con bounds que NO lo incluyan → no debe devolverlo
+4) Mostrar evidencia:
+- response JSON del endpoint
+- screenshot o descripción clara del mapa mostrando el pin
+
+F) CIERRE
+Al final responde:
+- PASO 12.4 COMPLETADO
+- lista de archivos modificados
+- cómo probar en UI (paso a paso)

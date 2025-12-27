@@ -31,7 +31,9 @@ function CreateSpace() {
     schedule: '',
     address: '',
     city: '',
-    department: ''
+    department: '',
+    latitude: '',
+    longitude: ''
   })
 
   const departments = [
@@ -63,7 +65,10 @@ function CreateSpace() {
     setLoading(true)
 
     try {
-      const response = await api.post('/spaces', formData)
+      const submitData = { ...formData }
+      if (submitData.latitude === '') delete submitData.latitude
+      if (submitData.longitude === '') delete submitData.longitude
+      const response = await api.post('/spaces', submitData)
       setSpaceId(response.data.id)
       setStep(2)
     } catch (err) {
@@ -190,6 +195,17 @@ function CreateSpace() {
               <div className="form-group">
                 <label>Direccion</label>
                 <input type="text" name="address" value={formData.address} onChange={handleChange} required />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Latitud (opcional)</label>
+                <input type="number" name="latitude" value={formData.latitude} onChange={handleChange} step="any" min="-90" max="90" placeholder="Ej: -16.5" />
+              </div>
+              <div className="form-group">
+                <label>Longitud (opcional)</label>
+                <input type="number" name="longitude" value={formData.longitude} onChange={handleChange} step="any" min="-180" max="180" placeholder="Ej: -68.1" />
               </div>
             </div>
 

@@ -4,6 +4,7 @@ import Footer from './components/Footer'
 import Home from './pages/Home'
 import Spaces from './pages/Spaces'
 import SpaceDetail from './pages/SpaceDetail'
+import MapPage from './pages/MapPage'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
@@ -26,6 +27,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/espacios" element={<Spaces />} />
           <Route path="/espacios/:id" element={<SpaceDetail />} />
+          <Route path="/mapa" element={<MapPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Register />} />
           <Route path="/legal/:type" element={<Legal />} />

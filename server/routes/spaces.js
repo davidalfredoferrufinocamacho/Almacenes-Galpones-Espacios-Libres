@@ -121,6 +121,68 @@ router.get('/', optionalAuth, [
   }
 });
 
+router.get('/map', [
+  query('minLat').isFloat({ min: -90, max: 90 }).withMessage('minLat requerido (-90 a 90)'),
+  query('maxLat').isFloat({ min: -90, max: 90 }).withMessage('maxLat requerido (-90 a 90)'),
+  query('minLng').isFloat({ min: -180, max: 180 }).withMessage('minLng requerido (-180 a 180)'),
+  query('maxLng').isFloat({ min: -180, max: 180 }).withMessage('maxLng requerido (-180 a 180)'),
+  query('space_type').optional().isIn(['almacen', 'galpon', 'deposito', 'cuarto', 'contenedor', 'patio', 'terreno']),
+  query('department').optional().trim(),
+  query('city').optional().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { minLat, maxLat, minLng, maxLng, space_type, department, city } = req.query;
+
+    if (parseFloat(minLat) > parseFloat(maxLat)) {
+      return res.status(400).json({ error: 'minLat debe ser menor o igual a maxLat' });
+    }
+    if (parseFloat(minLng) > parseFloat(maxLng)) {
+      return res.status(400).json({ error: 'minLng debe ser menor o igual a maxLng' });
+    }
+
+    let sql = `
+      SELECT s.id, s.title, s.space_type, s.city, s.department, 
+             s.latitude, s.longitude, s.available_sqm,
+             COALESCE(s.price_per_sqm_day, s.price_per_sqm_week, s.price_per_sqm_month) as price_preview,
+             (SELECT url FROM space_photos WHERE space_id = s.id AND is_primary = 1 LIMIT 1) as primary_photo
+      FROM spaces s
+      WHERE s.status = 'published'
+        AND s.latitude IS NOT NULL
+        AND s.longitude IS NOT NULL
+        AND s.latitude >= ? AND s.latitude <= ?
+        AND s.longitude >= ? AND s.longitude <= ?
+    `;
+
+    const params = [parseFloat(minLat), parseFloat(maxLat), parseFloat(minLng), parseFloat(maxLng)];
+
+    if (space_type) {
+      sql += ' AND s.space_type = ?';
+      params.push(space_type);
+    }
+
+    if (department) {
+      sql += ' AND s.department = ?';
+      params.push(department);
+    }
+
+    if (city) {
+      sql += ' AND s.city LIKE ?';
+      params.push(`%${city}%`);
+    }
+
+    const spaces = db.prepare(sql).all(...params);
+    res.json(spaces);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al buscar espacios en mapa' });
+  }
+});
+
 router.get('/:id', optionalAuth, (req, res) => {
   try {
     const space = db.prepare(`
@@ -224,8 +286,19 @@ router.put('/:id', authenticateToken, requireRole('HOST'), (req, res) => {
       price_per_sqm_day, price_per_sqm_week, price_per_sqm_month,
       price_per_sqm_quarter, price_per_sqm_semester, price_per_sqm_year,
       is_open, has_roof, rain_protected, dust_protected, access_type,
-      has_security, security_description, schedule, address, city, department
+      has_security, security_description, schedule, address, city, department,
+      latitude, longitude
     } = req.body;
+
+    const parsedLat = latitude === '' || latitude === null ? undefined : parseFloat(latitude);
+    const parsedLng = longitude === '' || longitude === null ? undefined : parseFloat(longitude);
+
+    if (parsedLat !== undefined && (isNaN(parsedLat) || parsedLat < -90 || parsedLat > 90)) {
+      return res.status(400).json({ error: 'Latitud debe estar entre -90 y 90' });
+    }
+    if (parsedLng !== undefined && (isNaN(parsedLng) || parsedLng < -180 || parsedLng > 180)) {
+      return res.status(400).json({ error: 'Longitud debe estar entre -180 y 180' });
+    }
 
     const stmt = db.prepare(`
       UPDATE spaces SET
@@ -250,6 +323,8 @@ router.put('/:id', authenticateToken, requireRole('HOST'), (req, res) => {
         address = COALESCE(?, address),
         city = COALESCE(?, city),
         department = COALESCE(?, department),
+        latitude = COALESCE(?, latitude),
+        longitude = COALESCE(?, longitude),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
@@ -264,6 +339,7 @@ router.put('/:id', authenticateToken, requireRole('HOST'), (req, res) => {
       dust_protected !== undefined ? (dust_protected ? 1 : 0) : undefined,
       access_type, has_security !== undefined ? (has_security ? 1 : 0) : undefined,
       security_description, schedule, address, city, department,
+      parsedLat, parsedLng,
       req.params.id
     );
 
