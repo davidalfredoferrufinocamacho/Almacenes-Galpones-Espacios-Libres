@@ -28,6 +28,7 @@ function AdminDashboard() {
 
   const menuItems = [
     { label: 'Dashboard', key: 'dashboard' },
+    { label: 'En Mi Panel', key: 'my-panel' },
     { label: 'Usuarios', key: 'users' },
     { label: 'Espacios', key: 'spaces' },
     { label: 'Reservaciones', key: 'reservations' },
@@ -45,6 +46,7 @@ function AdminDashboard() {
 
   const renderContent = () => {
     switch (activeSection) {
+      case 'my-panel': return <AdminMyPanel />
       case 'users': return <AdminUsers />
       case 'spaces': return <AdminSpaces />
       case 'reservations': return <AdminReservations />
@@ -128,6 +130,523 @@ function AdminOverview({ stats, onNavigate }) {
           <small className="card-link">Ver contabilidad →</small>
         </div>
       </div>
+    </div>
+  )
+}
+
+function AdminMyPanel() {
+  const [data, setData] = useState({ users: [], stats: {} })
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [userDetails, setUserDetails] = useState(null)
+  const [detailsLoading, setDetailsLoading] = useState(false)
+  const [detailTab, setDetailTab] = useState('resumen')
+  const [editingUser, setEditingUser] = useState(null)
+  const [editForm, setEditForm] = useState({})
+
+  const loadUsers = (role = '') => {
+    setLoading(true)
+    const url = role ? `/admin/panel/users?role=${role}` : '/admin/panel/users'
+    api.get(url).then(r => setData(r.data)).finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadUsers(activeTab === 'all' ? '' : activeTab === 'guests' ? 'GUEST' : 'HOST')
+  }, [activeTab])
+
+  const loadUserDetails = async (userId) => {
+    setDetailsLoading(true)
+    try {
+      const response = await api.get(`/admin/panel/users/${userId}/details`)
+      setUserDetails(response.data)
+      setSelectedUser(userId)
+      setDetailTab('resumen')
+    } catch (error) {
+      alert('Error al cargar detalles')
+    } finally {
+      setDetailsLoading(false)
+    }
+  }
+
+  const openEditModal = (user) => {
+    setEditingUser(user)
+    setEditForm({
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      company_name: user.company_name || '',
+      phone: user.phone || '',
+      city: user.city || '',
+      department: user.department || '',
+      is_active: user.is_active,
+      is_blocked: user.is_blocked,
+      is_verified: user.is_verified
+    })
+  }
+
+  const saveEdit = async () => {
+    try {
+      await api.put(`/admin/panel/users/${editingUser.id}`, editForm)
+      setEditingUser(null)
+      loadUsers(activeTab === 'all' ? '' : activeTab === 'guests' ? 'GUEST' : 'HOST')
+      alert('Usuario actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al actualizar')
+    }
+  }
+
+  const toggleUserStatus = async (userId, field, currentValue) => {
+    try {
+      await api.put(`/admin/panel/users/${userId}`, { [field]: !currentValue })
+      loadUsers(activeTab === 'all' ? '' : activeTab === 'guests' ? 'GUEST' : 'HOST')
+      if (userDetails && userDetails.user.id === userId) {
+        loadUserDetails(userId)
+      }
+    } catch (error) {
+      alert('Error al actualizar estado')
+    }
+  }
+
+  const exportUserData = async (userId, userName) => {
+    if (!userDetails) return
+    const exportData = {
+      usuario: userDetails.user,
+      resumen: userDetails.summary,
+      espacios: userDetails.spaces,
+      reservaciones: userDetails.reservations,
+      contratos: userDetails.contracts,
+      pagos: userDetails.payments,
+      facturas: userDetails.invoices,
+      exportado_el: new Date().toISOString()
+    }
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `usuario_${userName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const filteredUsers = data.users.filter(u => {
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      const matchName = (u.first_name || '').toLowerCase().includes(term) || 
+                       (u.last_name || '').toLowerCase().includes(term) ||
+                       (u.company_name || '').toLowerCase().includes(term)
+      const matchEmail = u.email.toLowerCase().includes(term)
+      if (!matchName && !matchEmail) return false
+    }
+    if (filterStatus === 'active' && (!u.is_active || u.is_blocked)) return false
+    if (filterStatus === 'blocked' && !u.is_blocked) return false
+    if (filterStatus === 'inactive' && u.is_active) return false
+    if (filterStatus === 'verified' && !u.is_verified) return false
+    if (filterStatus === 'with_contracts' && u.contracts_count === 0) return false
+    return true
+  })
+
+  const formatMoney = (amount) => `Bs. ${(amount || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}`
+
+  const getStatusBadge = (user) => {
+    if (user.is_blocked) return <span style={{background: '#dc3545', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.7rem'}}>Bloqueado</span>
+    if (!user.is_active) return <span style={{background: '#6c757d', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.7rem'}}>Inactivo</span>
+    if (user.is_verified) return <span style={{background: '#28a745', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.7rem'}}>Verificado</span>
+    return <span style={{background: '#ffc107', color: 'black', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.7rem'}}>Activo</span>
+  }
+
+  const getRoleBadge = (role) => {
+    const colors = { GUEST: '#17a2b8', HOST: '#6f42c1', ADMIN: '#dc3545' }
+    return <span style={{background: colors[role] || '#6c757d', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.7rem'}}>{role}</span>
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>En Mi Panel - Gestion de Clientes y Hosts</h1>
+
+      <div className="stats-grid" style={{marginBottom: '1.5rem'}}>
+        <div className="stat-card card" style={{padding: '1rem', borderLeft: '4px solid #007bff'}}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Total Usuarios</h4>
+          <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.8rem'}}>{data.stats.total || 0}</p>
+          <small style={{color: '#666'}}>Activos: {data.stats.active || 0}</small>
+        </div>
+        <div className="stat-card card" style={{padding: '1rem', borderLeft: '4px solid #28a745'}}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Con Contratos</h4>
+          <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.8rem'}}>{data.stats.with_contracts || 0}</p>
+          <small style={{color: '#666'}}>Verificados: {data.stats.verified || 0}</small>
+        </div>
+        <div className="stat-card card" style={{padding: '1rem', borderLeft: '4px solid #17a2b8'}}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Ingresos Totales</h4>
+          <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.4rem'}}>{formatMoney(data.stats.total_revenue)}</p>
+          <small style={{color: '#666'}}>Pagos completados</small>
+        </div>
+        <div className="stat-card card" style={{padding: '1rem', borderLeft: '4px solid #6f42c1'}}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Comisiones</h4>
+          <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.4rem'}}>{formatMoney(data.stats.total_commissions)}</p>
+          <small style={{color: '#666'}}>Total generado</small>
+        </div>
+      </div>
+
+      <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center'}}>
+        <div style={{display: 'flex', gap: '0'}}>
+          <button 
+            onClick={() => setActiveTab('all')} 
+            className={`btn ${activeTab === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{borderRadius: '4px 0 0 4px'}}
+          >Todos</button>
+          <button 
+            onClick={() => setActiveTab('guests')} 
+            className={`btn ${activeTab === 'guests' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{borderRadius: '0'}}
+          >Clientes (GUEST)</button>
+          <button 
+            onClick={() => setActiveTab('hosts')} 
+            className={`btn ${activeTab === 'hosts' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{borderRadius: '0 4px 4px 0'}}
+          >Anfitriones (HOST)</button>
+        </div>
+        <input 
+          type="text" 
+          placeholder="Buscar por nombre, empresa o email..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          style={{padding: '0.5rem', flex: 1, minWidth: '200px'}}
+        />
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{padding: '0.5rem'}}>
+          <option value="">Todos los estados</option>
+          <option value="active">Activos</option>
+          <option value="inactive">Inactivos</option>
+          <option value="blocked">Bloqueados</option>
+          <option value="verified">Verificados</option>
+          <option value="with_contracts">Con contratos</option>
+        </select>
+      </div>
+
+      <div style={{display: 'grid', gridTemplateColumns: selectedUser ? '1fr 1.5fr' : '1fr', gap: '1rem'}}>
+        <div>
+          <table className="admin-table" style={{fontSize: '0.85rem'}}>
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Actividad</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredUsers.map(u => (
+                <tr key={u.id} style={{background: selectedUser === u.id ? '#e3f2fd' : 'inherit', cursor: 'pointer'}} onClick={() => loadUserDetails(u.id)}>
+                  <td>
+                    <div style={{fontWeight: '500'}}>{u.first_name || u.company_name || 'Sin nombre'} {u.last_name || ''}</div>
+                    <div style={{fontSize: '0.75rem', color: '#666'}}>{u.email}</div>
+                    <div style={{fontSize: '0.7rem', color: '#999'}}>{u.city || 'Sin ciudad'}</div>
+                  </td>
+                  <td>{getRoleBadge(u.role)}</td>
+                  <td>{getStatusBadge(u)}</td>
+                  <td style={{fontSize: '0.75rem'}}>
+                    <div>Espacios: {u.spaces_count || 0}</div>
+                    <div>Reservas: {u.reservations_count || 0}</div>
+                    <div>Contratos: {u.contracts_count || 0}</div>
+                  </td>
+                  <td onClick={e => e.stopPropagation()}>
+                    <button onClick={() => openEditModal(u)} className="btn btn-sm btn-secondary">Editar</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredUsers.length === 0 && <p style={{textAlign: 'center', color: '#666', padding: '2rem'}}>No se encontraron usuarios</p>}
+        </div>
+
+        {selectedUser && userDetails && (
+          <div className="card" style={{padding: '1rem', maxHeight: '80vh', overflowY: 'auto'}}>
+            {detailsLoading ? (
+              <div className="loading"><div className="spinner"></div></div>
+            ) : (
+              <>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem'}}>
+                  <div>
+                    <h2 style={{margin: 0}}>{userDetails.user.first_name || userDetails.user.company_name || 'Usuario'} {userDetails.user.last_name || ''}</h2>
+                    <p style={{margin: '0.25rem 0', color: '#666'}}>{userDetails.user.email}</p>
+                    <div style={{display: 'flex', gap: '0.5rem', marginTop: '0.5rem'}}>
+                      {getRoleBadge(userDetails.user.role)}
+                      {getStatusBadge(userDetails.user)}
+                    </div>
+                  </div>
+                  <div style={{display: 'flex', gap: '0.5rem'}}>
+                    <button onClick={() => exportUserData(userDetails.user.id, userDetails.user.email)} className="btn btn-sm btn-secondary">Exportar</button>
+                    <button onClick={() => setSelectedUser(null)} className="btn btn-sm btn-secondary">Cerrar</button>
+                  </div>
+                </div>
+
+                <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap'}}>
+                  {['resumen', 'espacios', 'reservaciones', 'contratos', 'pagos', 'facturas', 'busquedas'].map(tab => (
+                    <button 
+                      key={tab}
+                      onClick={() => setDetailTab(tab)}
+                      className={`btn btn-sm ${detailTab === tab ? 'btn-primary' : 'btn-secondary'}`}
+                    >{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>
+                  ))}
+                </div>
+
+                {detailTab === 'resumen' && (
+                  <div className="stats-grid" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))'}}>
+                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
+                      <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#007bff'}}>{userDetails.summary.total_spaces}</div>
+                      <div style={{fontSize: '0.75rem'}}>Espacios ({userDetails.summary.published_spaces} pub.)</div>
+                    </div>
+                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
+                      <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#17a2b8'}}>{userDetails.summary.total_reservations}</div>
+                      <div style={{fontSize: '0.75rem'}}>Reservaciones ({userDetails.summary.active_reservations} act.)</div>
+                    </div>
+                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
+                      <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#28a745'}}>{userDetails.summary.total_contracts}</div>
+                      <div style={{fontSize: '0.75rem'}}>Contratos ({userDetails.summary.signed_contracts} firm.)</div>
+                    </div>
+                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
+                      <div style={{fontSize: '1.2rem', fontWeight: 'bold', color: '#6f42c1'}}>{formatMoney(userDetails.summary.total_payments)}</div>
+                      <div style={{fontSize: '0.75rem'}}>Total Pagado</div>
+                    </div>
+                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
+                      <div style={{fontSize: '1.2rem', fontWeight: 'bold', color: '#fd7e14'}}>{formatMoney(userDetails.summary.total_commissions)}</div>
+                      <div style={{fontSize: '0.75rem'}}>Comisiones</div>
+                    </div>
+                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
+                      <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#dc3545'}}>{userDetails.summary.pending_payments}</div>
+                      <div style={{fontSize: '0.75rem'}}>Pagos Pend.</div>
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'espacios' && (
+                  <div>
+                    {userDetails.spaces.length === 0 ? (
+                      <p style={{textAlign: 'center', color: '#666'}}>Sin espacios registrados</p>
+                    ) : (
+                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                        <thead><tr><th>Titulo</th><th>Tipo</th><th>Ubicacion</th><th>Precio</th><th>Estado</th></tr></thead>
+                        <tbody>
+                          {userDetails.spaces.map(s => (
+                            <tr key={s.id}>
+                              <td>{s.title}</td>
+                              <td>{s.type}</td>
+                              <td>{s.city}, {s.department}</td>
+                              <td>{s.price_per_day ? `Bs. ${s.price_per_day}/dia` : `Bs. ${s.price_per_month}/mes`}</td>
+                              <td><span style={{background: s.status === 'published' ? '#28a745' : '#6c757d', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{s.status}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+
+                {detailTab === 'reservaciones' && (
+                  <div>
+                    {userDetails.reservations.length === 0 ? (
+                      <p style={{textAlign: 'center', color: '#666'}}>Sin reservaciones</p>
+                    ) : (
+                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                        <thead><tr><th>Espacio</th><th>Periodo</th><th>Monto</th><th>Comision</th><th>Estado</th><th>Rol</th></tr></thead>
+                        <tbody>
+                          {userDetails.reservations.map(r => (
+                            <tr key={r.id}>
+                              <td>{r.space_title || 'N/A'}</td>
+                              <td style={{fontSize: '0.75rem'}}>{new Date(r.start_date).toLocaleDateString('es-BO')} - {new Date(r.end_date).toLocaleDateString('es-BO')}</td>
+                              <td>{formatMoney(r.total_price)}</td>
+                              <td>{formatMoney(r.commission_amount)}</td>
+                              <td><span style={{background: r.status === 'confirmed' ? '#28a745' : r.status === 'pending' ? '#ffc107' : '#6c757d', color: r.status === 'pending' ? 'black' : 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{r.status}</span></td>
+                              <td><span style={{background: r.user_role_in_reservation === 'guest' ? '#17a2b8' : '#6f42c1', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{r.user_role_in_reservation}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+
+                {detailTab === 'contratos' && (
+                  <div>
+                    {userDetails.contracts.length === 0 ? (
+                      <p style={{textAlign: 'center', color: '#666'}}>Sin contratos</p>
+                    ) : (
+                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                        <thead><tr><th>Numero</th><th>Espacio</th><th>Contraparte</th><th>Estado</th><th>Fecha</th></tr></thead>
+                        <tbody>
+                          {userDetails.contracts.map(c => (
+                            <tr key={c.id}>
+                              <td>{c.contract_number || c.id.slice(0,8)}</td>
+                              <td>{c.space_title || 'N/A'}</td>
+                              <td style={{fontSize: '0.75rem'}}>{c.guest_id === userDetails.user.id ? c.host_email : c.guest_email}</td>
+                              <td><span style={{background: c.status === 'signed' ? '#28a745' : c.status === 'pending' ? '#ffc107' : '#6c757d', color: c.status === 'pending' ? 'black' : 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{c.status}</span></td>
+                              <td style={{fontSize: '0.75rem'}}>{new Date(c.created_at).toLocaleDateString('es-BO')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+
+                {detailTab === 'pagos' && (
+                  <div>
+                    {userDetails.payments.length === 0 ? (
+                      <p style={{textAlign: 'center', color: '#666'}}>Sin pagos registrados</p>
+                    ) : (
+                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                        <thead><tr><th>Tipo</th><th>Monto</th><th>Metodo</th><th>Estado</th><th>Escrow</th><th>Fecha</th></tr></thead>
+                        <tbody>
+                          {userDetails.payments.map(p => (
+                            <tr key={p.id}>
+                              <td>{p.payment_type}</td>
+                              <td style={{fontWeight: '500'}}>{formatMoney(p.amount)}</td>
+                              <td>{p.payment_method || 'N/A'}</td>
+                              <td><span style={{background: p.status === 'completed' ? '#28a745' : p.status === 'pending' ? '#ffc107' : '#dc3545', color: p.status === 'pending' ? 'black' : 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{p.status}</span></td>
+                              <td>{p.escrow_status || 'N/A'}</td>
+                              <td style={{fontSize: '0.75rem'}}>{new Date(p.created_at).toLocaleDateString('es-BO')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+
+                {detailTab === 'facturas' && (
+                  <div>
+                    {userDetails.invoices.length === 0 ? (
+                      <p style={{textAlign: 'center', color: '#666'}}>Sin facturas</p>
+                    ) : (
+                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                        <thead><tr><th>Numero</th><th>Monto</th><th>IVA</th><th>Estado</th><th>Fecha</th></tr></thead>
+                        <tbody>
+                          {userDetails.invoices.map(i => (
+                            <tr key={i.id}>
+                              <td>{i.invoice_number || i.id.slice(0,8)}</td>
+                              <td style={{fontWeight: '500'}}>{formatMoney(i.total_amount)}</td>
+                              <td>{formatMoney(i.iva_amount)}</td>
+                              <td><span style={{background: i.status === 'paid' ? '#28a745' : i.status === 'issued' ? '#17a2b8' : '#6c757d', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{i.status}</span></td>
+                              <td style={{fontSize: '0.75rem'}}>{new Date(i.created_at).toLocaleDateString('es-BO')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+
+                {detailTab === 'busquedas' && (
+                  <div>
+                    {userDetails.searches.length === 0 ? (
+                      <p style={{textAlign: 'center', color: '#666'}}>Sin historial de busquedas</p>
+                    ) : (
+                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                        <thead><tr><th>Termino</th><th>Filtros</th><th>Resultados</th><th>Fecha</th></tr></thead>
+                        <tbody>
+                          {userDetails.searches.map((s, i) => (
+                            <tr key={i}>
+                              <td>{s.search_term || 'N/A'}</td>
+                              <td style={{fontSize: '0.7rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis'}}>{s.filters || 'Sin filtros'}</td>
+                              <td>{s.results_count || 0}</td>
+                              <td style={{fontSize: '0.75rem'}}>{new Date(s.created_at).toLocaleString('es-BO')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+
+                <div style={{marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #ddd'}}>
+                  <h4 style={{margin: '0 0 0.5rem 0'}}>Acciones Rapidas</h4>
+                  <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
+                    <button 
+                      onClick={() => toggleUserStatus(userDetails.user.id, 'is_active', userDetails.user.is_active)} 
+                      className={`btn btn-sm ${userDetails.user.is_active ? 'btn-warning' : 'btn-success'}`}
+                    >{userDetails.user.is_active ? 'Desactivar' : 'Activar'}</button>
+                    <button 
+                      onClick={() => toggleUserStatus(userDetails.user.id, 'is_blocked', userDetails.user.is_blocked)} 
+                      className={`btn btn-sm ${userDetails.user.is_blocked ? 'btn-success' : 'btn-danger'}`}
+                    >{userDetails.user.is_blocked ? 'Desbloquear' : 'Bloquear'}</button>
+                    <button 
+                      onClick={() => toggleUserStatus(userDetails.user.id, 'is_verified', userDetails.user.is_verified)} 
+                      className={`btn btn-sm ${userDetails.user.is_verified ? 'btn-secondary' : 'btn-primary'}`}
+                    >{userDetails.user.is_verified ? 'Quitar Verificacion' : 'Verificar'}</button>
+                    <button onClick={() => openEditModal(userDetails.user)} className="btn btn-sm btn-secondary">Editar Datos</button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {editingUser && (
+        <div className="modal-overlay" onClick={() => setEditingUser(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
+            <h2>Editar Usuario</h2>
+            <p style={{color: '#666', marginBottom: '1rem'}}>{editingUser.email}</p>
+            
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+              <div>
+                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Nombre:</label>
+                <input type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+              </div>
+              <div>
+                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Apellido:</label>
+                <input type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+              </div>
+            </div>
+
+            <div style={{marginBottom: '1rem'}}>
+              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Empresa:</label>
+              <input type="text" value={editForm.company_name} onChange={e => setEditForm({...editForm, company_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+            </div>
+
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+              <div>
+                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Telefono:</label>
+                <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+              </div>
+              <div>
+                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Ciudad:</label>
+                <input type="text" value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+              </div>
+            </div>
+
+            <div style={{marginBottom: '1rem'}}>
+              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Departamento:</label>
+              <select value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                <option value="">Seleccionar...</option>
+                {['La Paz', 'Cochabamba', 'Santa Cruz', 'Oruro', 'Potosi', 'Tarija', 'Chuquisaca', 'Beni', 'Pando'].map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem'}}>
+              <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                <input type="checkbox" checked={editForm.is_active} onChange={e => setEditForm({...editForm, is_active: e.target.checked})} /> Activo
+              </label>
+              <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                <input type="checkbox" checked={editForm.is_verified} onChange={e => setEditForm({...editForm, is_verified: e.target.checked})} /> Verificado
+              </label>
+              <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#dc3545'}}>
+                <input type="checkbox" checked={editForm.is_blocked} onChange={e => setEditForm({...editForm, is_blocked: e.target.checked})} /> Bloqueado
+              </label>
+            </div>
+
+            <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setEditingUser(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -68,6 +68,172 @@ router.get('/users', (req, res) => {
   }
 });
 
+router.get('/panel/users', (req, res) => {
+  try {
+    const { role } = req.query;
+    let whereClause = "WHERE role != 'ADMIN'";
+    if (role === 'GUEST' || role === 'HOST') {
+      whereClause = `WHERE role = '${role}'`;
+    }
+
+    const users = db.prepare(`
+      SELECT u.id, u.email, u.role, u.person_type, u.first_name, u.last_name, u.company_name,
+             u.ci, u.nit, u.phone, u.city, u.department, u.is_verified, u.is_active, u.is_blocked,
+             u.anti_bypass_accepted, u.created_at,
+             (SELECT COUNT(*) FROM spaces WHERE host_id = u.id) as spaces_count,
+             (SELECT COUNT(*) FROM reservations WHERE guest_id = u.id OR host_id = u.id) as reservations_count,
+             (SELECT COUNT(*) FROM contracts WHERE guest_id = u.id OR host_id = u.id) as contracts_count,
+             (SELECT COALESCE(SUM(amount), 0) FROM payments p 
+              JOIN reservations r ON p.reservation_id = r.id 
+              WHERE (r.guest_id = u.id OR r.host_id = u.id) AND p.status = 'completed') as total_payments,
+             (SELECT COALESCE(SUM(commission_amount), 0) FROM reservations 
+              WHERE (guest_id = u.id OR host_id = u.id) AND status = 'contract_signed') as total_commissions
+      FROM users u
+      ${whereClause}
+      ORDER BY u.created_at DESC
+    `).all();
+
+    const stats = {
+      total: users.length,
+      active: users.filter(u => u.is_active && !u.is_blocked).length,
+      blocked: users.filter(u => u.is_blocked).length,
+      verified: users.filter(u => u.is_verified).length,
+      with_contracts: users.filter(u => u.contracts_count > 0).length,
+      total_revenue: users.reduce((sum, u) => sum + (u.total_payments || 0), 0),
+      total_commissions: users.reduce((sum, u) => sum + (u.total_commissions || 0), 0)
+    };
+
+    res.json({ users, stats });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener usuarios del panel' });
+  }
+});
+
+router.get('/panel/users/:id/details', (req, res) => {
+  try {
+    const user = db.prepare(`
+      SELECT id, email, role, person_type, first_name, last_name, company_name,
+             ci, nit, phone, city, department, address, is_verified, is_active, is_blocked,
+             anti_bypass_accepted, anti_bypass_accepted_at, created_at
+      FROM users WHERE id = ?
+    `).get(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const spaces = db.prepare(`
+      SELECT id, title, type, city, department, price_per_day, price_per_month, status, 
+             views, created_at
+      FROM spaces WHERE host_id = ? ORDER BY created_at DESC
+    `).all(req.params.id);
+
+    const reservations = db.prepare(`
+      SELECT r.*, s.title as space_title, 
+             ug.email as guest_email, uh.email as host_email,
+             CASE WHEN r.guest_id = ? THEN 'guest' ELSE 'host' END as user_role_in_reservation
+      FROM reservations r
+      LEFT JOIN spaces s ON r.space_id = s.id
+      LEFT JOIN users ug ON r.guest_id = ug.id
+      LEFT JOIN users uh ON r.host_id = uh.id
+      WHERE r.guest_id = ? OR r.host_id = ?
+      ORDER BY r.created_at DESC
+    `).all(req.params.id, req.params.id, req.params.id);
+
+    const contracts = db.prepare(`
+      SELECT c.*, s.title as space_title,
+             ug.email as guest_email, uh.email as host_email
+      FROM contracts c
+      LEFT JOIN spaces s ON c.space_id = s.id
+      LEFT JOIN users ug ON c.guest_id = ug.id
+      LEFT JOIN users uh ON c.host_id = uh.id
+      WHERE c.guest_id = ? OR c.host_id = ?
+      ORDER BY c.created_at DESC
+    `).all(req.params.id, req.params.id);
+
+    const payments = db.prepare(`
+      SELECT p.*, r.space_id, s.title as space_title
+      FROM payments p
+      JOIN reservations r ON p.reservation_id = r.id
+      LEFT JOIN spaces s ON r.space_id = s.id
+      WHERE r.guest_id = ? OR r.host_id = ?
+      ORDER BY p.created_at DESC
+    `).all(req.params.id, req.params.id);
+
+    const invoices = db.prepare(`
+      SELECT i.*, r.space_id
+      FROM invoices i
+      JOIN reservations r ON i.reservation_id = r.id
+      WHERE r.guest_id = ? OR r.host_id = ?
+      ORDER BY i.created_at DESC
+    `).all(req.params.id, req.params.id);
+
+    const searches = db.prepare(`
+      SELECT * FROM search_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 50
+    `).all(req.params.id);
+
+    const summary = {
+      total_spaces: spaces.length,
+      published_spaces: spaces.filter(s => s.status === 'published').length,
+      total_reservations: reservations.length,
+      active_reservations: reservations.filter(r => !['cancelled', 'completed', 'refunded'].includes(r.status)).length,
+      total_contracts: contracts.length,
+      signed_contracts: contracts.filter(c => c.status === 'signed').length,
+      total_payments: payments.reduce((sum, p) => sum + (p.status === 'completed' ? p.amount : 0), 0),
+      pending_payments: payments.filter(p => p.status === 'pending').length,
+      total_commissions: reservations.reduce((sum, r) => sum + (r.commission_amount || 0), 0),
+      total_invoices: invoices.length
+    };
+
+    res.json({ user, spaces, reservations, contracts, payments, invoices, searches, summary });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener detalles del usuario' });
+  }
+});
+
+router.put('/panel/users/:id', (req, res) => {
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const { first_name, last_name, company_name, phone, city, department, address, 
+            is_active, is_blocked, is_verified, admin_notes } = req.body;
+    
+    const updates = [];
+    const values = [];
+
+    if (first_name !== undefined) { updates.push('first_name = ?'); values.push(first_name); }
+    if (last_name !== undefined) { updates.push('last_name = ?'); values.push(last_name); }
+    if (company_name !== undefined) { updates.push('company_name = ?'); values.push(company_name); }
+    if (phone !== undefined) { updates.push('phone = ?'); values.push(phone); }
+    if (city !== undefined) { updates.push('city = ?'); values.push(city); }
+    if (department !== undefined) { updates.push('department = ?'); values.push(department); }
+    if (address !== undefined) { updates.push('address = ?'); values.push(address); }
+    if (is_active !== undefined) { updates.push('is_active = ?'); values.push(is_active ? 1 : 0); }
+    if (is_blocked !== undefined) { updates.push('is_blocked = ?'); values.push(is_blocked ? 1 : 0); }
+    if (is_verified !== undefined) { updates.push('is_verified = ?'); values.push(is_verified ? 1 : 0); }
+    if (admin_notes !== undefined) { updates.push('admin_notes = ?'); values.push(admin_notes); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay cambios' });
+    }
+
+    values.push(req.params.id);
+    db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    logAudit(req.user.id, 'ADMIN_PANEL_USER_UPDATED', 'users', req.params.id, user, req.body, req);
+
+    res.json({ message: 'Usuario actualizado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar usuario' });
+  }
+});
+
 router.put('/users/:id/status', [
   body('is_active').isBoolean()
 ], (req, res) => {
