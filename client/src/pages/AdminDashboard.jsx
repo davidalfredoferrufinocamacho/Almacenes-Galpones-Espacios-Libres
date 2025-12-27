@@ -9,8 +9,13 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    console.log('[AdminDashboard] Montado, pathname:', location.pathname)
     loadStats()
   }, [])
+
+  useEffect(() => {
+    console.log('[AdminDashboard] Ruta cambio a:', location.pathname)
+  }, [location.pathname])
 
   const loadStats = async () => {
     try {
