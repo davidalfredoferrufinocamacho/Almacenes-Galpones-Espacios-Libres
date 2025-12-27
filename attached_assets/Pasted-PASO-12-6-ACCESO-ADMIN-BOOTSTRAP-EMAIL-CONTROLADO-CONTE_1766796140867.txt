@@ -1,0 +1,148 @@
+PASO 12.6 — ACCESO ADMIN (BOOTSTRAP + EMAIL CONTROLADO)
+
+CONTEXTO (NO DISCUTIR):
+- El ADMIN NO se registra por /registro (esto es CORRECTO).
+- El ADMIN debe entrar SOLO por /ingresar (login normal).
+- Actualmente NO hay forma clara de entrar como ADMIN.
+- La solución correcta es:
+  1) Garantizar que exista un usuario ADMIN activo
+  2) Generar password inicial seguro
+  3) Enviar ese password por EMAIL al dueño del sistema
+  4) NO exponer passwords en API
+  5) TODO auditado
+
+EMAIL DESTINO OBLIGATORIO:
+davidalfredoferrufinocamacho@gmail.com
+
+REGLAS ESTRICTAS:
+- NO agregar ADMIN al formulario /registro
+- NO permitir role=ADMIN en POST /auth/register
+- NO hardcodear passwords
+- NO devolver passwords en JSON
+- NO hacer push a GitHub
+- Usar SOLO email para entrega del password
+- Mostrar evidencia de cada paso
+- Si algo falla, DETENERSE y reportar
+
+========================
+PASO 1 — AUDIT: ¿EXISTE ADMIN EN DB?
+========================
+Ejecutar SQL:
+SELECT id, email, role, is_active, deleted_at
+FROM users
+WHERE role = 'ADMIN';
+
+Reportar:
+- ¿Existe ADMIN?
+- ¿is_active = 1?
+- ¿deleted_at IS NULL?
+
+SI EXISTE → ir a PASO 3  
+SI NO EXISTE → ir a PASO 2
+
+========================
+PASO 2 — CREAR ADMIN BOOTSTRAP (SOLO SI NO EXISTE)
+========================
+2.1 Crear usuario ADMIN SOLO en backend:
+- email: admin@almacenes-galpones-espacios-libres.com
+- role: ADMIN
+- is_active: 1
+- deleted_at: NULL
+- password: GENERAR RANDOM (mínimo 16 caracteres)
+
+2.2 Seguridad del password:
+- Hashear con bcrypt
+- NO guardar texto plano
+- NO mostrar en respuestas HTTP
+- NO escribir en replit.md
+- NO imprimir en frontend
+
+2.3 Auditoría obligatoria:
+Evento: ADMIN_BOOTSTRAP_CREATED
+Datos:
+- admin_user_id
+- created_by: system
+- ip, user-agent, timestamp
+
+========================
+PASO 3 — ENVÍO DE PASSWORD POR EMAIL (OBLIGATORIO)
+========================
+3.1 Implementar envío de email usando el sistema de notificaciones MOCK/EMAIL existente.
+
+3.2 Email debe enviarse a:
+davidalfredoferrufinocamacho@gmail.com
+
+3.3 Contenido del email (TEXTO EXACTO):
+Asunto:
+"Acceso Administrador — Almacenes, Galpones, Espacios Libres"
+
+Cuerpo:
+"Se ha creado el acceso ADMINISTRADOR del sistema.
+
+Email de acceso:
+admin@almacenes-galpones-espacios-libres.com
+
+Contraseña inicial:
+{PASSWORD_GENERADO}
+
+IMPORTANTE:
+- Cambie esta contraseña inmediatamente después de ingresar.
+- Este acceso NO se puede crear desde el registro público.
+
+Fecha y hora:
+{timestamp}"
+
+3.4 Registrar auditoría:
+Evento: ADMIN_BOOTSTRAP_PASSWORD_SENT
+Datos:
+- admin_user_id
+- email_destino
+- channel: email
+- ip, user-agent, timestamp
+
+========================
+PASO 4 — TEST LOGIN ADMIN
+========================
+4.1 Ir a /ingresar
+4.2 Login con:
+- email: admin@almacenes-galpones-espacios-libres.com
+- password: el enviado por email
+
+4.3 Verificar:
+- Login exitoso
+- JWT emitido
+- role=ADMIN
+
+4.4 Frontend:
+- Botón “Admin” visible en header
+- Acceso a /admin permitido
+- Dashboard carga correctamente
+
+========================
+PASO 5 — BLOQUEOS DE SEGURIDAD (RE-TEST)
+========================
+5.1 POST /auth/register con role=ADMIN
+Resultado esperado: BLOQUEADO
+
+5.2 PUT /me/role con role=ADMIN
+Resultado esperado: BLOQUEADO
+
+5.3 DELETE /me como ADMIN
+Resultado esperado: BLOQUEADO
+Auditoría: ADMIN_SELF_DELETE_BLOCKED
+
+========================
+PASO 6 — RESULTADO FINAL ESPERADO
+========================
+- ADMIN existe y es accesible solo por login
+- Password entregado SOLO por email
+- Registro público sigue siendo GUEST/HOST
+- Acceso ADMIN funcional en UI y backend
+- Auditoría completa
+- CERO cambios a reglas de seguridad existentes
+
+DETENERSE AQUÍ Y REPORTAR:
+- Resultado de cada PASO
+- Evidencia SQL
+- Evidencia audit_log
+- Confirmación de email enviado
