@@ -58,7 +58,7 @@ function AdminDashboard() {
       case 'accounting': return <AdminAccounting />
       case 'export': return <AdminExport />
       case 'messages': return <AdminMessages />
-      default: return <AdminOverview stats={stats} />
+      default: return <AdminOverview stats={stats} onNavigate={setActiveSection} />
     }
   }
 
@@ -86,40 +86,46 @@ function AdminDashboard() {
   )
 }
 
-function AdminOverview({ stats }) {
+function AdminOverview({ stats, onNavigate }) {
   return (
     <div className="admin-overview">
       <h1>Dashboard</h1>
       <div className="stats-grid">
-        <div className="stat-card card">
+        <div className="stat-card card clickable" onClick={() => onNavigate('users')}>
           <h3>Usuarios</h3>
           <p className="stat-number">{stats?.users?.total || 0}</p>
           <span>GUEST: {stats?.users?.guests || 0} | HOST: {stats?.users?.hosts || 0}</span>
+          <small className="card-link">Ver todos →</small>
         </div>
-        <div className="stat-card card">
+        <div className="stat-card card clickable" onClick={() => onNavigate('spaces')}>
           <h3>Espacios</h3>
           <p className="stat-number">{stats?.spaces?.total || 0}</p>
           <span>Publicados: {stats?.spaces?.published || 0}</span>
+          <small className="card-link">Ver todos →</small>
         </div>
-        <div className="stat-card card">
+        <div className="stat-card card clickable" onClick={() => onNavigate('reservations')}>
           <h3>Reservaciones</h3>
           <p className="stat-number">{stats?.reservations?.total || 0}</p>
           <span>Activas: {stats?.reservations?.active || 0}</span>
+          <small className="card-link">Ver todas →</small>
         </div>
-        <div className="stat-card card">
+        <div className="stat-card card clickable" onClick={() => onNavigate('contracts')}>
           <h3>Contratos</h3>
           <p className="stat-number">{stats?.contracts?.total || 0}</p>
           <span>Firmados: {stats?.contracts?.signed || 0}</span>
+          <small className="card-link">Ver todos →</small>
         </div>
-        <div className="stat-card card">
+        <div className="stat-card card clickable" onClick={() => onNavigate('payments')}>
           <h3>Escrow Retenido</h3>
           <p className="stat-number">Bs. {stats?.payments?.escrow_held?.toFixed(2) || '0.00'}</p>
           <span>En espera de liberacion</span>
+          <small className="card-link">Ver pagos →</small>
         </div>
-        <div className="stat-card card">
+        <div className="stat-card card clickable" onClick={() => onNavigate('accounting')}>
           <h3>Comisiones</h3>
           <p className="stat-number">Bs. {stats?.commissions?.total?.toFixed(2) || '0.00'}</p>
           <span>Total ganado</span>
+          <small className="card-link">Ver contabilidad →</small>
         </div>
       </div>
     </div>
