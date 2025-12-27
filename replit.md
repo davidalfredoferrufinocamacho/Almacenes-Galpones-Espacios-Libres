@@ -18,7 +18,7 @@ The project uses a Node.js 20 backend with Express.js and SQLite (better-sqlite3
 *   **Contract PDF Export & Invoice Generation:** The platform generates legally compliant PDF contracts and invoices, incorporating frozen data and applicable legal clauses.
 *   **Contract Extensions/Annexes:** Extensions do not modify the original contract but create separate annex documents. These annexes reference the original contract, specify the extension period, and freeze relevant legal texts at the time of creation.
 *   **Anti-Bypass Clause:** A unified anti-bypass clause is enforced for both guests and hosts to prevent direct dealings outside the platform, protecting commission structures. This clause is a core part of legal texts and reaffirmed in extensions.
-*   **Admin Panel:** A comprehensive admin interface provides tools for managing users, spaces, reservations, contracts, payments, invoices, system configuration, audit logs, and an accounting summary.
+*   **Admin Panel:** A comprehensive admin interface with 14 sections: Dashboard, Users (CRUD with activate/deactivate, role changes), Spaces, Reservations, Contracts (PDF download, extensions), Payments, Invoices (PDF download, SIAT disclaimer), Config, Legal Texts (CRUD with versioning), Notifications (templates, log), Audit Log (filterable by date/user/event_type), Accounting (balance summary by period), Export (JSON with audit), and Messages. All admin actions are audit-logged.
 *   **Map Search:** Interactive map search using Leaflet/react-leaflet allows users to find spaces by geographic location. Spaces with latitude/longitude coordinates are displayed as pins on a map centered on Bolivia. The GET /api/spaces/map endpoint filters by geographic bounds.
 
 **UI/UX Decisions:**
