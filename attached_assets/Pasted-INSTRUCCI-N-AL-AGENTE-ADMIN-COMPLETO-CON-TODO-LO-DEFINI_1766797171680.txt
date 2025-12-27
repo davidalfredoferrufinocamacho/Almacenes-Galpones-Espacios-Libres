@@ -1,0 +1,191 @@
+INSTRUCCIÓN AL AGENTE — ADMIN COMPLETO (CON TODO LO DEFINIDO)
+
+Proyecto: “Almacenes, Galpones, Espacios Libres”
+Objetivo: El usuario ADMIN (role=ADMIN) debe poder administrar TODO lo definido en el documento + correcciones acumuladas. 
+IMPORTANTE: NO inventar features fuera de lo que está aquí. Implementar y conectar end-to-end (UI ↔ API ↔ DB), con evidencia de tests.
+
+REGLAS:
+- NO permitir registro público como ADMIN.
+- Admin entra solo con login normal (/ingresar) y role=ADMIN.
+- NO push a GitHub.
+- Todo cambio importante debe quedar auditado (audit_log).
+- Mantener disclaimers de MVP (pagos MOCK, firma MOCK, SIAT pendiente) donde corresponda.
+
+========================================================
+PASO A — AUDIT INICIAL (ANTES DE CAMBIAR CÓDIGO)
+========================================================
+A1) Verificar que el usuario logueado realmente es ADMIN:
+- GET /api/users/me -> role debe ser ADMIN
+A2) Verificar que desde el frontend admin se envía Authorization: Bearer <token> en cada request.
+A3) Verificar qué endpoints ADMIN existen y si responden:
+- GET /api/admin/dashboard
+- GET /api/admin/users
+- GET /api/admin/spaces
+- GET /api/admin/reservations
+- GET /api/admin/contracts
+- GET /api/admin/payments
+- GET /api/admin/invoices
+- GET /api/admin/audit-log?from_date=&to_date=&user_id=&event_type=
+- GET /api/admin/config
+- GET /api/admin/legal-texts
+- GET /api/admin/notification-templates
+- GET /api/admin/accounting/summary?from_date=&to_date=
+- GET /api/admin/export/:type
+
+Entregar un reporte corto:
+- “El problema es UI no conectada / token no enviado / endpoints faltan / rutas rotas”
+
+DETENERSE y luego continuar con PASO B.
+
+========================================================
+PASO B — ADMIN PANEL FRONTEND (OBLIGATORIO)
+========================================================
+Implementar o corregir el AdminDashboard para que NO sea solo UI: debe consumir endpoints reales.
+Crear navegación ADMIN con secciones:
+
+B1) Dashboard
+- Métricas globales:
+  - usuarios totales, hosts, guests, admins
+  - espacios: draft/published/paused
+  - reservaciones por estado (PAID_DEPOSIT_ESCROW / confirmed / refunded / etc.)
+  - contratos: created / signed_mock / extended
+  - pagos: deposit / remaining / extension / refunds (MOCK)
+  - facturas: count, totals
+  - notificaciones enviadas (notification_log)
+  - alertas: intentos bloqueados (REFUND_BLOCKED_CONTRACT_SIGNED, LEGAL_IDENTITY_INCOMPLETE, ADMIN_SELF_DELETE_BLOCKED)
+- Fuente: GET /api/admin/dashboard + /accounting/summary
+
+B2) Usuarios (CRUD ADMIN)
+- Listar/filtrar: por role, active, deleted, fecha
+- Ver detalle usuario
+- Activar/desactivar usuario (is_active)
+- Ver soft-delete status (deleted_at)
+- Cambiar rol (ADMIN puede promover/degradar con reglas):
+  - Endpoint: PUT /api/admin/users/:id/role
+  - Reglas: no autodegradarse si es ADMIN; no crear ADMIN por registro público.
+- Auditoría obligatoria: USER_STATUS_CHANGED, USER_ROLE_CHANGED
+- Mostrar auditoría del usuario (últimos eventos)
+
+B3) Espacios / Listings (Moderación)
+- Listar/filtrar: por status (draft/published/paused), por ciudad/departamento/tipo
+- Ver detalle de un espacio (incl. fotos/video info)
+- Acciones ADMIN:
+  - Forzar PAUSE / UNPAUSE / PUBLISH (si aplica al modelo)
+  - Marcar como “requiere revisión” (si existe) o “bloqueado”
+  - Validar que video cumpla 30–60 (solo mostrar estado, NO re-subir)
+- Auditoría: SPACE_STATUS_CHANGED_ADMIN o equivalente
+
+B4) Reservas + Escrow (MVP/Mock)
+- Listar reservas con estados y montos congelados:
+  - frozen_deposit_percentage
+  - frozen_pricing
+  - frozen_commission_percentage
+  - frozen_video_duration
+- Ver detalle reserva: snapshot congelado + audit trail (CONTRACT_SNAPSHOT_CREATED)
+- Reembolsos:
+  - Listar solicitudes / pagos refund
+  - Ver bloqueos por contrato firmado (REFUND_BLOCKED_CONTRACT_SIGNED)
+  - Acciones ADMIN (si el sistema lo define como MOCK):
+    - aprobar / rechazar reembolso (si existe endpoint)
+  - Auditoría: REFUND_PROCESSED / REFUND_BLOCKED_* / ADMIN_REFUND_DECISION (si aplica)
+
+B5) Contratos
+- Listar/filtrar contratos
+- Ver contrato: SOLO datos FROZEN + estado firma
+- Descargar PDF contrato (GET /api/contracts/:id/pdf) desde UI
+- Ver anexos/extensiones:
+  - listar extensiones por contrato
+  - descargar PDF anexo (GET /api/contracts/extensions/:id/pdf)
+- Auditoría: CONTRACT_CREATED, CONTRACT_SIGNED_*_MOCK, CONTRACT_EXTENSION_CREATED, CONTRACT_PDF_GENERATED
+
+B6) Facturas
+- Listar/filtrar facturas (invoice_type: normal / extension)
+- Ver detalle
+- Descargar PDF factura (GET /api/invoices/:id/pdf)
+- Ver disclaimer SIAT [FACTURA NO FISCAL]
+- Ver frozen_disclaimer_* guardado
+- Auditoría: INVOICE_GENERATED, INVOICE_PDF_DOWNLOADED
+
+B7) Configuración del sistema (Admin Config)
+- UI para editar:
+  - deposit_percentage (0–100)  ✅ IMPORTANTE: tu regla “anticipo configurable”
+  - commission_percentage (0–100)
+- Mostrar valor vigente y advertencia “queda congelado en contratos al pagar anticipo”
+- Auditoría: CONFIG_UPDATED
+
+B8) Textos Legales (Versionado)
+- CRUD legal_texts:
+  - listar por type y estado (active/inactive)
+  - crear nueva versión INACTIVA
+  - editar SOLO si está INACTIVA
+  - activar versión => desactiva anterior del mismo type
+- Tipos incluidos (mínimo):
+  - aviso_legal, terms, privacy, payments_refunds, intermediary
+  - anti_bypass_guest, anti_bypass_host, anti_bypass (unificado para público/footer)
+  - disclaimers: firma (MOCK), factura (NO fiscal), contrato
+  - liability_limitation, applicable_law
+- Auditoría: LEGAL_TEXT_CREATED/UPDATED/ACTIVATED/DEACTIVATED
+
+B9) Plantillas de Notificación (MOCK)
+- CRUD notification_templates:
+  - activar/desactivar
+  - editar contenido y variables permitidas
+- Ver notification_log con filtros (fecha, usuario, tipo)
+- Auditoría: NOTIFICATION_SENT + cambios de plantilla
+
+B10) Auditoría global (Audit Log)
+- Vista con filtros:
+  - from_date, to_date, user_id, event_type
+- Mostrar old_data/new_data legibles
+- Exportar audit a JSON/CSV (si existe export endpoint)
+- Auditoría de exportaciones: ADMIN_EXPORT_DATA (si no existe, implementarlo)
+
+B11) Contabilidad / “Balanza” (MVP)
+- Implementar “Balanza / Resumen contable” por período (from/to):
+  - ingresos deposit (escrow held mock)
+  - ingresos remaining
+  - refunds
+  - comisiones (platform)
+  - payouts host (mock)
+  - extensiones (amount + comisión)
+- Mostrar totales y netos
+- Fuente: GET /api/admin/accounting/summary?from_date=&to_date=
+- Exportación: /api/admin/export/accounting o incluir en export general
+- Auditoría: ADMIN_ACCOUNTING_VIEWED (si aplica) y ADMIN_EXPORT_DATA cuando exporta
+
+B12) Exportaciones (Admin Export)
+- UI para descargar:
+  - users, spaces, reservations, contracts, payments, invoices, audit, notification_log, legal_texts
+- Cada export debe registrar evento: ADMIN_EXPORT_DATA con tipo exportado.
+
+========================================================
+PASO C — BACKEND: COMPLETAR ENDPOINTS FALTANTES (SOLO SI NO EXISTEN)
+========================================================
+Si en PASO A detectas endpoints faltantes, créalos con:
+- authenticateToken + requireRole('ADMIN')
+- validaciones de parámetros
+- paginación básica donde aplique
+- auditoría en acciones sensibles
+
+IMPORTANTE:
+- deposit_percentage debe ser configurable 0–100 por ADMIN.
+- anticipo real del usuario es 10% por defecto pero configurable por ADMIN.
+- Los contratos/facturas usan frozen data: NO leer “spaces” para datos contractuales.
+
+========================================================
+PASO D — EVIDENCIA OBLIGATORIA (QA ADMIN)
+========================================================
+Entregar pruebas (mínimo):
+D1) Login admin -> aparece botón Admin -> entra a panel
+D2) Dashboard carga métricas reales desde API
+D3) Cambiar deposit_percentage y commission_percentage desde UI -> CONFIG_UPDATED en audit_log
+D4) Crear nueva versión legal_text anti_bypass y activarla -> LEGAL_TEXT_* en audit_log
+D5) Export users -> ADMIN_EXPORT_DATA en audit_log
+D6) Ver contabilidad summary por fechas -> muestra totales coherentes
+
+SALIDA FINAL:
+- Lista de archivos modificados
+- Lista de endpoints usados
+- Capturas o descripciones claras de cada test
+- Confirmación: “Admin ya puede administrar todo lo definido”
+DETENERSE.

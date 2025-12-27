@@ -303,8 +303,8 @@ router.get('/audit-log', (req, res) => {
       params.push(user_id);
     }
     if (event_type) {
-      sql += ` AND a.event_type = ?`;
-      params.push(event_type);
+      sql += ` AND a.action LIKE ?`;
+      params.push(`%${event_type}%`);
     }
 
     sql += ` ORDER BY a.created_at DESC LIMIT ?`;
