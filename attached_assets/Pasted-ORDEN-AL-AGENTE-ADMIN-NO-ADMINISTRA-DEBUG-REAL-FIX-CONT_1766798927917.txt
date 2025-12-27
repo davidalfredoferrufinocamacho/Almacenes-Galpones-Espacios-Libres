@@ -1,0 +1,133 @@
+ORDEN AL AGENTE — ADMIN NO ADMINISTRA (DEBUG REAL + FIX)
+
+CONTEXTO:
+- El usuario entra como ADMIN (role=ADMIN) pero “no puede administrar nada”.
+- No acepto resúmenes. Quiero evidencia real en UI + API.
+- Ejecutar paso por paso. NO saltar. NO decir “completo” sin pruebas.
+
+REGLAS:
+- NO push a GitHub.
+- NO inventar features.
+- Si algo falla: reportar causa raíz y el fix exacto.
+- Entregar evidencia (capturas o descripción exacta + respuestas JSON).
+
+====================================================
+PASO 1 — VERIFICAR QUE EL ADMIN PANEL SE VE REALMENTE
+====================================================
+1.1 En el navegador (Preview de Replit):
+- Ir a /ingresar
+- Login con ADMIN
+- Confirmar que aparece botón/link “Admin” en el header
+
+1.2 Abrir /admin (o /admin/dashboard si existe)
+- Confirmar que NO está en blanco
+- Confirmar que hay sidebar/menú con secciones
+
+EVIDENCIA PASO 1:
+- Indicar exactamente qué URL abriste y qué se ve (títulos/menú).
+- Si está blanco: copiar error de consola del navegador.
+
+====================================================
+PASO 2 — VERIFICAR ERRORES DEL FRONTEND (CONSOLa DEL NAVEGADOR)
+====================================================
+2.1 Abrir DevTools → Console:
+- Capturar errores (CORS, 401, 403, 404, JS error, import error).
+2.2 Abrir DevTools → Network:
+- Filtrar por “admin”
+- Click en /admin/dashboard o cualquier sección
+- Ver si salen requests a /api/admin/*
+
+EVIDENCIA PASO 2:
+- Lista de errores exactos en Console
+- Lista de requests relevantes con status codes (200/401/403/404)
+
+====================================================
+PASO 3 — PRUEBA FUNCIONAL “ADMIN SÍ ADMINISTRA” (NO SOLO LEE)
+====================================================
+Hacer estas 3 acciones desde la UI ADMIN (clic real):
+
+3.1 ACCIÓN 1 (CONFIG):
+- Ir a sección Configuración
+- Cambiar deposit_percentage (por ejemplo 10 → 11)
+- Guardar
+- Confirmar:
+  a) UI muestra success
+  b) GET /api/admin/config refleja el nuevo valor
+  c) audit_log tiene CONFIG_UPDATED
+
+3.2 ACCIÓN 2 (USUARIO):
+- Ir a Usuarios
+- Elegir un usuario NO ADMIN
+- Cambiar is_active (activar/desactivar) O cambiar rol (GUEST↔HOST)
+- Confirmar:
+  a) UI muestra success
+  b) GET /api/admin/users muestra el cambio
+  c) audit_log tiene USER_STATUS_CHANGED o USER_ROLE_CHANGED
+
+3.3 ACCIÓN 3 (LEGAL TEXT):
+- Ir a Textos legales
+- Crear una NUEVA versión INACTIVA de un tipo (ej: privacy o terms)
+- Activarla
+- Confirmar:
+  a) UI muestra success
+  b) GET /api/admin/legal-texts muestra la nueva versión activa
+  c) audit_log tiene LEGAL_TEXT_CREATED y LEGAL_TEXT_ACTIVATED
+
+EVIDENCIA PASO 3 (OBLIGATORIA):
+- Para cada acción: pegar las respuestas JSON relevantes (antes y después)
+- Pegar el registro de audit_log (acción + entity_id + created_at)
+
+SI NO EXISTE LA UI de esas secciones o botones:
+- NO decir “completo”
+- Pasar al PASO 4
+
+====================================================
+PASO 4 — CAUSA RAÍZ (SI EL ADMIN “NO PUEDE”)
+====================================================
+Si el admin no puede cambiar nada, identificar EXACTAMENTE cuál es la causa:
+
+CASO A: UI no tiene botones/acciones (solo lectura)
+- Causa: faltan componentes/handlers
+- Fix: implementar botones + formularios + llamadas API
+
+CASO B: Botones existen pero no hacen requests
+- Causa: onClick no conectado / componente no monta
+- Fix: conectar handlers y verificar rutas/imports
+
+CASO C: Requests salen pero fallan 401/403
+- Causa: token no se adjunta o interceptor no funciona en admin pages
+- Fix: asegurar que api client se usa en admin pages y añade Authorization
+
+CASO D: Requests 200 pero UI no cambia
+- Causa: estado no se refresca (missing refetch/setState)
+- Fix: refetch tras éxito o actualizar estado local
+
+CASO E: 404 en rutas admin
+- Causa: router mal configurado / build no actualizado
+- Fix: corregir rutas y verificar App.jsx / AdminLayout
+
+EVIDENCIA PASO 4:
+- Mostrar 1 ejemplo concreto con:
+  request + response + código status + componente que lo llama + fix aplicado
+
+====================================================
+PASO 5 — FIX MINIMO NECESARIO + RE-TEST
+====================================================
+Aplicar SOLO el fix necesario según causa raíz y repetir PASO 3 completo.
+No cerrar hasta que PASO 3 funcione con evidencia.
+
+====================================================
+SALIDA FINAL (FORMATO OBLIGATORIO)
+====================================================
+Responder exactamente con:
+
+- Resultado PASO 1:
+- Resultado PASO 2:
+- Resultado PASO 3 (con evidencia JSON + audit_log):
+  * Acción 1:
+  * Acción 2:
+  * Acción 3:
+- Si falló: Causa raíz + Fix aplicado
+- Archivos modificados (lista exacta)
+- Confirmación final: “ADMIN puede modificar config, usuarios y textos legales desde UI”
+DETENERSE.
