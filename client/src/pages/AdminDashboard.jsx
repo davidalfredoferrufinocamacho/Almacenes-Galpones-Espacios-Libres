@@ -1490,22 +1490,46 @@ function AdminInvoices() {
 
 function AdminLegalTexts() {
   const [texts, setTexts] = useState([])
+  const [categories, setCategories] = useState([])
+  const [footerConfig, setFooterConfig] = useState({ title: '', text: '' })
   const [loading, setLoading] = useState(true)
+  const [view, setView] = useState('texts')
   const [editingId, setEditingId] = useState(null)
   const [editContent, setEditContent] = useState('')
-  const [newText, setNewText] = useState({ type: '', title: '', content: '', version: '1.0' })
+  const [editTitle, setEditTitle] = useState('')
+  const [newText, setNewText] = useState({ type: '', title: '', content: '', version: '1.0', category: 'legal' })
   const [showNew, setShowNew] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
+  const [newCategory, setNewCategory] = useState({ key: '', label: '' })
+  const [showNewCategory, setShowNewCategory] = useState(false)
+  const [editingCategory, setEditingCategory] = useState(null)
 
-  const loadTexts = () => {
-    api.get('/admin/legal-texts').then(r => setTexts(r.data.texts || [])).finally(() => setLoading(false))
+  const loadData = async () => {
+    try {
+      const [textsRes, catsRes, configRes] = await Promise.all([
+        api.get('/admin/legal-texts'),
+        api.get('/admin/legal-categories'),
+        api.get('/admin/config')
+      ])
+      setTexts(textsRes.data.texts || [])
+      setCategories(catsRes.data || [])
+      const footerTitle = configRes.data.find(c => c.key === 'footer_title')
+      const footerText = configRes.data.find(c => c.key === 'footer_text')
+      setFooterConfig({ title: footerTitle?.value || '', text: footerText?.value || '' })
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  useEffect(() => { loadTexts() }, [])
+  useEffect(() => { loadData() }, [])
 
   const handleActivate = async (id) => {
     try {
       await api.put(`/admin/legal-texts/${id}/activate`)
-      loadTexts()
+      loadData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al activar')
     }
@@ -1514,7 +1538,7 @@ function AdminLegalTexts() {
   const handleDeactivate = async (id) => {
     try {
       await api.put(`/admin/legal-texts/${id}/deactivate`)
-      loadTexts()
+      loadData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al desactivar')
     }
@@ -1522,11 +1546,23 @@ function AdminLegalTexts() {
 
   const handleEdit = async (id) => {
     try {
-      await api.put(`/admin/legal-texts/${id}`, { content: editContent })
+      await api.put(`/admin/legal-texts/${id}`, { content: editContent, title: editTitle })
       setEditingId(null)
-      loadTexts()
+      loadData()
+      alert('Texto actualizado')
     } catch (error) {
       alert(error.response?.data?.error || 'Error al editar')
+    }
+  }
+
+  const handleDelete = async (id, title) => {
+    if (!confirm(`¿Eliminar texto "${title}"?`)) return
+    try {
+      await api.delete(`/admin/legal-texts/${id}`)
+      loadData()
+      alert('Texto eliminado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar')
     }
   }
 
@@ -1534,11 +1570,71 @@ function AdminLegalTexts() {
     try {
       await api.post('/admin/legal-texts', newText)
       setShowNew(false)
-      setNewText({ type: '', title: '', content: '', version: '1.0' })
-      loadTexts()
+      setNewText({ type: '', title: '', content: '', version: '1.0', category: 'legal' })
+      loadData()
+      alert('Texto creado')
     } catch (error) {
       alert(error.response?.data?.error || 'Error al crear')
     }
+  }
+
+  const handleCreateCategory = async () => {
+    try {
+      await api.post('/admin/legal-categories', newCategory)
+      setShowNewCategory(false)
+      setNewCategory({ key: '', label: '' })
+      loadData()
+      alert('Categoria creada')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al crear categoria')
+    }
+  }
+
+  const handleUpdateCategory = async (id, label) => {
+    try {
+      await api.put(`/admin/legal-categories/${id}`, { label })
+      setEditingCategory(null)
+      loadData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al actualizar')
+    }
+  }
+
+  const handleDeleteCategory = async (id, label) => {
+    if (!confirm(`¿Eliminar categoria "${label}"?`)) return
+    try {
+      await api.delete(`/admin/legal-categories/${id}`)
+      loadData()
+      alert('Categoria eliminada')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar')
+    }
+  }
+
+  const handleSaveFooter = async () => {
+    try {
+      await api.put('/admin/config/footer_title', { value: footerConfig.title })
+      await api.put('/admin/config/footer_text', { value: footerConfig.text })
+      alert('Footer actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al guardar')
+    }
+  }
+
+  const filteredTexts = texts.filter(t => {
+    if (filterCategory && t.category !== filterCategory) return false
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      return t.title?.toLowerCase().includes(term) || t.type?.toLowerCase().includes(term)
+    }
+    return true
+  })
+
+  const typeLabels = {
+    aviso_legal: 'Aviso Legal', terminos_condiciones: 'Terminos y Condiciones', privacidad: 'Privacidad',
+    pagos_reembolsos: 'Pagos y Reembolsos', intermediacion: 'Intermediacion', anti_bypass_guest: 'Anti-Bypass Guest',
+    anti_bypass_host: 'Anti-Bypass Host', disclaimer_contrato: 'Disclaimer Contrato', disclaimer_firma: 'Disclaimer Firma',
+    disclaimer_factura: 'Disclaimer Factura', liability_limitation: 'Limitacion Responsabilidad', applicable_law: 'Ley Aplicable'
   }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
@@ -1546,77 +1642,157 @@ function AdminLegalTexts() {
   return (
     <div>
       <h1>Textos Legales</h1>
-      <button onClick={() => setShowNew(!showNew)} className="btn btn-primary" style={{marginBottom: '1rem'}}>
-        {showNew ? 'Cancelar' : '+ Nueva Version'}
-      </button>
-      
-      {showNew && (
-        <div className="card" style={{marginBottom: '1rem', padding: '1rem'}}>
-          <select value={newText.type} onChange={e => setNewText({...newText, type: e.target.value})} style={{marginBottom: '0.5rem', width: '100%', padding: '0.5rem'}}>
-            <option value="">Seleccionar tipo...</option>
-            <option value="aviso_legal">Aviso Legal</option>
-            <option value="terminos_condiciones">Terminos y Condiciones</option>
-            <option value="privacidad">Privacidad</option>
-            <option value="pagos_reembolsos">Pagos y Reembolsos</option>
-            <option value="intermediacion">Intermediacion</option>
-            <option value="anti_bypass_guest">Anti-Bypass Guest</option>
-            <option value="anti_bypass_host">Anti-Bypass Host</option>
-            <option value="disclaimer_contrato">Disclaimer Contrato</option>
-            <option value="disclaimer_firma">Disclaimer Firma</option>
-            <option value="disclaimer_factura">Disclaimer Factura</option>
-            <option value="liability_limitation">Limitacion de Responsabilidad</option>
-            <option value="applicable_law">Ley Aplicable</option>
-          </select>
-          <input type="text" placeholder="Titulo" value={newText.title} onChange={e => setNewText({...newText, title: e.target.value})} style={{marginBottom: '0.5rem', width: '100%'}} />
-          <input type="text" placeholder="Version (ej: 1.0, 2.0)" value={newText.version} onChange={e => setNewText({...newText, version: e.target.value})} style={{marginBottom: '0.5rem', width: '100%'}} />
-          <textarea placeholder="Contenido" value={newText.content} onChange={e => setNewText({...newText, content: e.target.value})} rows={5} style={{marginBottom: '0.5rem', width: '100%'}} />
-          <button onClick={handleCreate} className="btn btn-primary">Crear (Inactivo)</button>
+      <div style={{marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
+        <button onClick={() => setView('texts')} className={`btn ${view === 'texts' ? 'btn-primary' : 'btn-secondary'}`}>Textos</button>
+        <button onClick={() => setView('categories')} className={`btn ${view === 'categories' ? 'btn-primary' : 'btn-secondary'}`}>Categorias</button>
+        <button onClick={() => setView('footer')} className={`btn ${view === 'footer' ? 'btn-primary' : 'btn-secondary'}`}>Footer</button>
+      </div>
+
+      {view === 'texts' && (
+        <>
+          <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center'}}>
+            <button onClick={() => setShowNew(!showNew)} className="btn btn-primary">{showNew ? 'Cancelar' : '+ Nuevo Texto'}</button>
+            <input type="text" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{padding: '0.5rem', minWidth: '200px'}} />
+            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} style={{padding: '0.5rem'}}>
+              <option value="">Todas las categorias</option>
+              {categories.map(c => <option key={c.id} value={c.key}>{c.label}</option>)}
+            </select>
+            <span style={{marginLeft: 'auto', color: '#666', fontSize: '0.85rem'}}>{filteredTexts.length} de {texts.length} textos</span>
+          </div>
+
+          {showNew && (
+            <div className="card" style={{marginBottom: '1rem', padding: '1rem'}}>
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem'}}>
+                <select value={newText.type} onChange={e => setNewText({...newText, type: e.target.value})} style={{padding: '0.5rem'}}>
+                  <option value="">Seleccionar tipo...</option>
+                  {Object.entries(typeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+                <select value={newText.category} onChange={e => setNewText({...newText, category: e.target.value})} style={{padding: '0.5rem'}}>
+                  {categories.map(c => <option key={c.id} value={c.key}>{c.label}</option>)}
+                </select>
+              </div>
+              <input type="text" placeholder="Titulo" value={newText.title} onChange={e => setNewText({...newText, title: e.target.value})} style={{marginTop: '0.5rem', width: '100%', padding: '0.5rem'}} />
+              <input type="text" placeholder="Version (ej: 1.0, 2.0)" value={newText.version} onChange={e => setNewText({...newText, version: e.target.value})} style={{marginTop: '0.5rem', width: '100%', padding: '0.5rem'}} />
+              <textarea placeholder="Contenido" value={newText.content} onChange={e => setNewText({...newText, content: e.target.value})} rows={5} style={{marginTop: '0.5rem', width: '100%', padding: '0.5rem'}} />
+              <button onClick={handleCreate} className="btn btn-primary" style={{marginTop: '0.5rem'}}>Crear (Inactivo)</button>
+            </div>
+          )}
+
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Titulo</th>
+                <th>Categoria</th>
+                <th>Version</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTexts.map(t => (
+                <tr key={t.id}>
+                  <td>{typeLabels[t.type] || t.type}</td>
+                  <td>{t.title}</td>
+                  <td>{categories.find(c => c.key === t.category)?.label || t.category || 'Legal'}</td>
+                  <td>{t.version}</td>
+                  <td><span className={`status-badge status-${t.is_active ? 'active' : 'inactive'}`}>{t.is_active ? 'ACTIVO' : 'INACTIVO'}</span></td>
+                  <td>
+                    <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                      {t.is_active ? (
+                        <button onClick={() => handleDeactivate(t.id)} className="btn btn-sm btn-danger">Desactivar</button>
+                      ) : (
+                        <>
+                          <button onClick={() => handleActivate(t.id)} className="btn btn-sm btn-success">Activar</button>
+                          <button onClick={() => { setEditingId(t.id); setEditContent(t.content); setEditTitle(t.title) }} className="btn btn-sm btn-secondary">Editar</button>
+                          <button onClick={() => handleDelete(t.id, t.title)} className="btn btn-sm btn-danger">Eliminar</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {view === 'categories' && (
+        <>
+          <button onClick={() => setShowNewCategory(!showNewCategory)} className="btn btn-primary" style={{marginBottom: '1rem'}}>{showNewCategory ? 'Cancelar' : '+ Nueva Categoria'}</button>
+          {showNewCategory && (
+            <div className="card" style={{marginBottom: '1rem', padding: '1rem'}}>
+              <input type="text" placeholder="Clave (ej: contractual)" value={newCategory.key} onChange={e => setNewCategory({...newCategory, key: e.target.value.toLowerCase().replace(/[^a-z_]/g, '')})} style={{marginBottom: '0.5rem', width: '100%', padding: '0.5rem'}} />
+              <input type="text" placeholder="Etiqueta (ej: Contractual)" value={newCategory.label} onChange={e => setNewCategory({...newCategory, label: e.target.value})} style={{marginBottom: '0.5rem', width: '100%', padding: '0.5rem'}} />
+              <button onClick={handleCreateCategory} className="btn btn-primary">Crear Categoria</button>
+            </div>
+          )}
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Clave</th>
+                <th>Etiqueta</th>
+                <th>Sistema</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map(c => (
+                <tr key={c.id}>
+                  <td>{c.key}</td>
+                  <td>{editingCategory === c.id ? <input type="text" defaultValue={c.label} onBlur={e => handleUpdateCategory(c.id, e.target.value)} autoFocus style={{padding: '0.25rem'}} /> : c.label}</td>
+                  <td>{c.is_system ? 'Si' : 'No'}</td>
+                  <td>
+                    <div style={{display: 'flex', gap: '0.25rem'}}>
+                      <button onClick={() => setEditingCategory(c.id)} className="btn btn-sm btn-secondary">Editar</button>
+                      {!c.is_system && <button onClick={() => handleDeleteCategory(c.id, c.label)} className="btn btn-sm btn-danger">Eliminar</button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {view === 'footer' && (
+        <div className="card" style={{padding: '1.5rem'}}>
+          <h2>Configuracion del Footer</h2>
+          <div style={{marginBottom: '1rem'}}>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Titulo del Footer:</label>
+            <input type="text" value={footerConfig.title} onChange={e => setFooterConfig({...footerConfig, title: e.target.value})} style={{width: '100%', padding: '0.5rem', fontSize: '1rem'}} />
+          </div>
+          <div style={{marginBottom: '1rem'}}>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Texto del Footer:</label>
+            <textarea value={footerConfig.text} onChange={e => setFooterConfig({...footerConfig, text: e.target.value})} rows={3} style={{width: '100%', padding: '0.5rem', fontSize: '1rem'}} />
+          </div>
+          <button onClick={handleSaveFooter} className="btn btn-primary">Guardar Cambios</button>
+          <div style={{marginTop: '1.5rem', padding: '1rem', background: '#f5f5f5', borderRadius: '4px'}}>
+            <strong>Vista previa:</strong>
+            <div style={{marginTop: '0.5rem', textAlign: 'center'}}>
+              <h3 style={{margin: '0 0 0.25rem 0'}}>{footerConfig.title}</h3>
+              <p style={{margin: 0, color: '#666'}}>{footerConfig.text}</p>
+            </div>
+          </div>
         </div>
       )}
 
-      <table className="admin-table">
-        <thead>
-          <tr>
-            <th>Tipo</th>
-            <th>Titulo</th>
-            <th>Estado</th>
-            <th>Actualizado</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {texts.map(t => (
-            <tr key={t.id}>
-              <td>{t.type}</td>
-              <td>{t.title}</td>
-              <td>
-                <span className={`status-badge status-${t.is_active ? 'active' : 'inactive'}`}>
-                  {t.is_active ? 'ACTIVO' : 'INACTIVO'}
-                </span>
-              </td>
-              <td>{new Date(t.updated_at).toLocaleDateString()}</td>
-              <td>
-                {t.is_active ? (
-                  <button onClick={() => handleDeactivate(t.id)} className="btn btn-sm btn-danger">Desactivar</button>
-                ) : (
-                  <>
-                    <button onClick={() => handleActivate(t.id)} className="btn btn-sm btn-success" style={{marginRight: '0.5rem'}}>Activar</button>
-                    <button onClick={() => { setEditingId(t.id); setEditContent(t.content) }} className="btn btn-sm btn-secondary">Editar</button>
-                  </>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
       {editingId && (
         <div className="modal-overlay" onClick={() => setEditingId(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '700px'}}>
             <h3>Editar Texto Legal</h3>
-            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={10} style={{width: '100%', marginBottom: '1rem'}} />
-            <button onClick={() => handleEdit(editingId)} className="btn btn-primary" style={{marginRight: '0.5rem'}}>Guardar</button>
-            <button onClick={() => setEditingId(null)} className="btn btn-secondary">Cancelar</button>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Titulo:</label>
+              <input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Contenido:</label>
+              <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={12} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setEditingId(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={() => handleEdit(editingId)} className="btn btn-primary">Guardar</button>
+            </div>
           </div>
         </div>
       )}

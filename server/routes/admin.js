@@ -1256,6 +1256,7 @@ router.post('/legal-texts', [
   body('title').notEmpty().trim(),
   body('content').notEmpty(),
   body('version').notEmpty().trim(),
+  body('category').optional().trim(),
   body('effective_date').optional().isISO8601()
 ], (req, res) => {
   try {
@@ -1264,17 +1265,17 @@ router.post('/legal-texts', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { type, title, content, version, effective_date } = req.body;
+    const { type, title, content, version, category, effective_date } = req.body;
     const id = `legal_${type}_v${version.replace(/\./g, '_')}_${Date.now()}`;
     const clientInfo = getClientInfo(req);
 
     db.prepare(`
-      INSERT INTO legal_texts (id, type, title, content, version, is_active, effective_date, created_by)
-      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
-    `).run(id, type, title, content, version, effective_date || null, req.user.id);
+      INSERT INTO legal_texts (id, type, title, content, version, category, is_active, effective_date, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+    `).run(id, type, title, content, version, category || 'legal', effective_date || null, req.user.id);
 
     logAudit(req.user.id, 'LEGAL_TEXT_CREATED', 'legal_texts', id, null, {
-      type, title, version, effective_date, ...clientInfo
+      type, title, version, category, effective_date, ...clientInfo
     }, req);
 
     res.status(201).json({
@@ -1433,6 +1434,117 @@ router.get('/legal-texts/history/:type', (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener historial' });
+  }
+});
+
+router.delete('/legal-texts/:id', (req, res) => {
+  try {
+    const text = db.prepare('SELECT * FROM legal_texts WHERE id = ?').get(req.params.id);
+    if (!text) {
+      return res.status(404).json({ error: 'Texto legal no encontrado' });
+    }
+
+    if (text.is_active) {
+      return res.status(400).json({ error: 'No se puede eliminar texto legal activo. Desactivelo primero.' });
+    }
+
+    db.prepare('DELETE FROM legal_texts WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'LEGAL_TEXT_DELETED', 'legal_texts', req.params.id, text, null, req);
+
+    res.json({ message: 'Texto legal eliminado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar texto legal' });
+  }
+});
+
+router.get('/legal-categories', (req, res) => {
+  try {
+    const categories = db.prepare('SELECT * FROM legal_categories ORDER BY label').all();
+    res.json(categories);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener categorias' });
+  }
+});
+
+router.post('/legal-categories', [
+  body('key').notEmpty().trim().matches(/^[a-z_]+$/),
+  body('label').notEmpty().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const existing = db.prepare('SELECT id FROM legal_categories WHERE key = ?').get(req.body.key);
+    if (existing) {
+      return res.status(400).json({ error: 'Ya existe una categoria con esa clave' });
+    }
+
+    const id = `cat_${req.body.key}`;
+    db.prepare('INSERT INTO legal_categories (id, key, label, is_system) VALUES (?, ?, ?, 0)').run(id, req.body.key, req.body.label);
+
+    logAudit(req.user.id, 'LEGAL_CATEGORY_CREATED', 'legal_categories', id, null, req.body, req);
+
+    res.json({ message: 'Categoria creada', id });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear categoria' });
+  }
+});
+
+router.put('/legal-categories/:id', [
+  body('label').notEmpty().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const category = db.prepare('SELECT * FROM legal_categories WHERE id = ?').get(req.params.id);
+    if (!category) {
+      return res.status(404).json({ error: 'Categoria no encontrada' });
+    }
+
+    db.prepare('UPDATE legal_categories SET label = ? WHERE id = ?').run(req.body.label, req.params.id);
+
+    logAudit(req.user.id, 'LEGAL_CATEGORY_UPDATED', 'legal_categories', req.params.id, category, req.body, req);
+
+    res.json({ message: 'Categoria actualizada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar categoria' });
+  }
+});
+
+router.delete('/legal-categories/:id', (req, res) => {
+  try {
+    const category = db.prepare('SELECT * FROM legal_categories WHERE id = ?').get(req.params.id);
+    if (!category) {
+      return res.status(404).json({ error: 'Categoria no encontrada' });
+    }
+
+    if (category.is_system) {
+      return res.status(400).json({ error: 'No se puede eliminar categoria del sistema' });
+    }
+
+    const textsUsingCategory = db.prepare('SELECT COUNT(*) as count FROM legal_texts WHERE category = ?').get(category.key);
+    if (textsUsingCategory && textsUsingCategory.count > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar categoria con textos asociados' });
+    }
+
+    db.prepare('DELETE FROM legal_categories WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'LEGAL_CATEGORY_DELETED', 'legal_categories', req.params.id, category, null, req);
+
+    res.json({ message: 'Categoria eliminada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar categoria' });
   }
 });
 

@@ -390,6 +390,7 @@ function initDatabase() {
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       version TEXT NOT NULL DEFAULT '1.0',
+      category TEXT DEFAULT 'legal',
       is_active INTEGER DEFAULT 0,
       effective_date TEXT,
       created_by TEXT,
@@ -476,14 +477,44 @@ function initDatabase() {
       ('tpl_invoice_generated', 'invoice_generated', 'email', 'Factura generada - {{invoice_number}}', 'Hola {{recipient_name}},\n\nSe ha generado una factura para tu contrato.\n\nNumero de factura: {{invoice_number}}\nContrato: {{contract_number}}\nMonto total: Bs. {{total_amount}}\n\nPuedes descargar el PDF desde la plataforma.\n\nSaludos,\n{{platform_name}}', 1);
   `);
 
+  // Crear tabla de categorias legales
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS legal_categories (
+      id TEXT PRIMARY KEY,
+      key TEXT UNIQUE NOT NULL,
+      label TEXT NOT NULL,
+      is_system INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    INSERT OR IGNORE INTO legal_categories (id, key, label, is_system) VALUES
+      ('cat_legal', 'legal', 'Legal', 1),
+      ('cat_informacion', 'informacion', 'Informacion', 1);
+  `);
+
+  // Agregar config de footer
+  db.exec(`
+    INSERT OR IGNORE INTO system_config (id, key, value, description) VALUES
+      ('cfg_footer_title', 'footer_title', 'Almacenes, Galpones, Espacios Libres', 'Titulo del footer'),
+      ('cfg_footer_text', 'footer_text', 'Plataforma de intermediacion tecnologica para alquiler de espacios en Bolivia', 'Texto del footer');
+  `);
+
   // Migraciones para columnas faltantes en bases de datos existentes
   const migrations = [
     { table: 'users', column: 'anti_bypass_legal_text_id', type: 'TEXT' },
     { table: 'users', column: 'anti_bypass_legal_version', type: 'TEXT' },
     { table: 'users', column: 'anti_bypass_ip', type: 'TEXT' },
     { table: 'users', column: 'anti_bypass_user_agent', type: 'TEXT' },
-    { table: 'users', column: 'is_blocked', type: 'INTEGER DEFAULT 0' }
+    { table: 'users', column: 'is_blocked', type: 'INTEGER DEFAULT 0' },
+    { table: 'legal_texts', column: 'category', type: 'TEXT DEFAULT "legal"' }
   ];
+
+  // Backfill null categories to 'legal'
+  try {
+    db.exec(`UPDATE legal_texts SET category = 'legal' WHERE category IS NULL`);
+  } catch (e) {
+    console.log('Backfill categories:', e.message);
+  }
 
   for (const m of migrations) {
     try {
