@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import api from '../services/api'
 import './AdminDashboard.css'
 
@@ -7,14 +7,12 @@ function AdminDashboard() {
   const location = useLocation()
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [activeSection, setActiveSection] = useState('dashboard')
 
   useEffect(() => {
-    console.log('[AdminDashboard] Montado, pathname:', location.pathname)
     loadStats()
-  }, [])
-
-  useEffect(() => {
-    console.log('[AdminDashboard] Ruta cambio a:', location.pathname)
+    const path = location.pathname.replace('/admin', '').replace('/', '')
+    setActiveSection(path || 'dashboard')
   }, [location.pathname])
 
   const loadStats = async () => {
@@ -32,25 +30,38 @@ function AdminDashboard() {
     return <div className="loading"><div className="spinner"></div></div>
   }
 
+  const menuItems = [
+    { path: '/admin', label: 'Dashboard', key: 'dashboard' },
+    { path: '/admin/users', label: 'Usuarios', key: 'users' },
+    { path: '/admin/spaces', label: 'Espacios', key: 'spaces' },
+    { path: '/admin/reservations', label: 'Reservaciones', key: 'reservations' },
+    { path: '/admin/contracts', label: 'Contratos', key: 'contracts' },
+    { path: '/admin/payments', label: 'Pagos', key: 'payments' },
+    { path: '/admin/invoices', label: 'Facturas', key: 'invoices' },
+    { path: '/admin/config', label: 'Configuracion', key: 'config' },
+    { path: '/admin/legal-texts', label: 'Textos Legales', key: 'legal-texts' },
+    { path: '/admin/notifications', label: 'Notificaciones', key: 'notifications' },
+    { path: '/admin/audit-log', label: 'Auditoria', key: 'audit-log' },
+    { path: '/admin/accounting', label: 'Contabilidad', key: 'accounting' },
+    { path: '/admin/export', label: 'Exportar', key: 'export' },
+    { path: '/admin/messages', label: 'Mensajes', key: 'messages' },
+  ]
+
   return (
     <div className="admin-dashboard">
       <div className="admin-sidebar">
         <h2>Panel Admin</h2>
         <nav>
-          <Link to="/admin" className={location.pathname === '/admin' ? 'active' : ''}>Dashboard</Link>
-          <Link to="/admin/users" className={location.pathname === '/admin/users' ? 'active' : ''}>Usuarios</Link>
-          <Link to="/admin/spaces" className={location.pathname === '/admin/spaces' ? 'active' : ''}>Espacios</Link>
-          <Link to="/admin/reservations" className={location.pathname === '/admin/reservations' ? 'active' : ''}>Reservaciones</Link>
-          <Link to="/admin/contracts" className={location.pathname === '/admin/contracts' ? 'active' : ''}>Contratos</Link>
-          <Link to="/admin/payments" className={location.pathname === '/admin/payments' ? 'active' : ''}>Pagos</Link>
-          <Link to="/admin/invoices" className={location.pathname === '/admin/invoices' ? 'active' : ''}>Facturas</Link>
-          <Link to="/admin/config" className={location.pathname === '/admin/config' ? 'active' : ''}>Configuracion</Link>
-          <Link to="/admin/legal-texts" className={location.pathname === '/admin/legal-texts' ? 'active' : ''}>Textos Legales</Link>
-          <Link to="/admin/notifications" className={location.pathname === '/admin/notifications' ? 'active' : ''}>Notificaciones</Link>
-          <Link to="/admin/audit-log" className={location.pathname === '/admin/audit-log' ? 'active' : ''}>Auditoria</Link>
-          <Link to="/admin/accounting" className={location.pathname === '/admin/accounting' ? 'active' : ''}>Contabilidad</Link>
-          <Link to="/admin/export" className={location.pathname === '/admin/export' ? 'active' : ''}>Exportar</Link>
-          <Link to="/admin/messages" className={location.pathname === '/admin/messages' ? 'active' : ''}>Mensajes</Link>
+          {menuItems.map(item => (
+            <NavLink 
+              key={item.key}
+              to={item.path}
+              end={item.path === '/admin'}
+              className={({ isActive }) => isActive ? 'active' : ''}
+            >
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
       </div>
 
