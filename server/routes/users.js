@@ -119,32 +119,44 @@ router.put('/me/accept-anti-bypass', authenticateToken, (req, res) => {
     }
 
     const clientInfo = getClientInfo(req);
+    const acceptedAt = new Date().toISOString();
 
     db.prepare(`
       UPDATE users SET 
         anti_bypass_accepted = 1,
-        anti_bypass_accepted_at = CURRENT_TIMESTAMP,
+        anti_bypass_accepted_at = ?,
+        anti_bypass_legal_text_id = ?,
         anti_bypass_legal_version = ?,
         anti_bypass_ip = ?,
         anti_bypass_user_agent = ?
       WHERE id = ?
-    `).run(legalText.version, clientInfo.ip_address, clientInfo.user_agent, req.user.id);
+    `).run(acceptedAt, legalText.id, legalText.version, clientInfo.ip_address, clientInfo.user_agent, req.user.id);
 
-    logAudit(req.user.id, 'ANTI_BYPASS_ACCEPTED', 'users', req.user.id, 
+    const auditAction = user.role === 'HOST' ? 'ANTI_BYPASS_HOST_ACCEPTED' : 'ANTI_BYPASS_GUEST_ACCEPTED';
+    const auditData = {
+      role: user.role,
+      anti_bypass_accepted: 1,
+      legal_text_id: legalText.id,
+      legal_text_version: legalText.version,
+      accepted_at: acceptedAt,
+      ip_address: clientInfo.ip_address,
+      user_agent: clientInfo.user_agent
+    };
+
+    logAudit(req.user.id, auditAction, 'users', req.user.id, 
       { anti_bypass_accepted: 0 },
-      { 
-        anti_bypass_accepted: 1,
-        legal_text_id: legalText.id,
-        legal_version: legalText.version,
-        ...clientInfo
-      },
+      auditData,
       req
     );
 
     res.json({ 
       message: 'Clausula anti-bypass aceptada exitosamente',
-      accepted_at: new Date().toISOString(),
-      version: legalText.version
+      anti_bypass_accepted: 1,
+      anti_bypass_accepted_at: acceptedAt,
+      anti_bypass_legal_text_id: legalText.id,
+      anti_bypass_legal_version: legalText.version,
+      anti_bypass_ip: clientInfo.ip_address,
+      anti_bypass_user_agent: clientInfo.user_agent
     });
   } catch (error) {
     console.error('Error:', error);

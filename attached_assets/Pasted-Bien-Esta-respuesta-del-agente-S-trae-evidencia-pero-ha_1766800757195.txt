@@ -1,0 +1,50 @@
+Bien. Esta respuesta del agente SÍ trae evidencia, pero hay 2 problemas claros que tenemos que corregir ya, porque si no, después vuelve a fallar:
+
+1) Endpoint equivocado (según lo que prometió vs lo que implementó)
+
+Él dijo “endpoint para HOST aceptar anti-bypass” y en “ARCHIVOS MODIFICADOS” puso:
+	•	server/routes/users.js - Nuevo endpoint PUT /me/accept-anti-bypass
+
+Eso está bien, pero tiene que existir también una ruta pública/estándar clara en API y estar documentada, porque antes hablábamos de:
+	•	POST /api/users/accept-anti-bypass
+
+Ahora implementó:
+	•	PUT /api/users/me/accept-anti-bypass (probablemente)
+
+✅ Eso es válido, pero debe quedar consistente y el frontend debe llamarlo.
+➡️ Hay que asegurar que:
+	•	La ruta exista exactamente con el prefijo real /api/users/me/accept-anti-bypass
+	•	El Dashboard HOST la consuma
+	•	Quede en replit.md para que no se pierda
+
+2) Host “aceptó” pero el evento auditado es genérico
+
+Él registró:
+	•	ANTI_BYPASS_ACCEPTED
+
+Pero necesitamos evento diferenciado para auditoría legal:
+	•	ANTI_BYPASS_HOST_ACCEPTED (o al menos ANTI_BYPASS_ACCEPTED con role=HOST en new_data)
+
+De lo contrario, luego no podrás probar legalmente que fue el HOST quien aceptó, vs un usuario cualquiera.
+
+⸻
+
+✅ UNA SOLA ORDEN (en un texto) para enviar al agente
+
+Copia y pega esto tal cual:
+
+ORDEN ÚNICA — CERRAR ANTI-BYPASS HOST + AUDITORÍA LEGAL (SIN RESUMEN)
+Asegura consistencia completa del flujo Anti-Bypass para HOST y evidencia legal:
+	1.	Confirma y deja establecida UNA ÚNICA ruta oficial para aceptación del HOST: PUT /api/users/me/accept-anti-bypass (con JWT). Actualiza frontend (Dashboard HOST) para llamar exactamente esa ruta y elimina/evita cualquier otra variante. Documenta esa ruta en replit.md.
+	2.	La aceptación del HOST debe guardar en users y devolver en respuesta: anti_bypass_accepted=1, anti_bypass_accepted_at, anti_bypass_ip, anti_bypass_user_agent, y además guardar y devolver anti_bypass_legal_text_id y anti_bypass_legal_version (si la DB existente no tiene columnas, aplicar migración automática).
+	3.	En audit_log, registra un evento explícito ANTI_BYPASS_HOST_ACCEPTED (no genérico) o, si mantienes ANTI_BYPASS_ACCEPTED, entonces en new_data debe incluir obligatoriamente { role: 'HOST', legal_text_id, legal_text_version, ip, userAgent, timestamp }.
+	4.	Re-test obligatorio con evidencia:
+	•	Antes: HOST intenta publicar espacio → debe devolver 403 “Debe aceptar anti-bypass…”
+	•	HOST acepta en UI → 200 + devuelve legal_text_id + legal_text_version
+	•	Después: HOST publica espacio → 200
+	•	Mostrar SELECT de DB del usuario HOST con esos campos y el registro exacto del audit_log (action + new_data).
+No avanzar a otros temas hasta que esto quede perfecto y comprobado.
+
+⸻
+
+Si el agente te responde con la evidencia (SELECT de DB + audit_log + responses), pégamela y te digo si ya queda “cerrado” o si falta algo mínimo.

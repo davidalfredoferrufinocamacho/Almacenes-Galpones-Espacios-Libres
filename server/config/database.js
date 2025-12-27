@@ -27,9 +27,10 @@ function initDatabase() {
       is_active INTEGER DEFAULT 1,
       anti_bypass_accepted INTEGER DEFAULT 0,
       anti_bypass_accepted_at TEXT,
+      anti_bypass_legal_text_id TEXT,
+      anti_bypass_legal_version TEXT,
       anti_bypass_ip TEXT,
       anti_bypass_user_agent TEXT,
-      anti_bypass_legal_version TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -476,6 +477,7 @@ function initDatabase() {
 
   // Migraciones para columnas faltantes en bases de datos existentes
   const migrations = [
+    { table: 'users', column: 'anti_bypass_legal_text_id', type: 'TEXT' },
     { table: 'users', column: 'anti_bypass_legal_version', type: 'TEXT' },
     { table: 'users', column: 'anti_bypass_ip', type: 'TEXT' },
     { table: 'users', column: 'anti_bypass_user_agent', type: 'TEXT' }
