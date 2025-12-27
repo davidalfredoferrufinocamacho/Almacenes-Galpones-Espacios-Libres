@@ -1,0 +1,39 @@
+Excelente: el bloqueo del HOST por anti-bypass ya quedó cerrado con evidencia suficiente.
+
+Lo único que todavía falta (y explica por qué tú “sigues viendo que el admin no puede administrar”) es que no hay evidencia equivalente para ADMIN en UI, solo afirmaciones previas.
+
+Ahora, para no perdernos:
+✅ Anti-Bypass HOST = aprobado (con evento ANTI_BYPASS_HOST_ACCEPTED, versión, id, retest 403→200→200).
+❗ ADMIN “no puede administrar” = seguimos sin prueba real de UI en tu lado.
+
+Lo mínimo que falta corregir (porque en tu evidencia el SELECT quedó incompleto)
+
+En el “SELECT de usuario HOST” solo aparece:
+	•	anti_bypass_accepted: 1
+
+Pero no aparece en el SELECT:
+	•	anti_bypass_legal_text_id
+	•	anti_bypass_legal_version
+	•	anti_bypass_ip
+	•	anti_bypass_user_agent
+	•	anti_bypass_accepted_at
+
+Eso significa que o no se guardaron en DB, o el SELECT que está usando no los está mostrando. El audit_log sí, pero queremos ambos.
+
+⸻
+
+✅ UN SOLO TEXTO (orden única) para el agente — cerrar DB + ADMIN UI REAL
+
+Copia y pega esto tal cual:
+
+ORDEN ÚNICA — CIERRE FINAL: (A) Persistencia DB Anti-Bypass HOST + (B) Admin Panel usable en UI
+	1.	Verifica en SQLite que el usuario HOST realmente tiene persistidos TODOS estos campos en tabla users: anti_bypass_accepted, anti_bypass_accepted_at, anti_bypass_ip, anti_bypass_user_agent, anti_bypass_legal_text_id, anti_bypass_legal_version. Si falta cualquiera, corrige el endpoint PUT /api/users/me/accept-anti-bypass para que haga UPDATE de todos esos campos y agrega migración automática si faltan columnas. Luego muestra evidencia pegando el resultado exacto de este SELECT: SELECT id,email,role,anti_bypass_accepted,anti_bypass_accepted_at,anti_bypass_ip,anti_bypass_user_agent,anti_bypass_legal_text_id,anti_bypass_legal_version FROM users WHERE id = '<HOST_ID>';
+	2.	Admin Panel: demuestra que el ADMIN puede administrar desde UI con evidencia real y no solo afirmaciones. Ejecuta desde la UI /admin estas 3 acciones y pega responses JSON y audit_log:
+(a) Cambiar commission_percentage en Configuración → confirmar con GET /api/admin/config y audit CONFIG_UPDATED
+(b) Desactivar un usuario desde Usuarios → confirmar con GET /api/admin/users y audit USER_STATUS_CHANGED
+(c) Crear y activar un texto legal desde Textos Legales → confirmar con GET /api/admin/legal-texts y audits LEGAL_TEXT_CREATED + LEGAL_TEXT_ACTIVATED
+	3.	Si alguna acción no se puede hacer desde UI (no hay botones, no dispara request, o falla 401/403), arregla el frontend correspondiente (rutas, handlers, interceptor JWT, refresco de estado) hasta que las 3 acciones funcionen. No avances a otras tareas hasta completar A y B con evidencia.
+
+⸻
+
+Cuando el agente responda con ese SELECT y las 3 acciones admin (con logs/auditoría), ahí sí te digo “admin funciona” sin dudas.

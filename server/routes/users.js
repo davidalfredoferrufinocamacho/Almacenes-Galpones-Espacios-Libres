@@ -130,7 +130,7 @@ router.put('/me/accept-anti-bypass', authenticateToken, (req, res) => {
         anti_bypass_ip = ?,
         anti_bypass_user_agent = ?
       WHERE id = ?
-    `).run(acceptedAt, legalText.id, legalText.version, clientInfo.ip_address, clientInfo.user_agent, req.user.id);
+    `).run(acceptedAt, legalText.id, legalText.version, clientInfo.ip, clientInfo.userAgent, req.user.id);
 
     const auditAction = user.role === 'HOST' ? 'ANTI_BYPASS_HOST_ACCEPTED' : 'ANTI_BYPASS_GUEST_ACCEPTED';
     const auditData = {
@@ -139,8 +139,8 @@ router.put('/me/accept-anti-bypass', authenticateToken, (req, res) => {
       legal_text_id: legalText.id,
       legal_text_version: legalText.version,
       accepted_at: acceptedAt,
-      ip_address: clientInfo.ip_address,
-      user_agent: clientInfo.user_agent
+      ip: clientInfo.ip,
+      user_agent: clientInfo.userAgent
     };
 
     logAudit(req.user.id, auditAction, 'users', req.user.id, 
@@ -155,8 +155,8 @@ router.put('/me/accept-anti-bypass', authenticateToken, (req, res) => {
       anti_bypass_accepted_at: acceptedAt,
       anti_bypass_legal_text_id: legalText.id,
       anti_bypass_legal_version: legalText.version,
-      anti_bypass_ip: clientInfo.ip_address,
-      anti_bypass_user_agent: clientInfo.user_agent
+      anti_bypass_ip: clientInfo.ip,
+      anti_bypass_user_agent: clientInfo.userAgent
     });
   } catch (error) {
     console.error('Error:', error);
