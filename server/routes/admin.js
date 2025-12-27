@@ -1714,6 +1714,28 @@ router.put('/notification-templates/:id/deactivate', (req, res) => {
   }
 });
 
+router.delete('/notification-templates/:id', (req, res) => {
+  try {
+    const template = db.prepare('SELECT * FROM notification_templates WHERE id = ?').get(req.params.id);
+    if (!template) {
+      return res.status(404).json({ error: 'Plantilla no encontrada' });
+    }
+
+    if (template.is_active) {
+      return res.status(400).json({ error: 'No se puede eliminar una plantilla activa. Desactivela primero.' });
+    }
+
+    db.prepare('DELETE FROM notification_templates WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'NOTIFICATION_TEMPLATE_DELETED', 'notification_templates', req.params.id, template, null, req);
+
+    res.json({ message: 'Plantilla eliminada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar plantilla' });
+  }
+});
+
 router.get('/notification-log', (req, res) => {
   try {
     const { recipient_id, event_type, channel, from_date, to_date, limit = 100 } = req.query;
@@ -1750,6 +1772,24 @@ router.get('/notification-log', (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener log de notificaciones' });
+  }
+});
+
+router.delete('/notification-log/:id', (req, res) => {
+  try {
+    const log = db.prepare('SELECT * FROM notification_log WHERE id = ?').get(req.params.id);
+    if (!log) {
+      return res.status(404).json({ error: 'Registro no encontrado' });
+    }
+
+    db.prepare('DELETE FROM notification_log WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'NOTIFICATION_LOG_DELETED', 'notification_log', req.params.id, log, null, req);
+
+    res.json({ message: 'Registro eliminado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar registro' });
   }
 });
 

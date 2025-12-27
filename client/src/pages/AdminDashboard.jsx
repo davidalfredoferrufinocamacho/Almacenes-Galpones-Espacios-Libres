@@ -1805,8 +1805,10 @@ function AdminNotificationTemplates() {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('templates')
+  const [editingTemplate, setEditingTemplate] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
-  useEffect(() => {
+  const loadData = () => {
     Promise.all([
       api.get('/admin/notification-templates'),
       api.get('/admin/notification-log')
@@ -1814,15 +1816,54 @@ function AdminNotificationTemplates() {
       setTemplates(tRes.data.templates || [])
       setLogs(lRes.data.logs || [])
     }).finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadData() }, [])
 
   const toggleActive = async (id, currentActive) => {
     try {
       await api.put(`/admin/notification-templates/${id}`, { is_active: !currentActive })
-      const r = await api.get('/admin/notification-templates')
-      setTemplates(r.data.templates || [])
+      loadData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error')
+    }
+  }
+
+  const openEditModal = (template) => {
+    setEditingTemplate(template)
+    setEditForm({ subject: template.subject || '', body_template: template.body_template || '' })
+  }
+
+  const saveEdit = async () => {
+    try {
+      await api.put(`/admin/notification-templates/${editingTemplate.id}`, editForm)
+      setEditingTemplate(null)
+      loadData()
+      alert('Plantilla actualizada')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al editar')
+    }
+  }
+
+  const deleteTemplate = async (id, eventType) => {
+    if (!confirm(`¿Eliminar plantilla "${eventType}"?`)) return
+    try {
+      await api.delete(`/admin/notification-templates/${id}`)
+      loadData()
+      alert('Plantilla eliminada')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar')
+    }
+  }
+
+  const deleteLog = async (id) => {
+    if (!confirm('¿Eliminar este registro de envio?')) return
+    try {
+      await api.delete(`/admin/notification-log/${id}`)
+      loadData()
+      alert('Registro eliminado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar')
     }
   }
 
@@ -1859,9 +1900,13 @@ function AdminNotificationTemplates() {
                   </span>
                 </td>
                 <td>
-                  <button onClick={() => toggleActive(t.id, t.is_active)} className={`btn btn-sm ${t.is_active ? 'btn-danger' : 'btn-success'}`}>
-                    {t.is_active ? 'Desactivar' : 'Activar'}
-                  </button>
+                  <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                    <button onClick={() => toggleActive(t.id, t.is_active)} className={`btn btn-sm ${t.is_active ? 'btn-danger' : 'btn-success'}`}>
+                      {t.is_active ? 'Desactivar' : 'Activar'}
+                    </button>
+                    <button onClick={() => openEditModal(t)} className="btn btn-sm btn-secondary">Editar</button>
+                    {!t.is_active && <button onClick={() => deleteTemplate(t.id, t.event_type)} className="btn btn-sm btn-danger">Eliminar</button>}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1876,6 +1921,7 @@ function AdminNotificationTemplates() {
               <th>Canal</th>
               <th>Destinatario</th>
               <th>Estado</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -1886,10 +1932,33 @@ function AdminNotificationTemplates() {
                 <td>{l.channel}</td>
                 <td>{l.recipient}</td>
                 <td>{l.status}</td>
+                <td>
+                  <button onClick={() => deleteLog(l.id)} className="btn btn-sm btn-danger">Eliminar</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+
+      {editingTemplate && (
+        <div className="modal-overlay" onClick={() => setEditingTemplate(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '600px'}}>
+            <h2>Editar Plantilla: {editingTemplate.event_type}</h2>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Asunto:</label>
+              <input type="text" value={editForm.subject} onChange={e => setEditForm({...editForm, subject: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Cuerpo del mensaje:</label>
+              <textarea value={editForm.body_template} onChange={e => setEditForm({...editForm, body_template: e.target.value})} rows={8} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setEditingTemplate(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
