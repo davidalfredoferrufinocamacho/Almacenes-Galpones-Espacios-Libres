@@ -324,6 +324,8 @@ function AdminSpaces() {
   const [filter, setFilter] = useState({ status: '', city: '', occupancy: '' })
   const [editingSpace, setEditingSpace] = useState(null)
   const [editForm, setEditForm] = useState({})
+  const [searchTerm, setSearchTerm] = useState('')
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
 
   const loadSpaces = () => {
     api.get('/admin/spaces').then(r => setSpaces(r.data)).finally(() => setLoading(false))
@@ -411,21 +413,67 @@ function AdminSpaces() {
 
   const cities = [...new Set(spaces.map(s => s.city))].filter(Boolean)
 
-  const filteredSpaces = spaces.filter(s => {
-    if (filter.status && s.status !== filter.status) return false
-    if (filter.city && s.city !== filter.city) return false
-    if (filter.occupancy === 'free' && s.occupancy_percent > 0) return false
-    if (filter.occupancy === 'partial' && (s.occupancy_percent === 0 || s.occupancy_percent >= 100)) return false
-    if (filter.occupancy === 'full' && s.occupancy_percent < 100) return false
-    return true
-  })
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }))
+  }
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) return ' ↕'
+    return sortConfig.direction === 'asc' ? ' ↑' : ' ↓'
+  }
+
+  const filteredSpaces = spaces
+    .filter(s => {
+      if (filter.status && s.status !== filter.status) return false
+      if (filter.city && s.city !== filter.city) return false
+      if (filter.occupancy === 'free' && s.occupancy_percent > 0) return false
+      if (filter.occupancy === 'partial' && (s.occupancy_percent === 0 || s.occupancy_percent >= 100)) return false
+      if (filter.occupancy === 'full' && s.occupancy_percent < 100) return false
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        return s.title?.toLowerCase().includes(term) ||
+               s.space_type?.toLowerCase().includes(term) ||
+               s.city?.toLowerCase().includes(term) ||
+               s.host_email?.toLowerCase().includes(term) ||
+               s.address?.toLowerCase().includes(term)
+      }
+      return true
+    })
+    .sort((a, b) => {
+      if (!sortConfig.key) return 0
+      let aVal = a[sortConfig.key]
+      let bVal = b[sortConfig.key]
+      if (sortConfig.key === 'occupancy_percent') {
+        aVal = a.occupancy_percent || 0
+        bVal = b.occupancy_percent || 0
+      }
+      if (sortConfig.key === 'host') {
+        aVal = a.host_email || ''
+        bVal = b.host_email || ''
+      }
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase()
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase()
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+      return 0
+    })
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
       <h1>Espacios</h1>
-      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap'}}>
+      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center'}}>
+        <input 
+          type="text" 
+          placeholder="Buscar por titulo, tipo, ciudad, host..." 
+          value={searchTerm} 
+          onChange={e => setSearchTerm(e.target.value)} 
+          style={{padding: '0.5rem', minWidth: '250px', border: '1px solid #ddd', borderRadius: '4px'}}
+        />
         <select value={filter.status} onChange={e => setFilter({...filter, status: e.target.value})} style={{padding: '0.5rem'}}>
           <option value="">Todos los estados</option>
           <option value="published">Publicado</option>
@@ -442,16 +490,19 @@ function AdminSpaces() {
           <option value="partial">Parcialmente ocupado</option>
           <option value="full">100% Ocupado</option>
         </select>
+        <span style={{marginLeft: 'auto', color: '#666', fontSize: '0.85rem'}}>
+          {filteredSpaces.length} de {spaces.length} espacios
+        </span>
       </div>
       <table className="admin-table">
         <thead>
           <tr>
-            <th>Titulo</th>
-            <th>Tipo</th>
-            <th>Ciudad</th>
-            <th>Ocupacion</th>
-            <th>Estado</th>
-            <th>Host</th>
+            <th onClick={() => handleSort('title')} style={{cursor: 'pointer', userSelect: 'none'}}>Titulo{getSortIcon('title')}</th>
+            <th onClick={() => handleSort('space_type')} style={{cursor: 'pointer', userSelect: 'none'}}>Tipo{getSortIcon('space_type')}</th>
+            <th onClick={() => handleSort('city')} style={{cursor: 'pointer', userSelect: 'none'}}>Ciudad{getSortIcon('city')}</th>
+            <th onClick={() => handleSort('occupancy_percent')} style={{cursor: 'pointer', userSelect: 'none'}}>Ocupacion{getSortIcon('occupancy_percent')}</th>
+            <th onClick={() => handleSort('status')} style={{cursor: 'pointer', userSelect: 'none'}}>Estado{getSortIcon('status')}</th>
+            <th onClick={() => handleSort('host')} style={{cursor: 'pointer', userSelect: 'none'}}>Host{getSortIcon('host')}</th>
             <th>Acciones</th>
           </tr>
         </thead>
