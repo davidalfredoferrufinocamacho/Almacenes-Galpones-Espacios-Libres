@@ -2786,49 +2786,218 @@ function AdminAccounting() {
 }
 
 function AdminExport() {
-  const [exporting, setExporting] = useState(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportModal, setExportModal] = useState(null)
+  const [exportOptions, setExportOptions] = useState({ format: 'excel', filename: '' })
 
   const exportTypes = [
-    { key: 'users', label: 'Usuarios' },
-    { key: 'spaces', label: 'Espacios' },
-    { key: 'reservations', label: 'Reservaciones' },
-    { key: 'contracts', label: 'Contratos' },
-    { key: 'payments', label: 'Pagos' },
-    { key: 'invoices', label: 'Facturas' },
-    { key: 'audit', label: 'Auditoria' },
-    { key: 'notification_log', label: 'Log Notificaciones' },
-    { key: 'legal_texts', label: 'Textos Legales' }
+    { key: 'users', label: 'Usuarios', icon: '👤' },
+    { key: 'spaces', label: 'Espacios', icon: '🏢' },
+    { key: 'reservations', label: 'Reservaciones', icon: '📅' },
+    { key: 'contracts', label: 'Contratos', icon: '📄' },
+    { key: 'payments', label: 'Pagos', icon: '💳' },
+    { key: 'invoices', label: 'Facturas', icon: '🧾' },
+    { key: 'audit', label: 'Auditoria', icon: '📋' },
+    { key: 'notification_log', label: 'Log Notificaciones', icon: '🔔' },
+    { key: 'legal_texts', label: 'Textos Legales', icon: '⚖️' }
   ]
 
-  const handleExport = async (type) => {
-    setExporting(type)
+  const formats = [
+    { key: 'excel', label: 'Excel (.xlsx)', icon: '📊', desc: 'Ideal para analisis y edicion' },
+    { key: 'pdf', label: 'PDF (.pdf)', icon: '📕', desc: 'Ideal para imprimir o compartir' },
+    { key: 'json', label: 'JSON (.json)', icon: '💾', desc: 'Ideal para respaldo o integracion' }
+  ]
+
+  const openExportModal = (type) => {
+    const typeInfo = exportTypes.find(t => t.key === type)
+    const defaultFilename = `${typeInfo.label}_${new Date().toISOString().split('T')[0]}`
+    setExportOptions({ format: 'excel', filename: defaultFilename })
+    setExportModal(type)
+  }
+
+  const handleExport = async (action) => {
+    if (!exportModal) return
+    setExporting(true)
+    
     try {
-      const response = await api.get(`/admin/export/${type}`, { responseType: 'blob' })
+      const format = exportOptions.format
+      const filename = exportOptions.filename || `export_${exportModal}`
+      const ext = format === 'excel' ? 'xlsx' : format
+      
+      if (action === 'print') {
+        const response = await api.get(`/admin/export/${exportModal}?format=json`)
+        const data = response.data.data || []
+        
+        const printWindow = window.open('', '_blank')
+        const typeInfo = exportTypes.find(t => t.key === exportModal)
+        
+        let tableHtml = '<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">'
+        if (data.length > 0) {
+          const cols = Object.keys(data[0])
+          tableHtml += '<thead style="background: #4472c4; color: white;"><tr>'
+          cols.forEach(col => { tableHtml += `<th>${col.toUpperCase()}</th>` })
+          tableHtml += '</tr></thead><tbody>'
+          data.slice(0, 100).forEach((row, idx) => {
+            tableHtml += `<tr style="background: ${idx % 2 === 0 ? '#f8f9fa' : 'white'}">`
+            cols.forEach(col => { tableHtml += `<td>${row[col] || '-'}</td>` })
+            tableHtml += '</tr>'
+          })
+          if (data.length > 100) {
+            tableHtml += `<tr><td colspan="${cols.length}" style="text-align: center; color: #666;">... y ${data.length - 100} registros mas</td></tr>`
+          }
+          tableHtml += '</tbody>'
+        }
+        tableHtml += '</table>'
+        
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>${typeInfo.label} - Almacenes Galpones</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              h1 { text-align: center; color: #333; }
+              .info { text-align: center; color: #666; margin-bottom: 20px; }
+              table { font-size: 11px; }
+              @media print { button { display: none; } }
+            </style>
+          </head>
+          <body>
+            <h1>${typeInfo.icon} ${typeInfo.label}</h1>
+            <p class="info">Exportado: ${new Date().toLocaleString('es-BO')} | Total: ${data.length} registros</p>
+            <button onclick="window.print()" style="padding: 10px 20px; margin-bottom: 20px; cursor: pointer;">Imprimir</button>
+            ${tableHtml}
+          </body>
+          </html>
+        `)
+        printWindow.document.close()
+        setExportModal(null)
+        setExporting(false)
+        return
+      }
+      
+      const response = await api.get(`/admin/export/${exportModal}?format=${format}`, { responseType: 'blob' })
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `export_${type}_${new Date().toISOString().split('T')[0]}.json`)
+      link.setAttribute('download', `${filename}.${ext}`)
       document.body.appendChild(link)
       link.click()
       link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      setExportModal(null)
+      alert('Exportacion completada')
     } catch (error) {
-      alert('Error al exportar')
+      console.error('Export error:', error)
+      alert('Error al exportar: ' + (error.response?.data?.error || error.message))
     } finally {
-      setExporting(null)
+      setExporting(false)
     }
   }
 
   return (
     <div>
       <h1>Exportar Datos</h1>
-      <p style={{marginBottom: '1rem', color: '#666'}}>Descarga datos del sistema en formato JSON. Cada exportacion queda registrada en auditoria.</p>
+      <p style={{marginBottom: '1rem', color: '#666'}}>Seleccione el tipo de datos que desea exportar. Puede elegir formato y nombre de archivo.</p>
+      
       <div className="export-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem'}}>
         {exportTypes.map(t => (
-          <button key={t.key} onClick={() => handleExport(t.key)} disabled={exporting === t.key} className="btn btn-secondary" style={{padding: '1rem'}}>
-            {exporting === t.key ? 'Exportando...' : `Exportar ${t.label}`}
+          <button 
+            key={t.key} 
+            onClick={() => openExportModal(t.key)} 
+            className="btn btn-secondary" 
+            style={{padding: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem'}}
+          >
+            <span style={{fontSize: '1.5rem'}}>{t.icon}</span>
+            <span>{t.label}</span>
           </button>
         ))}
       </div>
+
+      {exportModal && (
+        <div className="modal-overlay" onClick={() => !exporting && setExportModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
+            <h2 style={{marginBottom: '1rem'}}>
+              {exportTypes.find(t => t.key === exportModal)?.icon} Exportar {exportTypes.find(t => t.key === exportModal)?.label}
+            </h2>
+            
+            <div style={{marginBottom: '1.5rem'}}>
+              <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: 'bold'}}>Formato de exportacion:</label>
+              <div style={{display: 'flex', flexDirection: 'column', gap: '0.5rem'}}>
+                {formats.map(f => (
+                  <label 
+                    key={f.key} 
+                    style={{
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.75rem', 
+                      padding: '0.75rem', 
+                      border: exportOptions.format === f.key ? '2px solid #007bff' : '1px solid #ddd',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      background: exportOptions.format === f.key ? '#f0f7ff' : 'white'
+                    }}
+                  >
+                    <input 
+                      type="radio" 
+                      name="format" 
+                      value={f.key} 
+                      checked={exportOptions.format === f.key}
+                      onChange={e => setExportOptions({...exportOptions, format: e.target.value})}
+                    />
+                    <span style={{fontSize: '1.25rem'}}>{f.icon}</span>
+                    <div>
+                      <div style={{fontWeight: '500'}}>{f.label}</div>
+                      <div style={{fontSize: '0.8rem', color: '#666'}}>{f.desc}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+            
+            <div style={{marginBottom: '1.5rem'}}>
+              <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: 'bold'}}>Nombre del archivo:</label>
+              <input 
+                type="text" 
+                value={exportOptions.filename} 
+                onChange={e => setExportOptions({...exportOptions, filename: e.target.value})}
+                placeholder="Nombre del archivo (sin extension)"
+                style={{width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px'}}
+              />
+              <small style={{color: '#666'}}>Extension: .{exportOptions.format === 'excel' ? 'xlsx' : exportOptions.format}</small>
+            </div>
+            
+            <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'space-between'}}>
+              <button 
+                onClick={() => handleExport('print')} 
+                disabled={exporting}
+                className="btn btn-secondary"
+                style={{flex: '1', minWidth: '120px'}}
+              >
+                🖨️ Vista Previa / Imprimir
+              </button>
+              <button 
+                onClick={() => handleExport('download')} 
+                disabled={exporting}
+                className="btn btn-primary"
+                style={{flex: '1', minWidth: '120px'}}
+              >
+                {exporting ? 'Exportando...' : '⬇️ Descargar'}
+              </button>
+            </div>
+            
+            <button 
+              onClick={() => setExportModal(null)} 
+              disabled={exporting}
+              className="btn btn-link"
+              style={{marginTop: '1rem', width: '100%', color: '#666'}}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

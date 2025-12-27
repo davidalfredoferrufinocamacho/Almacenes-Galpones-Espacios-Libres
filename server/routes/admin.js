@@ -960,10 +960,11 @@ router.get('/export/:type', (req, res) => {
   try {
     let data;
     const { type } = req.params;
+    const format = req.query.format || 'json';
 
     switch (type) {
       case 'users':
-        data = db.prepare('SELECT * FROM users').all();
+        data = db.prepare('SELECT id, email, role, person_type, first_name, last_name, company_name, ci, nit, phone, city, department, is_verified, is_active, is_blocked, created_at FROM users').all();
         break;
       case 'spaces':
         data = db.prepare('SELECT * FROM spaces').all();
@@ -981,7 +982,13 @@ router.get('/export/:type', (req, res) => {
         data = db.prepare('SELECT * FROM invoices').all();
         break;
       case 'audit':
-        data = db.prepare('SELECT * FROM audit_log').all();
+        data = db.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 5000').all();
+        break;
+      case 'notification_log':
+        data = db.prepare('SELECT * FROM notification_log ORDER BY created_at DESC LIMIT 5000').all();
+        break;
+      case 'legal_texts':
+        data = db.prepare('SELECT * FROM legal_texts ORDER BY created_at DESC').all();
         break;
       default:
         return res.status(400).json({ error: 'Tipo de exportacion no valido' });
@@ -990,9 +997,83 @@ router.get('/export/:type', (req, res) => {
     const clientInfo = getClientInfo(req);
     logAudit(req.user.id, 'ADMIN_EXPORT_DATA', 'system', null, null, {
       export_type: type,
+      format: format,
       records_count: data.length,
       ...clientInfo
     }, req);
+
+    if (format === 'excel') {
+      const ExcelJS = require('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Almacenes Galpones Espacios Libres';
+      workbook.created = new Date();
+      
+      const worksheet = workbook.addWorksheet(type.charAt(0).toUpperCase() + type.slice(1));
+      
+      if (data.length > 0) {
+        const columns = Object.keys(data[0]);
+        worksheet.columns = columns.map(col => ({ header: col.toUpperCase(), key: col, width: 20 }));
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+        worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        data.forEach(row => worksheet.addRow(row));
+      }
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=export_${type}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      return workbook.xlsx.write(res).then(() => res.end());
+    }
+
+    if (format === 'pdf') {
+      const PDFDocument = require('pdfkit');
+      const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=export_${type}_${new Date().toISOString().split('T')[0]}.pdf`);
+      doc.pipe(res);
+      
+      doc.fontSize(18).text(`Exportacion: ${type.toUpperCase()}`, { align: 'center' });
+      doc.fontSize(10).text(`Generado: ${new Date().toLocaleString('es-BO')}`, { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(10).text(`Total de registros: ${data.length}`, { align: 'center' });
+      doc.moveDown(2);
+      
+      if (data.length > 0) {
+        const columns = Object.keys(data[0]).slice(0, 6);
+        const colWidth = 120;
+        let yPos = doc.y;
+        
+        doc.fontSize(8).font('Helvetica-Bold');
+        columns.forEach((col, i) => {
+          doc.text(col.toUpperCase().substring(0, 15), 40 + (i * colWidth), yPos, { width: colWidth - 5 });
+        });
+        doc.moveDown();
+        
+        doc.font('Helvetica').fontSize(7);
+        const maxRows = Math.min(data.length, 50);
+        for (let r = 0; r < maxRows; r++) {
+          yPos = doc.y;
+          if (yPos > 500) {
+            doc.addPage();
+            yPos = 40;
+          }
+          columns.forEach((col, i) => {
+            const val = String(data[r][col] || '').substring(0, 20);
+            doc.text(val, 40 + (i * colWidth), yPos, { width: colWidth - 5 });
+          });
+          doc.moveDown(0.5);
+        }
+        
+        if (data.length > 50) {
+          doc.moveDown();
+          doc.fontSize(8).text(`... y ${data.length - 50} registros mas. Use formato Excel para ver todos los datos.`, { align: 'center' });
+        }
+      }
+      
+      doc.end();
+      return;
+    }
 
     res.json({ data, exported_at: new Date().toISOString(), type, records_count: data.length });
   } catch (error) {
