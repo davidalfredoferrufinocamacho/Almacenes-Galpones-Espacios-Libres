@@ -51,20 +51,20 @@ function AdminDashboard() {
 
       <div className="admin-content">
         <Routes>
-          <Route path="/" element={<AdminOverview stats={stats} />} />
-          <Route path="/users" element={<AdminUsers />} />
-          <Route path="/spaces" element={<AdminSpaces />} />
-          <Route path="/reservations" element={<AdminReservations />} />
-          <Route path="/contracts" element={<AdminContracts />} />
-          <Route path="/payments" element={<AdminPayments />} />
-          <Route path="/invoices" element={<AdminInvoices />} />
-          <Route path="/config" element={<AdminConfig />} />
-          <Route path="/legal-texts" element={<AdminLegalTexts />} />
-          <Route path="/notifications" element={<AdminNotificationTemplates />} />
-          <Route path="/audit-log" element={<AdminAuditLog />} />
-          <Route path="/accounting" element={<AdminAccounting />} />
-          <Route path="/export" element={<AdminExport />} />
-          <Route path="/messages" element={<AdminMessages />} />
+          <Route index element={<AdminOverview stats={stats} />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="spaces" element={<AdminSpaces />} />
+          <Route path="reservations" element={<AdminReservations />} />
+          <Route path="contracts" element={<AdminContracts />} />
+          <Route path="payments" element={<AdminPayments />} />
+          <Route path="invoices" element={<AdminInvoices />} />
+          <Route path="config" element={<AdminConfig />} />
+          <Route path="legal-texts" element={<AdminLegalTexts />} />
+          <Route path="notifications" element={<AdminNotificationTemplates />} />
+          <Route path="audit-log" element={<AdminAuditLog />} />
+          <Route path="accounting" element={<AdminAccounting />} />
+          <Route path="export" element={<AdminExport />} />
+          <Route path="messages" element={<AdminMessages />} />
         </Routes>
       </div>
     </div>
