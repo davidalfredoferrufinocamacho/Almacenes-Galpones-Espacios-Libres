@@ -2967,23 +2967,36 @@ function AdminExport() {
               />
               <small style={{color: '#666'}}>Extension: .{exportOptions.format === 'excel' ? 'xlsx' : exportOptions.format}</small>
             </div>
+
+            <div style={{marginBottom: '1.5rem', padding: '0.75rem', background: '#e7f3ff', borderRadius: '8px', border: '1px solid #b8daff'}}>
+              <p style={{margin: 0, fontSize: '0.85rem', color: '#004085'}}>
+                <strong>📂 Ubicacion de descarga:</strong><br/>
+                El archivo se guardara en su carpeta de <strong>Descargas</strong>.<br/>
+                <span style={{fontSize: '0.8rem'}}>
+                  Para elegir la ubicacion manualmente, configure su navegador:<br/>
+                  • <strong>Chrome/Edge:</strong> Configuracion → Descargas → "Preguntar donde guardar"<br/>
+                  • <strong>Firefox:</strong> Preferencias → Archivos y aplicaciones → "Preguntar siempre"<br/>
+                  • <strong>Movil:</strong> Los archivos se guardan en la carpeta Descargas del dispositivo
+                </span>
+              </p>
+            </div>
             
-            <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'space-between'}}>
-              <button 
-                onClick={() => handleExport('print')} 
-                disabled={exporting}
-                className="btn btn-secondary"
-                style={{flex: '1', minWidth: '120px'}}
-              >
-                🖨️ Vista Previa / Imprimir
-              </button>
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem'}}>
               <button 
                 onClick={() => handleExport('download')} 
                 disabled={exporting}
                 className="btn btn-primary"
-                style={{flex: '1', minWidth: '120px'}}
+                style={{padding: '0.75rem'}}
               >
-                {exporting ? 'Exportando...' : '⬇️ Descargar'}
+                {exporting ? 'Exportando...' : '⬇️ Descargar Archivo'}
+              </button>
+              <button 
+                onClick={() => handleExport('print')} 
+                disabled={exporting}
+                className="btn btn-secondary"
+                style={{padding: '0.75rem'}}
+              >
+                🖨️ Imprimir Directo
               </button>
             </div>
             
