@@ -139,11 +139,59 @@
 
 @media (max-width: 900px) {
   .admin-dashboard {
+    grid-template-columns: 200px 1fr;
+  }
+
+  .admin-sidebar {
+    padding: 1rem 0.5rem;
+  }
+  
+  .admin-sidebar h2 {
+    font-size: 1rem;
+    padding: 0 0.5rem;
+  }
+  
+  .admin-sidebar nav a {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-dashboard {
     grid-template-columns: 1fr;
   }
 
   .admin-sidebar {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    width: 100%;
+    height: auto;
+    max-height: 50vh;
+    overflow-y: auto;
+    z-index: 100;
+    padding: 0.5rem;
+  }
+  
+  .admin-sidebar nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  
+  .admin-sidebar nav a {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+  }
+  
+  .admin-sidebar h2 {
     display: none;
+  }
+  
+  .admin-content {
+    margin-top: 80px;
+    padding: 1rem;
   }
 }
 
