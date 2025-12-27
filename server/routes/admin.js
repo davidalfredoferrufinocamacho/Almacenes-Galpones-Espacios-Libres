@@ -94,6 +94,41 @@ router.put('/users/:id/status', [
   }
 });
 
+router.put('/users/:id/password', [
+  body('new_password').isLength({ min: 8 }).withMessage('La contraseña debe tener al menos 8 caracteres'),
+  body('confirm_password').custom((value, { req }) => {
+    if (value !== req.body.new_password) {
+      throw new Error('Las contraseñas no coinciden');
+    }
+    return true;
+  })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(req.body.new_password, 10);
+
+    db.prepare('UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(hashedPassword, req.params.id);
+
+    logAudit(req.user.id, 'USER_PASSWORD_CHANGED', 'users', req.params.id, { admin_action: true }, { password_changed: true }, req);
+
+    res.json({ message: 'Contraseña actualizada correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al cambiar contraseña' });
+  }
+});
+
 router.put('/users/:id/role', [
   body('role').isIn(['GUEST', 'HOST', 'ADMIN'])
 ], (req, res) => {

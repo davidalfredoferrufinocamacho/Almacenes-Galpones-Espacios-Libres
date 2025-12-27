@@ -138,6 +138,9 @@ function AdminUsers() {
   const [filter, setFilter] = useState({ role: '', status: '' })
   const [editingUser, setEditingUser] = useState(null)
   const [editForm, setEditForm] = useState({})
+  const [passwordModal, setPasswordModal] = useState(null)
+  const [passwordForm, setPasswordForm] = useState({ new_password: '', confirm_password: '' })
+  const [passwordError, setPasswordError] = useState('')
 
   const loadUsers = () => {
     api.get('/admin/users').then(r => setUsers(r.data)).finally(() => setLoading(false))
@@ -206,6 +209,31 @@ function AdminUsers() {
     }
   }
 
+  const openPasswordModal = (user) => {
+    setPasswordModal(user)
+    setPasswordForm({ new_password: '', confirm_password: '' })
+    setPasswordError('')
+  }
+
+  const changePassword = async () => {
+    setPasswordError('')
+    if (passwordForm.new_password.length < 8) {
+      setPasswordError('La contraseña debe tener al menos 8 caracteres')
+      return
+    }
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setPasswordError('Las contraseñas no coinciden')
+      return
+    }
+    try {
+      await api.put(`/admin/users/${passwordModal.id}/password`, passwordForm)
+      setPasswordModal(null)
+      alert('Contraseña actualizada correctamente')
+    } catch (error) {
+      setPasswordError(error.response?.data?.error || error.response?.data?.errors?.[0]?.msg || 'Error al cambiar contraseña')
+    }
+  }
+
   const filteredUsers = users.filter(u => {
     if (filter.role && u.role !== filter.role) return false
     if (filter.status === 'active' && !u.is_active) return false
@@ -268,6 +296,9 @@ function AdminUsers() {
                   <button onClick={() => openEditModal(user)} className="btn btn-sm btn-secondary" title="Editar">
                     Editar
                   </button>
+                  <button onClick={() => openPasswordModal(user)} className="btn btn-sm btn-info" title="Cambiar Contraseña">
+                    Contraseña
+                  </button>
                   <button onClick={() => toggleStatus(user.id, user.is_active)} className={`btn btn-sm ${user.is_active ? 'btn-warning' : 'btn-success'}`}>
                     {user.is_active ? 'Desactivar' : 'Activar'}
                   </button>
@@ -310,6 +341,45 @@ function AdminUsers() {
             <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
               <button onClick={() => setEditingUser(null)} className="btn btn-secondary">Cancelar</button>
               <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {passwordModal && (
+        <div className="modal-overlay" onClick={() => setPasswordModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '400px'}}>
+            <h3>Cambiar Contraseña</h3>
+            <p style={{color: '#666', marginBottom: '1rem'}}>{passwordModal.email}</p>
+            <p style={{fontSize: '0.85rem', color: '#888', marginBottom: '1rem'}}>Rol: <strong>{passwordModal.role}</strong></p>
+            {passwordError && (
+              <div style={{background: '#f8d7da', color: '#721c24', padding: '0.75rem', borderRadius: '4px', marginBottom: '1rem'}}>
+                {passwordError}
+              </div>
+            )}
+            <div style={{marginBottom: '1rem'}}>
+              <label>Nueva Contraseña:</label>
+              <input 
+                type="password" 
+                value={passwordForm.new_password} 
+                onChange={e => setPasswordForm({...passwordForm, new_password: e.target.value})} 
+                placeholder="Minimo 8 caracteres"
+                style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} 
+              />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Confirmar Contraseña:</label>
+              <input 
+                type="password" 
+                value={passwordForm.confirm_password} 
+                onChange={e => setPasswordForm({...passwordForm, confirm_password: e.target.value})} 
+                placeholder="Repetir contraseña"
+                style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} 
+              />
+            </div>
+            <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setPasswordModal(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={changePassword} className="btn btn-primary">Cambiar Contraseña</button>
             </div>
           </div>
         </div>
