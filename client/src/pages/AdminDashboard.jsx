@@ -1,19 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import api from '../services/api'
 import './AdminDashboard.css'
 
 function AdminDashboard() {
-  const location = useLocation()
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeSection, setActiveSection] = useState('dashboard')
 
   useEffect(() => {
     loadStats()
-    const path = location.pathname.replace('/admin', '').replace('/', '')
-    setActiveSection(path || 'dashboard')
-  }, [location.pathname])
+  }, [])
 
   const loadStats = async () => {
     try {
@@ -31,21 +27,40 @@ function AdminDashboard() {
   }
 
   const menuItems = [
-    { path: '/admin', label: 'Dashboard', key: 'dashboard' },
-    { path: '/admin/users', label: 'Usuarios', key: 'users' },
-    { path: '/admin/spaces', label: 'Espacios', key: 'spaces' },
-    { path: '/admin/reservations', label: 'Reservaciones', key: 'reservations' },
-    { path: '/admin/contracts', label: 'Contratos', key: 'contracts' },
-    { path: '/admin/payments', label: 'Pagos', key: 'payments' },
-    { path: '/admin/invoices', label: 'Facturas', key: 'invoices' },
-    { path: '/admin/config', label: 'Configuracion', key: 'config' },
-    { path: '/admin/legal-texts', label: 'Textos Legales', key: 'legal-texts' },
-    { path: '/admin/notifications', label: 'Notificaciones', key: 'notifications' },
-    { path: '/admin/audit-log', label: 'Auditoria', key: 'audit-log' },
-    { path: '/admin/accounting', label: 'Contabilidad', key: 'accounting' },
-    { path: '/admin/export', label: 'Exportar', key: 'export' },
-    { path: '/admin/messages', label: 'Mensajes', key: 'messages' },
+    { label: 'Dashboard', key: 'dashboard' },
+    { label: 'Usuarios', key: 'users' },
+    { label: 'Espacios', key: 'spaces' },
+    { label: 'Reservaciones', key: 'reservations' },
+    { label: 'Contratos', key: 'contracts' },
+    { label: 'Pagos', key: 'payments' },
+    { label: 'Facturas', key: 'invoices' },
+    { label: 'Configuracion', key: 'config' },
+    { label: 'Textos Legales', key: 'legal-texts' },
+    { label: 'Notificaciones', key: 'notifications' },
+    { label: 'Auditoria', key: 'audit-log' },
+    { label: 'Contabilidad', key: 'accounting' },
+    { label: 'Exportar', key: 'export' },
+    { label: 'Mensajes', key: 'messages' },
   ]
+
+  const renderContent = () => {
+    switch (activeSection) {
+      case 'users': return <AdminUsers />
+      case 'spaces': return <AdminSpaces />
+      case 'reservations': return <AdminReservations />
+      case 'contracts': return <AdminContracts />
+      case 'payments': return <AdminPayments />
+      case 'invoices': return <AdminInvoices />
+      case 'config': return <AdminConfig />
+      case 'legal-texts': return <AdminLegalTexts />
+      case 'notifications': return <AdminNotificationTemplates />
+      case 'audit-log': return <AdminAuditLog />
+      case 'accounting': return <AdminAccounting />
+      case 'export': return <AdminExport />
+      case 'messages': return <AdminMessages />
+      default: return <AdminOverview stats={stats} />
+    }
+  }
 
   return (
     <div className="admin-dashboard">
@@ -53,35 +68,19 @@ function AdminDashboard() {
         <h2>Panel Admin</h2>
         <nav>
           {menuItems.map(item => (
-            <NavLink 
+            <button 
               key={item.key}
-              to={item.path}
-              end={item.path === '/admin'}
-              className={({ isActive }) => isActive ? 'active' : ''}
+              onClick={() => setActiveSection(item.key)}
+              className={activeSection === item.key ? 'active' : ''}
             >
               {item.label}
-            </NavLink>
+            </button>
           ))}
         </nav>
       </div>
 
       <div className="admin-content">
-        <Routes>
-          <Route index element={<AdminOverview stats={stats} />} />
-          <Route path="users" element={<AdminUsers />} />
-          <Route path="spaces" element={<AdminSpaces />} />
-          <Route path="reservations" element={<AdminReservations />} />
-          <Route path="contracts" element={<AdminContracts />} />
-          <Route path="payments" element={<AdminPayments />} />
-          <Route path="invoices" element={<AdminInvoices />} />
-          <Route path="config" element={<AdminConfig />} />
-          <Route path="legal-texts" element={<AdminLegalTexts />} />
-          <Route path="notifications" element={<AdminNotificationTemplates />} />
-          <Route path="audit-log" element={<AdminAuditLog />} />
-          <Route path="accounting" element={<AdminAccounting />} />
-          <Route path="export" element={<AdminExport />} />
-          <Route path="messages" element={<AdminMessages />} />
-        </Routes>
+        {renderContent()}
       </div>
     </div>
   )
