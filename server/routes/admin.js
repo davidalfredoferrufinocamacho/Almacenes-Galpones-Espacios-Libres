@@ -956,6 +956,65 @@ router.put('/contact-messages/:id/respond', [
   }
 });
 
+router.put('/contact-messages/:id', (req, res) => {
+  try {
+    const message = db.prepare('SELECT * FROM contact_messages WHERE id = ?').get(req.params.id);
+    if (!message) {
+      return res.status(404).json({ error: 'Mensaje no encontrado' });
+    }
+
+    const { status, category, priority, admin_notes, admin_response } = req.body;
+    const updates = [];
+    const values = [];
+
+    if (status) { updates.push('status = ?'); values.push(status); }
+    if (category !== undefined) { updates.push('category = ?'); values.push(category); }
+    if (priority !== undefined) { updates.push('priority = ?'); values.push(priority); }
+    if (admin_notes !== undefined) { updates.push('admin_notes = ?'); values.push(admin_notes); }
+    if (admin_response !== undefined) { 
+      updates.push('admin_response = ?'); 
+      values.push(admin_response);
+      if (admin_response && !message.responded_at) {
+        updates.push('responded_at = CURRENT_TIMESTAMP');
+        updates.push('responded_by = ?');
+        values.push(req.user.id);
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay cambios' });
+    }
+
+    values.push(req.params.id);
+    db.prepare(`UPDATE contact_messages SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    logAudit(req.user.id, 'ADMIN_MESSAGE_UPDATED', 'contact_messages', req.params.id, message, req.body, req);
+
+    res.json({ message: 'Mensaje actualizado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar mensaje' });
+  }
+});
+
+router.delete('/contact-messages/:id', (req, res) => {
+  try {
+    const message = db.prepare('SELECT * FROM contact_messages WHERE id = ?').get(req.params.id);
+    if (!message) {
+      return res.status(404).json({ error: 'Mensaje no encontrado' });
+    }
+
+    db.prepare('DELETE FROM contact_messages WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'ADMIN_MESSAGE_DELETED', 'contact_messages', req.params.id, message, null, req);
+
+    res.json({ message: 'Mensaje eliminado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar mensaje' });
+  }
+});
+
 router.get('/export/:type', (req, res) => {
   try {
     let data;

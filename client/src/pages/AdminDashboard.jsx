@@ -1336,21 +1336,101 @@ function AdminConfig() {
 function AdminMessages() {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState({ status: '', category: '', priority: '' })
+  const [editingMessage, setEditingMessage] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
-  useEffect(() => {
+  const categories = [
+    { key: 'general', label: 'General', color: '#6c757d' },
+    { key: 'consulta', label: 'Consulta', color: '#17a2b8' },
+    { key: 'soporte', label: 'Soporte Tecnico', color: '#fd7e14' },
+    { key: 'reclamo', label: 'Reclamo', color: '#dc3545' },
+    { key: 'sugerencia', label: 'Sugerencia', color: '#28a745' },
+    { key: 'comercial', label: 'Comercial', color: '#6f42c1' }
+  ]
+
+  const priorities = [
+    { key: 'baja', label: 'Baja', color: '#28a745' },
+    { key: 'normal', label: 'Normal', color: '#17a2b8' },
+    { key: 'alta', label: 'Alta', color: '#fd7e14' },
+    { key: 'urgente', label: 'Urgente', color: '#dc3545' }
+  ]
+
+  const statuses = [
+    { key: 'pending', label: 'Pendiente', color: '#ffc107' },
+    { key: 'read', label: 'Leido', color: '#17a2b8' },
+    { key: 'responded', label: 'Respondido', color: '#28a745' },
+    { key: 'closed', label: 'Cerrado', color: '#6c757d' }
+  ]
+
+  const loadMessages = () => {
     api.get('/admin/contact-messages').then(r => setMessages(r.data)).finally(() => setLoading(false))
-  }, [])
+  }
 
-  const handleRespond = async (id) => {
+  useEffect(() => { loadMessages() }, [])
+
+  const openEditModal = (msg) => {
+    setEditingMessage(msg)
+    setEditForm({
+      status: msg.status || 'pending',
+      category: msg.category || 'general',
+      priority: msg.priority || 'normal',
+      admin_notes: msg.admin_notes || '',
+      admin_response: msg.admin_response || ''
+    })
+  }
+
+  const saveEdit = async () => {
+    try {
+      await api.put(`/admin/contact-messages/${editingMessage.id}`, editForm)
+      setEditingMessage(null)
+      loadMessages()
+      alert('Mensaje actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al actualizar')
+    }
+  }
+
+  const deleteMessage = async (id, subject) => {
+    if (!confirm(`¿Eliminar mensaje "${subject}"? Esta accion no se puede deshacer.`)) return
+    try {
+      await api.delete(`/admin/contact-messages/${id}`)
+      loadMessages()
+      alert('Mensaje eliminado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar')
+    }
+  }
+
+  const quickRespond = async (id) => {
     const response = prompt('Escriba su respuesta:')
     if (!response) return
-
     try {
       await api.put(`/admin/contact-messages/${id}/respond`, { response })
-      api.get('/admin/contact-messages').then(r => setMessages(r.data))
+      loadMessages()
+      alert('Respuesta enviada')
     } catch (error) {
       alert(error.response?.data?.error || 'Error')
     }
+  }
+
+  const getBadge = (type, value) => {
+    const list = type === 'status' ? statuses : type === 'category' ? categories : priorities
+    const item = list.find(i => i.key === value) || list[0]
+    return <span style={{background: item.color, color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.75rem'}}>{item.label}</span>
+  }
+
+  const filteredMessages = messages.filter(m => {
+    if (filter.status && m.status !== filter.status) return false
+    if (filter.category && m.category !== filter.category) return false
+    if (filter.priority && m.priority !== filter.priority) return false
+    return true
+  })
+
+  const stats = {
+    total: messages.length,
+    pending: messages.filter(m => m.status === 'pending').length,
+    urgent: messages.filter(m => m.priority === 'urgente').length
   }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
@@ -1358,23 +1438,147 @@ function AdminMessages() {
   return (
     <div>
       <h1>Mensajes de Contacto</h1>
-      <div className="messages-list">
-        {messages.map(m => (
-          <div key={m.id} className="message-item card">
-            <div className="message-header">
-              <strong>{m.name}</strong> - {m.email}
-              <span className={`status-badge status-${m.status}`}>{m.status}</span>
-            </div>
-            <p className="subject">{m.subject}</p>
-            <p>{m.message}</p>
-            {m.status === 'pending' && (
-              <button onClick={() => handleRespond(m.id)} className="btn btn-secondary">
-                Responder
-              </button>
-            )}
-          </div>
-        ))}
+      
+      <div className="stats-grid" style={{marginBottom: '1rem'}}>
+        <div className="stat-card card" style={{padding: '0.75rem'}}>
+          <h4 style={{margin: 0}}>Total</h4>
+          <p className="stat-number" style={{margin: 0}}>{stats.total}</p>
+        </div>
+        <div className="stat-card card" style={{padding: '0.75rem', borderLeft: '4px solid #ffc107'}}>
+          <h4 style={{margin: 0}}>Pendientes</h4>
+          <p className="stat-number" style={{margin: 0, color: '#ffc107'}}>{stats.pending}</p>
+        </div>
+        <div className="stat-card card" style={{padding: '0.75rem', borderLeft: '4px solid #dc3545'}}>
+          <h4 style={{margin: 0}}>Urgentes</h4>
+          <p className="stat-number" style={{margin: 0, color: '#dc3545'}}>{stats.urgent}</p>
+        </div>
       </div>
+
+      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap'}}>
+        <select value={filter.status} onChange={e => setFilter({...filter, status: e.target.value})} style={{padding: '0.5rem'}}>
+          <option value="">Todos los estados</option>
+          {statuses.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <select value={filter.category} onChange={e => setFilter({...filter, category: e.target.value})} style={{padding: '0.5rem'}}>
+          <option value="">Todas las categorias</option>
+          {categories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+        </select>
+        <select value={filter.priority} onChange={e => setFilter({...filter, priority: e.target.value})} style={{padding: '0.5rem'}}>
+          <option value="">Todas las prioridades</option>
+          {priorities.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+        <button onClick={() => setFilter({ status: '', category: '', priority: '' })} className="btn btn-sm btn-secondary">Limpiar filtros</button>
+      </div>
+
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Remitente</th>
+            <th>Asunto</th>
+            <th>Categoria</th>
+            <th>Prioridad</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredMessages.map(m => (
+            <tr key={m.id} style={{background: m.priority === 'urgente' ? '#fff5f5' : m.status === 'pending' ? '#fffbf0' : 'inherit'}}>
+              <td style={{fontSize: '0.85rem'}}>{new Date(m.created_at).toLocaleDateString('es-BO')}</td>
+              <td>
+                <div><strong>{m.name}</strong></div>
+                <div style={{fontSize: '0.8rem', color: '#666'}}>{m.email}</div>
+              </td>
+              <td>
+                <div style={{fontWeight: '500'}}>{m.subject}</div>
+                <div style={{fontSize: '0.8rem', color: '#666', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{m.message}</div>
+              </td>
+              <td>{getBadge('category', m.category || 'general')}</td>
+              <td>{getBadge('priority', m.priority || 'normal')}</td>
+              <td>{getBadge('status', m.status)}</td>
+              <td>
+                <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                  <button onClick={() => openEditModal(m)} className="btn btn-sm btn-secondary">Editar</button>
+                  {m.status === 'pending' && (
+                    <button onClick={() => quickRespond(m.id)} className="btn btn-sm btn-primary">Responder</button>
+                  )}
+                  <button onClick={() => deleteMessage(m.id, m.subject)} className="btn btn-sm btn-danger">Eliminar</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {filteredMessages.length === 0 && (
+        <p style={{textAlign: 'center', color: '#666', padding: '2rem'}}>No hay mensajes que coincidan con los filtros</p>
+      )}
+
+      {editingMessage && (
+        <div className="modal-overlay" onClick={() => setEditingMessage(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '600px'}}>
+            <h2>Editar Mensaje</h2>
+            
+            <div style={{background: '#f8f9fa', padding: '1rem', borderRadius: '8px', marginBottom: '1rem'}}>
+              <p style={{margin: 0}}><strong>De:</strong> {editingMessage.name} ({editingMessage.email})</p>
+              <p style={{margin: '0.5rem 0'}}><strong>Asunto:</strong> {editingMessage.subject}</p>
+              <p style={{margin: 0}}><strong>Mensaje:</strong></p>
+              <p style={{margin: '0.5rem 0', whiteSpace: 'pre-wrap', background: 'white', padding: '0.5rem', borderRadius: '4px'}}>{editingMessage.message}</p>
+              <p style={{margin: 0, fontSize: '0.8rem', color: '#666'}}>Recibido: {new Date(editingMessage.created_at).toLocaleString('es-BO')}</p>
+            </div>
+
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+              <div>
+                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
+                <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                  {statuses.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Categoria:</label>
+                <select value={editForm.category} onChange={e => setEditForm({...editForm, category: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                  {categories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Prioridad:</label>
+                <select value={editForm.priority} onChange={e => setEditForm({...editForm, priority: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                  {priorities.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={{marginBottom: '1rem'}}>
+              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Notas internas (solo admin):</label>
+              <textarea 
+                value={editForm.admin_notes} 
+                onChange={e => setEditForm({...editForm, admin_notes: e.target.value})}
+                placeholder="Notas internas para el equipo..."
+                style={{width: '100%', padding: '0.5rem', minHeight: '60px'}}
+              />
+            </div>
+
+            <div style={{marginBottom: '1rem'}}>
+              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Respuesta al usuario:</label>
+              <textarea 
+                value={editForm.admin_response} 
+                onChange={e => setEditForm({...editForm, admin_response: e.target.value})}
+                placeholder="Escriba la respuesta que se enviara al usuario..."
+                style={{width: '100%', padding: '0.5rem', minHeight: '80px'}}
+              />
+              {editingMessage.responded_at && (
+                <small style={{color: '#666'}}>Respondido: {new Date(editingMessage.responded_at).toLocaleString('es-BO')}</small>
+              )}
+            </div>
+
+            <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setEditingMessage(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={saveEdit} className="btn btn-primary">Guardar Cambios</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
