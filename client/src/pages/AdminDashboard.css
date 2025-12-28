@@ -342,3 +342,57 @@
   border: 1px solid #ddd;
   border-radius: 5px;
 }
+
+/* Responsive adicional para tablas en Admin */
+@media (max-width: 900px) {
+  .admin-table th,
+  .admin-table td {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+  }
+  
+  .config-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .config-value input {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .modal-content {
+    padding: 1rem;
+    width: 95%;
+    max-height: 90vh;
+  }
+  
+  .modal-content h3 {
+    font-size: 1.1rem;
+  }
+  
+  .admin-table {
+    font-size: 0.8rem;
+  }
+  
+  .admin-table th,
+  .admin-table td {
+    padding: 0.4rem 0.3rem;
+  }
+  
+  .message-header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .filters-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .filters-row input {
+    width: 100%;
+  }
+}

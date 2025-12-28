@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import './Header.css'
@@ -5,32 +6,40 @@ import './Header.css'
 function Header() {
   const { user, logout, isAuthenticated } = useAuth()
   const navigate = useNavigate()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const handleLogout = () => {
     logout()
     navigate('/')
+    setMenuOpen(false)
   }
+
+  const closeMenu = () => setMenuOpen(false)
 
   return (
     <header className="header">
       <div className="container header-content">
-        <Link to="/" className="logo">
+        <Link to="/" className="logo" onClick={closeMenu}>
           <h1>Almacenes, Galpones, Espacios Libres</h1>
         </Link>
         
-        <nav className="nav">
-          <Link to="/espacios">Espacios</Link>
+        <button className="menu-toggle" onClick={() => setMenuOpen(!menuOpen)}>
+          {menuOpen ? '✕' : '☰'}
+        </button>
+        
+        <nav className={`nav ${menuOpen ? 'open' : ''}`}>
+          <Link to="/espacios" onClick={closeMenu}>Espacios</Link>
           {isAuthenticated ? (
             <>
-              <Link to="/dashboard">Mi Panel</Link>
+              <Link to="/dashboard" onClick={closeMenu}>Mi Panel</Link>
               {user?.role === 'HOST' && (
-                <Link to="/propietario">Portal Propietario</Link>
+                <Link to="/propietario" onClick={closeMenu}>Portal Propietario</Link>
               )}
               {user?.role === 'GUEST' && (
-                <Link to="/cliente">Mi Portal</Link>
+                <Link to="/cliente" onClick={closeMenu}>Mi Portal</Link>
               )}
               {user?.role === 'ADMIN' && (
-                <Link to="/admin">Admin</Link>
+                <Link to="/admin" onClick={closeMenu}>Admin</Link>
               )}
               <button onClick={handleLogout} className="btn-logout">
                 Salir
@@ -38,8 +47,8 @@ function Header() {
             </>
           ) : (
             <>
-              <Link to="/login" className="btn-login">Ingresar</Link>
-              <Link to="/registro" className="btn btn-primary">Registrarse</Link>
+              <Link to="/login" className="btn-login" onClick={closeMenu}>Ingresar</Link>
+              <Link to="/registro" className="btn btn-primary" onClick={closeMenu}>Registrarse</Link>
             </>
           )}
         </nav>
