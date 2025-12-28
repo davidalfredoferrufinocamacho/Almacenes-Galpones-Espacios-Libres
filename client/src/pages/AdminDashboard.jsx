@@ -1072,6 +1072,29 @@ function AdminUsers({ isSuperAdmin }) {
     }
   }
 
+  const toggleSuperAdmin = async (userId, currentStatus) => {
+    const action = currentStatus ? 'degradar de Super Admin' : 'promover a Super Admin'
+    if (!confirm(`¿Está seguro de que desea ${action} a este usuario?`)) return
+    try {
+      await api.put(`/admin/users/${userId}/super-admin`, { is_super_admin: !currentStatus })
+      alert(currentStatus ? 'Usuario degradado de Super Admin' : 'Usuario promovido a Super Admin')
+      loadUsers()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al cambiar estado de Super Admin')
+    }
+  }
+
+  const removeAdminRole = async (userId, email) => {
+    if (!confirm(`¿Quitar permisos de administrador a ${email}? El usuario pasará a ser HOST.`)) return
+    try {
+      await api.put(`/admin/users/${userId}/role`, { role: 'HOST' })
+      loadUsers()
+      alert('Permisos de administrador removidos')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al quitar permisos de admin')
+    }
+  }
+
   const openEditModal = (user) => {
     setEditingUser(user)
     setEditForm({
@@ -1125,7 +1148,15 @@ function AdminUsers({ isSuperAdmin }) {
   }
 
   const filteredUsers = users.filter(u => {
-    if (filter.role && u.role !== filter.role) return false
+    if (filter.role) {
+      if (filter.role === 'SUPER_ADMIN') {
+        if (u.role !== 'ADMIN' || !u.is_super_admin) return false
+      } else if (filter.role === 'ADMIN') {
+        if (u.role !== 'ADMIN' || u.is_super_admin) return false
+      } else {
+        if (u.role !== filter.role) return false
+      }
+    }
     if (filter.status === 'active' && !u.is_active) return false
     if (filter.status === 'inactive' && u.is_active) return false
     return true
@@ -1139,9 +1170,10 @@ function AdminUsers({ isSuperAdmin }) {
       <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem'}}>
         <select value={filter.role} onChange={e => setFilter({...filter, role: e.target.value})} style={{padding: '0.5rem'}}>
           <option value="">Todos los roles</option>
-          <option value="GUEST">GUEST</option>
-          <option value="HOST">HOST</option>
+          <option value="GUEST">GUEST (Cliente)</option>
+          <option value="HOST">HOST (Propietario)</option>
           <option value="ADMIN">ADMIN</option>
+          <option value="SUPER_ADMIN">SUPER ADMIN</option>
         </select>
         <select value={filter.status} onChange={e => setFilter({...filter, status: e.target.value})} style={{padding: '0.5rem'}}>
           <option value="">Todos</option>
@@ -1250,6 +1282,25 @@ function AdminUsers({ isSuperAdmin }) {
                   <button onClick={() => toggleBlock(user.id, user.is_blocked)} className={`btn btn-sm ${user.is_blocked ? 'btn-info' : 'btn-dark'}`}>
                     {user.is_blocked ? 'Desblq.' : 'Bloquear'}
                   </button>
+                  {user.role === 'ADMIN' && isSuperAdmin && (
+                    <>
+                      <button 
+                        onClick={() => toggleSuperAdmin(user.id, user.is_super_admin)} 
+                        className={`btn btn-sm ${user.is_super_admin ? 'btn-warning' : 'btn-success'}`}
+                        title={user.is_super_admin ? 'Degradar a Admin normal' : 'Promover a Super Admin'}
+                      >
+                        {user.is_super_admin ? 'Degradar' : 'Promover'}
+                      </button>
+                      <button 
+                        onClick={() => removeAdminRole(user.id, user.email)} 
+                        className="btn btn-sm btn-outline-danger"
+                        title="Quitar permisos de administrador"
+                        style={{border: '1px solid #dc3545', color: '#dc3545', background: 'white'}}
+                      >
+                        Quitar Admin
+                      </button>
+                    </>
+                  )}
                   {(user.role !== 'ADMIN' || isSuperAdmin) && (
                     <button onClick={() => deleteUser(user.id, user.email)} className="btn btn-sm btn-danger" title="Eliminar">
                       Elim.
