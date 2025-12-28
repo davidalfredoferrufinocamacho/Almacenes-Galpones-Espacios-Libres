@@ -359,20 +359,21 @@ router.post('/:id/photos', authenticateToken, requireRole('HOST'), upload.array(
       return res.status(404).json({ error: 'Espacio no encontrado' });
     }
 
-    const photos = [];
+    const existingCount = db.prepare('SELECT COUNT(*) as count FROM space_photos WHERE space_id = ?').get(req.params.id).count;
+
     for (let i = 0; i < req.files.length; i++) {
       const photoId = generateId();
       const url = `/uploads/photos/${req.files[i].filename}`;
+      const isPrimary = existingCount === 0 && i === 0 ? 1 : 0;
 
       db.prepare(`
         INSERT INTO space_photos (id, space_id, url, is_primary, order_index)
         VALUES (?, ?, ?, ?, ?)
-      `).run(photoId, req.params.id, url, i === 0 ? 1 : 0, i);
-
-      photos.push({ id: photoId, url });
+      `).run(photoId, req.params.id, url, isPrimary, existingCount + i);
     }
 
-    res.json({ photos });
+    const allPhotos = db.prepare('SELECT * FROM space_photos WHERE space_id = ? ORDER BY order_index').all(req.params.id);
+    res.json({ photos: allPhotos });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al subir fotos' });
@@ -445,6 +446,74 @@ router.post('/:id/video', authenticateToken, requireRole('HOST'), upload.single(
     }
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al subir video' });
+  }
+});
+
+router.delete('/:id/photos/:photoId', authenticateToken, requireRole('HOST'), (req, res) => {
+  try {
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const photo = db.prepare('SELECT * FROM space_photos WHERE id = ? AND space_id = ?').get(req.params.photoId, req.params.id);
+    if (!photo) {
+      return res.status(404).json({ error: 'Foto no encontrada' });
+    }
+
+    db.prepare('DELETE FROM space_photos WHERE id = ?').run(req.params.photoId);
+
+    try {
+      const sanitizedUrl = photo.url.replace(/^\//, '');
+      const filePath = path.join(__dirname, '../../', sanitizedUrl);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (fileError) {
+      console.error('Error al eliminar archivo de foto:', fileError);
+    }
+
+    const remainingPhotos = db.prepare('SELECT * FROM space_photos WHERE space_id = ? ORDER BY order_index').all(req.params.id);
+
+    logAudit(req.user.id, 'PHOTO_DELETED', 'space_photos', req.params.photoId, photo, null, req);
+    res.json({ message: 'Foto eliminada exitosamente', photos: remainingPhotos });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar foto' });
+  }
+});
+
+router.delete('/:id/video', authenticateToken, requireRole('HOST'), (req, res) => {
+  try {
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    if (!space.video_url) {
+      return res.status(404).json({ error: 'No hay video para eliminar' });
+    }
+
+    db.prepare(`
+      UPDATE spaces SET video_url = NULL, video_duration = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(req.params.id);
+
+    try {
+      const sanitizedUrl = space.video_url.replace(/^\//, '');
+      const filePath = path.join(__dirname, '../../', sanitizedUrl);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (fileError) {
+      console.error('Error al eliminar archivo de video:', fileError);
+    }
+
+    logAudit(req.user.id, 'VIDEO_DELETED', 'spaces', req.params.id, { video_url: space.video_url }, null, req);
+    res.json({ message: 'Video eliminado exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar video' });
   }
 });
 

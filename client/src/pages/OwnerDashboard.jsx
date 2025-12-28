@@ -232,6 +232,9 @@ function OwnerSpaces() {
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(null)
+  const [photos, setPhotos] = useState([])
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  const [uploadingVideo, setUploadingVideo] = useState(false)
 
   useEffect(() => { loadSpaces() }, [])
 
@@ -283,11 +286,84 @@ function OwnerSpaces() {
 
   const handleEdit = async (id) => {
     try {
-      const res = await api.get(`/spaces/${id}`)
+      const res = await authApi.get(`/spaces/${id}`)
       setForm(res.data)
+      setPhotos(res.data.photos || [])
       setShowModal(true)
     } catch (error) {
       alert('Error al cargar espacio')
+    }
+  }
+
+  const handleUploadPhotos = async (e) => {
+    if (!form.id) {
+      alert('Primero guarde el espacio, luego podra subir fotos')
+      return
+    }
+    const files = e.target.files
+    if (!files.length) return
+    
+    setUploadingPhotos(true)
+    const formData = new FormData()
+    for (let i = 0; i < files.length; i++) {
+      formData.append('photos', files[i])
+    }
+    
+    try {
+      const res = await authApi.post(`/spaces/${form.id}/photos`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setPhotos(res.data.photos || [])
+      alert('Fotos subidas exitosamente')
+    } catch (error) {
+      alert('Error al subir fotos: ' + (error.response?.data?.error || error.message))
+    }
+    setUploadingPhotos(false)
+    e.target.value = ''
+  }
+
+  const handleDeletePhoto = async (photoId) => {
+    if (!confirm('¿Eliminar esta foto?')) return
+    try {
+      const res = await authApi.delete(`/spaces/${form.id}/photos/${photoId}`)
+      setPhotos(res.data.photos || [])
+    } catch (error) {
+      alert('Error al eliminar foto: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleUploadVideo = async (e) => {
+    if (!form.id) {
+      alert('Primero guarde el espacio, luego podra subir video')
+      return
+    }
+    const file = e.target.files[0]
+    if (!file) return
+    
+    setUploadingVideo(true)
+    const formData = new FormData()
+    formData.append('video', file)
+    
+    try {
+      const res = await authApi.post(`/spaces/${form.id}/video`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setForm({...form, video_url: res.data.video_url, video_duration: res.data.duration})
+      alert(`Video subido exitosamente (${res.data.duration} segundos)`)
+    } catch (error) {
+      alert('Error al subir video: ' + (error.response?.data?.error || error.message))
+    }
+    setUploadingVideo(false)
+    e.target.value = ''
+  }
+
+  const handleDeleteVideo = async () => {
+    if (!confirm('¿Eliminar el video?')) return
+    try {
+      await authApi.delete(`/spaces/${form.id}/video`)
+      setForm({...form, video_url: null, video_duration: null})
+    } catch (error) {
+      alert('Error al eliminar video: ' + (error.response?.data?.error || error.message))
     }
   }
 
@@ -310,7 +386,7 @@ function OwnerSpaces() {
     <div>
       <div className="section-header">
         <h1>Mis Espacios</h1>
-        <button onClick={() => { setForm({}); setShowModal(true) }} className="btn btn-primary">+ Nuevo Espacio</button>
+        <button onClick={() => { setForm({}); setPhotos([]); setShowModal(true) }} className="btn btn-primary">+ Nuevo Espacio</button>
       </div>
 
       {spaces.length > 0 ? (
@@ -503,6 +579,54 @@ function OwnerSpaces() {
                   <input type="number" min="1" value={form.max_rental_days || ''} onChange={e => setForm({...form, max_rental_days: e.target.value})} placeholder="Sin limite" />
                 </div>
               </div>
+
+              {form.id && (
+                <>
+                  <h4>Fotos del Espacio</h4>
+                  <div className="media-section">
+                    <div className="photos-grid">
+                      {photos.map(photo => (
+                        <div key={photo.id} className="photo-item">
+                          <img src={photo.url} alt="Foto del espacio" />
+                          <button type="button" className="btn-delete-photo" onClick={() => handleDeletePhoto(photo.id)}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="upload-area">
+                      <label className="btn btn-secondary">
+                        {uploadingPhotos ? 'Subiendo...' : '+ Agregar Fotos'}
+                        <input type="file" accept="image/*" multiple onChange={handleUploadPhotos} disabled={uploadingPhotos} style={{display: 'none'}} />
+                      </label>
+                      <span className="upload-hint">Maximo 10 fotos por vez</span>
+                    </div>
+                  </div>
+
+                  <h4>Video del Espacio</h4>
+                  <div className="media-section">
+                    {form.video_url ? (
+                      <div className="video-preview">
+                        <video src={form.video_url} controls width="100%" style={{maxHeight: '200px'}} />
+                        <p>Duracion: {form.video_duration} segundos</p>
+                        <button type="button" className="btn btn-danger btn-small" onClick={handleDeleteVideo}>Eliminar Video</button>
+                      </div>
+                    ) : (
+                      <div className="upload-area">
+                        <label className="btn btn-secondary">
+                          {uploadingVideo ? 'Subiendo...' : '+ Subir Video'}
+                          <input type="file" accept="video/*" onChange={handleUploadVideo} disabled={uploadingVideo} style={{display: 'none'}} />
+                        </label>
+                        <span className="upload-hint">Duracion entre 0-15 segundos (configurable por Admin)</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {!form.id && (
+                <div className="info-box">
+                  <p>Guarde el espacio primero para poder subir fotos y video.</p>
+                </div>
+              )}
 
               <div className="form-actions">
                 <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button>

@@ -237,7 +237,6 @@ router.put('/spaces/:id', (req, res) => {
             is_open, has_roof, rain_protected, dust_protected,
             access_type, has_security, security_description, schedule,
             city, department, address, latitude, longitude,
-            amenities, rules,
             min_rental_days, max_rental_days, status } = req.body;
 
     const body = req.body;
@@ -248,8 +247,6 @@ router.put('/spaces/:id', (req, res) => {
     const hasSecurityVal = Object.prototype.hasOwnProperty.call(body, 'has_security') ? (has_security ? 1 : 0) : space.has_security;
     const securityDescVal = Object.prototype.hasOwnProperty.call(body, 'security_description') ? (security_description || null) : space.security_description;
     const scheduleVal = Object.prototype.hasOwnProperty.call(body, 'schedule') ? (schedule || null) : space.schedule;
-    const amenitiesVal = Object.prototype.hasOwnProperty.call(body, 'amenities') ? (amenities || null) : space.amenities;
-    const rulesVal = Object.prototype.hasOwnProperty.call(body, 'rules') ? (rules || null) : space.rules;
 
     db.prepare(`
       UPDATE spaces SET 
@@ -277,8 +274,6 @@ router.put('/spaces/:id', (req, res) => {
         address = COALESCE(?, address),
         latitude = ?,
         longitude = ?,
-        amenities = ?,
-        rules = ?,
         min_rental_days = COALESCE(?, min_rental_days),
         max_rental_days = ?,
         status = COALESCE(?, status),
@@ -305,8 +300,6 @@ router.put('/spaces/:id', (req, res) => {
       city, department, address,
       latitude ? parseFloat(latitude) : null,
       longitude ? parseFloat(longitude) : null,
-      amenitiesVal,
-      rulesVal,
       min_rental_days ? parseInt(min_rental_days) : null,
       max_rental_days ? parseInt(max_rental_days) : null,
       status,
