@@ -526,10 +526,7 @@ router.put('/profile', [
   body('city').optional().trim().isLength({ max: 50 }),
   body('department').optional().trim(),
   body('country').optional().trim(),
-  body('street').optional().trim(),
-  body('street_number').optional().trim(),
-  body('email_notifications').optional().isBoolean(),
-  body('newsletter').optional().isBoolean()
+  body('nit').optional().trim().isLength({ max: 20 })
 ], (req, res) => {
   try {
     const errors = validationResult(req);
@@ -538,7 +535,7 @@ router.put('/profile', [
     }
 
     const allowedFields = ['first_name', 'last_name', 'phone', 'address', 'city', 
-      'department', 'country', 'street', 'street_number', 'email_notifications', 'newsletter'];
+      'department', 'country', 'nit', 'email_notifications', 'newsletter'];
     
     const updates = [];
     const values = [];
@@ -546,7 +543,12 @@ router.put('/profile', [
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         updates.push(`${field} = ?`);
-        values.push(req.body[field]);
+        const val = req.body[field];
+        if (field === 'email_notifications' || field === 'newsletter') {
+          values.push(val ? 1 : 0);
+        } else {
+          values.push(val);
+        }
       }
     }
 
@@ -643,6 +645,69 @@ router.put('/profile/password', [
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al cambiar contrasena' });
+  }
+});
+
+router.delete('/account', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = db.prepare('SELECT email, first_name, last_name, profile_photo FROM users WHERE id = ?').get(userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const hasActiveReservations = db.prepare(`
+      SELECT COUNT(*) as count FROM reservations 
+      WHERE guest_id = ? AND status NOT IN ('cancelled', 'refunded', 'completed', 'expired')
+    `).get(userId);
+
+    if (hasActiveReservations.count > 0) {
+      return res.status(400).json({ 
+        error: 'No puede eliminar su cuenta mientras tenga reservaciones activas, pendientes o con contratos en proceso. Por favor complete o cancele sus reservaciones primero.' 
+      });
+    }
+
+    const hasActiveContracts = db.prepare(`
+      SELECT COUNT(*) as count FROM contracts c
+      JOIN reservations r ON c.reservation_id = r.id
+      WHERE r.guest_id = ? AND c.status NOT IN ('cancelled', 'completed', 'expired')
+    `).get(userId);
+
+    if (hasActiveContracts.count > 0) {
+      return res.status(400).json({ 
+        error: 'No puede eliminar su cuenta mientras tenga contratos activos o pendientes de firma.' 
+      });
+    }
+
+    const hasUnpaidPayments = db.prepare(`
+      SELECT COUNT(*) as count FROM payments 
+      WHERE user_id = ? AND status = 'pending'
+    `).get(userId);
+
+    if (hasUnpaidPayments.count > 0) {
+      return res.status(400).json({ 
+        error: 'No puede eliminar su cuenta mientras tenga pagos pendientes.' 
+      });
+    }
+
+    if (user.profile_photo && fs.existsSync(user.profile_photo)) {
+      fs.unlinkSync(user.profile_photo);
+    }
+
+    db.prepare('DELETE FROM favorites WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
+
+    logAudit(userId, 'ACCOUNT_DELETED', 'users', userId, 
+      { email: user.email, name: `${user.first_name} ${user.last_name}` }, 
+      null, req);
+
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+    res.json({ message: 'Cuenta eliminada exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar cuenta' });
   }
 });
 

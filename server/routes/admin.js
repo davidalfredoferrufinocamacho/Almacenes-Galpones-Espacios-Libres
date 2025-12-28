@@ -4,7 +4,7 @@ const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { getClientInfo, generateId } = require('../utils/helpers');
-const { sendContactResponseEmail } = require('../utils/gmailService');
+const { sendContactResponseEmail, sendEmail } = require('../utils/gmailService');
 
 const router = express.Router();
 
@@ -3518,20 +3518,24 @@ router.post('/campaigns', [
   body('name').notEmpty().trim(),
   body('campaign_type').isIn(['email', 'sms', 'both']),
   body('content').notEmpty(),
-  body('target_audience').isIn(['all', 'guests', 'hosts', 'inactive', 'new_users', 'custom'])
+  body('target_audience').notEmpty()
 ], (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { name, campaign_type, subject, content, template_variables, target_audience, custom_filter, scheduled_at } = req.body;
+    const { name, campaign_type, subject, content, template_variables, target_audience, scheduled_at } = req.body;
     const id = `camp_${Date.now()}`;
     const status = scheduled_at ? 'scheduled' : 'draft';
+
+    const newsletterAudiences = ['newsletter', 'guests_newsletter', 'hosts_newsletter'];
+    const dbTargetAudience = newsletterAudiences.includes(target_audience) ? 'custom' : target_audience;
+    const customFilter = newsletterAudiences.includes(target_audience) ? target_audience : (req.body.custom_filter || null);
 
     db.prepare(`
       INSERT INTO campaigns (id, name, campaign_type, subject, content, template_variables, target_audience, custom_filter, status, scheduled_at, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, campaign_type, subject || null, content, template_variables ? JSON.stringify(template_variables) : null, target_audience, custom_filter || null, status, scheduled_at || null, req.user.id);
+    `).run(id, name, campaign_type, subject || null, content, template_variables ? JSON.stringify(template_variables) : null, dbTargetAudience, customFilter, status, scheduled_at || null, req.user.id);
 
     logAudit(req.user.id, 'CAMPAIGN_CREATED', 'campaigns', id, null, req.body, req);
     res.status(201).json({ id, message: 'Campaña creada' });
@@ -3547,16 +3551,23 @@ router.put('/campaigns/:id', (req, res) => {
     if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' });
     if (campaign.status === 'sent') return res.status(400).json({ error: 'No se puede modificar una campaña enviada' });
 
-    const { name, campaign_type, subject, content, target_audience, custom_filter, scheduled_at, status } = req.body;
+    const { name, campaign_type, subject, content, target_audience, scheduled_at, status } = req.body;
     const updates = ['updated_at = CURRENT_TIMESTAMP'];
     const params = [];
+
+    const newsletterAudiences = ['newsletter', 'guests_newsletter', 'hosts_newsletter'];
 
     if (name) { updates.push('name = ?'); params.push(name); }
     if (campaign_type) { updates.push('campaign_type = ?'); params.push(campaign_type); }
     if (subject !== undefined) { updates.push('subject = ?'); params.push(subject); }
     if (content) { updates.push('content = ?'); params.push(content); }
-    if (target_audience) { updates.push('target_audience = ?'); params.push(target_audience); }
-    if (custom_filter !== undefined) { updates.push('custom_filter = ?'); params.push(custom_filter); }
+    if (target_audience) {
+      const dbTargetAudience = newsletterAudiences.includes(target_audience) ? 'custom' : target_audience;
+      updates.push('target_audience = ?');
+      params.push(dbTargetAudience);
+      updates.push('custom_filter = ?');
+      params.push(newsletterAudiences.includes(target_audience) ? target_audience : (req.body.custom_filter || null));
+    }
     if (scheduled_at !== undefined) { updates.push('scheduled_at = ?'); params.push(scheduled_at); }
     if (status) { updates.push('status = ?'); params.push(status); }
 
@@ -3571,32 +3582,97 @@ router.put('/campaigns/:id', (req, res) => {
   }
 });
 
-router.post('/campaigns/:id/send', (req, res) => {
+router.post('/campaigns/:id/send', async (req, res) => {
   try {
     const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
     if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' });
     if (campaign.status === 'sent') return res.status(400).json({ error: 'Campaña ya enviada' });
 
-    // Obtener destinatarios según audiencia
-    let usersQuery = 'SELECT id, email, phone FROM users WHERE is_active = 1';
-    if (campaign.target_audience === 'guests') usersQuery += " AND role = 'GUEST'";
-    else if (campaign.target_audience === 'hosts') usersQuery += " AND role = 'HOST'";
-    else if (campaign.target_audience === 'new_users') usersQuery += " AND created_at >= date('now', '-30 days')";
+    let usersQuery = 'SELECT id, email, phone, first_name, last_name FROM users WHERE is_active = 1';
+    
+    const effectiveAudience = campaign.target_audience === 'custom' && campaign.custom_filter 
+      ? campaign.custom_filter 
+      : campaign.target_audience;
+    
+    if (effectiveAudience === 'guests') usersQuery += " AND role = 'GUEST'";
+    else if (effectiveAudience === 'hosts') usersQuery += " AND role = 'HOST'";
+    else if (effectiveAudience === 'new_users') usersQuery += " AND created_at >= date('now', '-30 days')";
+    else if (effectiveAudience === 'newsletter') usersQuery += " AND newsletter = 1";
+    else if (effectiveAudience === 'guests_newsletter') usersQuery += " AND role = 'GUEST' AND newsletter = 1";
+    else if (effectiveAudience === 'hosts_newsletter') usersQuery += " AND role = 'HOST' AND newsletter = 1";
 
     const users = db.prepare(usersQuery).all();
     
-    // Simular envío (MOCK)
+    if (users.length === 0) {
+      return res.status(400).json({ error: 'No hay destinatarios para esta audiencia' });
+    }
+    
     let sentCount = 0;
     let failedCount = 0;
-    const insertRecipient = db.prepare('INSERT INTO campaign_recipients (id, campaign_id, user_id, email, phone, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)');
+    const insertRecipient = db.prepare('INSERT INTO campaign_recipients (id, campaign_id, user_id, email, phone, status, sent_at, error_message) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)');
     
-    users.forEach(user => {
+    const htmlTemplate = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .header { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); color: white; padding: 30px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; }
+    .content { padding: 30px; background: #ffffff; }
+    .footer { background: #1e3a5f; color: white; padding: 20px; text-align: center; font-size: 12px; }
+    .footer a { color: #a3c4f3; }
+    .unsubscribe { margin-top: 15px; font-size: 11px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Almacenes, Galpones, Espacios Libres</h1>
+    </div>
+    <div class="content">
+      {{CONTENT}}
+    </div>
+    <div class="footer">
+      <p>Almacenes, Galpones, Espacios Libres - Bolivia</p>
+      <p class="unsubscribe">Ha recibido este correo porque esta suscrito a nuestro boletin informativo. Para cancelar su suscripcion, visite su perfil en nuestra plataforma.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    for (const user of users) {
       const recipientId = `cr_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      // MOCK: 95% éxito
-      const status = Math.random() > 0.05 ? 'sent' : 'failed';
-      if (status === 'sent') sentCount++; else failedCount++;
-      insertRecipient.run(recipientId, req.params.id, user.id, user.email, user.phone, status);
-    });
+      
+      try {
+        let personalizedContent = campaign.content;
+        personalizedContent = personalizedContent.replace(/\{\{nombre\}\}/gi, user.first_name || 'Usuario');
+        personalizedContent = personalizedContent.replace(/\{\{apellido\}\}/gi, user.last_name || '');
+        personalizedContent = personalizedContent.replace(/\{\{email\}\}/gi, user.email);
+        
+        const htmlBody = htmlTemplate.replace('{{CONTENT}}', personalizedContent.replace(/\n/g, '<br>'));
+        
+        const result = await sendEmail({
+          to: user.email,
+          subject: campaign.subject || campaign.name,
+          htmlBody: htmlBody,
+          textBody: personalizedContent.replace(/<[^>]*>/g, '')
+        });
+        
+        if (result.success) {
+          sentCount++;
+          insertRecipient.run(recipientId, req.params.id, user.id, user.email, user.phone, 'sent', null);
+        } else {
+          failedCount++;
+          insertRecipient.run(recipientId, req.params.id, user.id, user.email, user.phone, 'failed', result.error);
+        }
+      } catch (emailError) {
+        failedCount++;
+        insertRecipient.run(recipientId, req.params.id, user.id, user.email, user.phone, 'failed', emailError.message);
+      }
+    }
 
     db.prepare(`
       UPDATE campaigns SET status = 'sent', sent_at = CURRENT_TIMESTAMP, total_recipients = ?, sent_count = ?, failed_count = ?, updated_at = CURRENT_TIMESTAMP
@@ -3604,7 +3680,7 @@ router.post('/campaigns/:id/send', (req, res) => {
     `).run(users.length, sentCount, failedCount, req.params.id);
 
     logAudit(req.user.id, 'CAMPAIGN_SENT', 'campaigns', req.params.id, campaign, { sent: sentCount, failed: failedCount }, req);
-    res.json({ message: 'Campaña enviada', total: users.length, sent: sentCount, failed: failedCount });
+    res.json({ message: 'Campaña enviada exitosamente', total: users.length, sent: sentCount, failed: failedCount });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al enviar campaña' });

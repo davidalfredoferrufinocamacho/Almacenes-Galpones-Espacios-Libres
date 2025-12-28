@@ -5172,7 +5172,17 @@ function AdminCampaigns() {
   }
 
   const statusLabels = { draft: 'Borrador', scheduled: 'Programada', sending: 'Enviando', sent: 'Enviada', cancelled: 'Cancelada' }
-  const audienceLabels = { all: 'Todos', guests: 'Clientes', hosts: 'Hosts', inactive: 'Inactivos', new_users: 'Nuevos', custom: 'Personalizado' }
+  const audienceLabels = { 
+    all: 'Todos', 
+    guests: 'Clientes', 
+    hosts: 'Hosts', 
+    inactive: 'Inactivos', 
+    new_users: 'Nuevos', 
+    newsletter: 'Suscritos al Boletin',
+    guests_newsletter: 'Clientes Suscritos',
+    hosts_newsletter: 'Hosts Suscritos',
+    custom: 'Personalizado' 
+  }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
@@ -5198,7 +5208,7 @@ function AdminCampaigns() {
             <tr key={c.id}>
               <td>{c.name}</td>
               <td>{c.campaign_type.toUpperCase()}</td>
-              <td>{audienceLabels[c.target_audience]}</td>
+              <td>{audienceLabels[c.target_audience === 'custom' && c.custom_filter ? c.custom_filter : c.target_audience] || c.target_audience}</td>
               <td><span className="badge" style={{background: c.status === 'sent' ? '#10b981' : c.status === 'draft' ? '#6b7280' : '#3b82f6'}}>{statusLabels[c.status]}</span></td>
               <td>{c.total_recipients}</td>
               <td>{c.sent_count}/{c.failed_count}</td>
@@ -5206,7 +5216,11 @@ function AdminCampaigns() {
               <td>
                 {c.status === 'draft' && (
                   <>
-                    <button onClick={() => { setForm(c); setShowModal('form') }} className="btn btn-small" style={{marginRight: '0.25rem'}}>Editar</button>
+                    <button onClick={() => { 
+                      const effectiveAudience = c.target_audience === 'custom' && c.custom_filter ? c.custom_filter : c.target_audience;
+                      setForm({...c, target_audience: effectiveAudience}); 
+                      setShowModal('form') 
+                    }} className="btn btn-small" style={{marginRight: '0.25rem'}}>Editar</button>
                     <button onClick={() => handleSend(c.id)} className="btn btn-small btn-primary" style={{marginRight: '0.25rem'}}>Enviar</button>
                   </>
                 )}
@@ -5237,11 +5251,15 @@ function AdminCampaigns() {
               <div className="form-group">
                 <label>Audiencia</label>
                 <select value={form.target_audience || 'all'} onChange={e => setForm({...form, target_audience: e.target.value})}>
-                  <option value="all">Todos</option>
+                  <option value="all">Todos los Usuarios</option>
                   <option value="guests">Solo Clientes</option>
                   <option value="hosts">Solo Hosts</option>
                   <option value="new_users">Nuevos Usuarios (30 dias)</option>
+                  <option value="newsletter">Suscritos al Boletin (Todos)</option>
+                  <option value="guests_newsletter">Clientes Suscritos al Boletin</option>
+                  <option value="hosts_newsletter">Hosts Suscritos al Boletin</option>
                 </select>
+                <small style={{color: '#64748b', fontSize: '12px'}}>Los usuarios suscritos al boletin han aceptado recibir correos informativos.</small>
               </div>
               {form.campaign_type !== 'sms' && (
                 <div className="form-group">

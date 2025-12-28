@@ -809,6 +809,22 @@
   to { transform: rotate(360deg); }
 }
 
+.danger-zone {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  margin-top: 2rem;
+}
+
+.danger-zone h3 {
+  color: #dc2626;
+}
+
+.danger-zone p {
+  color: #7f1d1d;
+  margin-bottom: 1rem;
+}
+
 @media (max-width: 768px) {
   .client-dashboard {
     flex-direction: column;

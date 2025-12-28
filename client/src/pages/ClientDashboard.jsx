@@ -810,13 +810,13 @@ function ClientProfile() {
         first_name: form.first_name,
         last_name: form.last_name,
         phone: form.phone,
+        nit: form.nit,
         address: form.address,
         city: form.city,
         department: form.department,
-        street: form.street,
-        street_number: form.street_number,
-        email_notifications: form.email_notifications,
-        newsletter: form.newsletter
+        country: form.country,
+        email_notifications: form.email_notifications ? true : false,
+        newsletter: form.newsletter ? true : false
       })
       setProfile({ ...profile, ...form })
       setEditing(false)
@@ -824,6 +824,24 @@ function ClientProfile() {
       alert('Error: ' + (error.response?.data?.error || error.message))
     }
     setSaving(false)
+  }
+
+  const handleDeleteAccount = async () => {
+    const confirmText = prompt('Para eliminar su cuenta permanentemente, escriba "ELIMINAR MI CUENTA":')
+    if (confirmText !== 'ELIMINAR MI CUENTA') {
+      alert('La confirmacion no coincide. La cuenta no fue eliminada.')
+      return
+    }
+    
+    try {
+      await api.delete('/client/account')
+      alert('Su cuenta ha sido eliminada permanentemente.')
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/'
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
   }
 
   const handlePhotoUpload = async (e) => {
@@ -956,8 +974,12 @@ function ClientProfile() {
               <p>{profile.ci || '-'}</p>
             </div>
             <div className="form-group">
-              <label>NIT</label>
-              <p>{profile.nit || '-'}</p>
+              <label>NIT (opcional)</label>
+              {editing ? (
+                <input value={form.nit || ''} onChange={e => setForm({ ...form, nit: e.target.value })} placeholder="Numero de Identificacion Tributaria" />
+              ) : (
+                <p>{profile.nit || '-'}</p>
+              )}
             </div>
           </div>
         </div>
@@ -968,25 +990,9 @@ function ClientProfile() {
             <div className="form-group full">
               <label>Direccion</label>
               {editing ? (
-                <input value={form.address || ''} onChange={e => setForm({ ...form, address: e.target.value })} />
+                <input value={form.address || ''} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Calle, numero, zona, etc." />
               ) : (
                 <p>{profile.address || '-'}</p>
-              )}
-            </div>
-            <div className="form-group">
-              <label>Calle</label>
-              {editing ? (
-                <input value={form.street || ''} onChange={e => setForm({ ...form, street: e.target.value })} />
-              ) : (
-                <p>{profile.street || '-'}</p>
-              )}
-            </div>
-            <div className="form-group">
-              <label>Numero</label>
-              {editing ? (
-                <input value={form.street_number || ''} onChange={e => setForm({ ...form, street_number: e.target.value })} />
-              ) : (
-                <p>{profile.street_number || '-'}</p>
               )}
             </div>
             <div className="form-group">
@@ -1014,6 +1020,14 @@ function ClientProfile() {
                 </select>
               ) : (
                 <p>{profile.department || '-'}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Pais</label>
+              {editing ? (
+                <input value={form.country || 'Bolivia'} onChange={e => setForm({ ...form, country: e.target.value })} />
+              ) : (
+                <p>{profile.country || 'Bolivia'}</p>
               )}
             </div>
           </div>
@@ -1059,6 +1073,12 @@ function ClientProfile() {
               <button onClick={() => setShowPasswordModal(true)} className="btn btn-secondary">Cambiar Contrasena</button>
             </>
           )}
+        </div>
+
+        <div className="form-section danger-zone">
+          <h3>Zona de Peligro</h3>
+          <p>Eliminar su cuenta es una accion permanente e irreversible. Se eliminaran todos sus datos, reservaciones, contratos y cualquier informacion asociada a su cuenta.</p>
+          <button onClick={handleDeleteAccount} className="btn btn-danger">Eliminar Mi Cuenta Permanentemente</button>
         </div>
       </div>
 
