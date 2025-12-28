@@ -36,6 +36,11 @@ The project utilizes a Node.js 20 backend with Express.js and SQLite for data pe
 *   **Client Portal (Portal del Cliente):** A dedicated dashboard for guests to manage reservations, contracts, payments, invoices, favorites, and profile, including account deletion with safety checks.
 *   **Owner Portal (Portal de Propietarios):** A dedicated dashboard for hosts to manage spaces (full CRUD with delete functionality), reservations, earnings, calendar, statements, and profile, also including account deletion with safety checks. Space management includes comprehensive pricing (day/week/month/quarter/semester/year per m2), conditions (roof, rain/dust protection, security), and rental day limits.
 *   **Editable Site Configuration:** Contact information and footer content are dynamically managed via the admin panel.
+*   **Editable Homepage Content (Super Admin):** All public homepage text content is fully editable via the Admin Panel → "Contenido Homepage" section, including:
+    - Hero section (title, subtitle, button texts)
+    - "Como Funciona" section (title, 3 steps with titles and descriptions)
+    - "Espacios Destacados" section (title, "Ver todos" link text)
+    - "Intermediacion Segura" section (title, 4 features with titles and descriptions)
 *   **Bolivian Professional Accounting Module:** A comprehensive accounting system compliant with Bolivian tax regulations, including tax calculations (IVA, IT, IUE, RC-IVA), ledger management, and financial reporting.
 *   **Backup and Recovery System (NEW):** Comprehensive data protection system accessible only to Super Admins:
     - Manual backup creation with one click
