@@ -34,7 +34,12 @@ The project utilizes a Node.js 20 backend with Express.js and SQLite for data pe
     - Independent from the general search functionality
     - Toggle endpoint: PUT /admin/spaces/:id/featured
 *   **Client Portal (Portal del Cliente):** A dedicated dashboard for guests to manage reservations, contracts, payments, invoices, favorites, and profile, including account deletion with safety checks.
-*   **Owner Portal (Portal de Propietarios):** A dedicated dashboard for hosts to manage spaces (full CRUD with delete functionality), reservations, earnings, calendar, statements, and profile, also including account deletion with safety checks. Space management includes comprehensive pricing (day/week/month/quarter/semester/year per m2), conditions (roof, rain/dust protection, security), and rental day limits.
+*   **Owner Portal (Portal de Propietarios):** A dedicated dashboard for hosts to manage spaces (full CRUD with delete functionality), reservations, earnings, calendar, statements, and profile, also including account deletion with safety checks. Space management includes comprehensive pricing (day/week/month/quarter/semester/year per m2), conditions (roof, rain/dust protection, security), rental day limits, and availability date ranges (available_from/available_until).
+*   **Public Search Privacy Protection:** Public space listings hide sensitive information for non-authenticated users:
+    - Address field is omitted from API responses for guests (only city/department visible)
+    - Calculator and payment options are replaced with login/register prompt
+    - Availability dates are shown publicly when configured
+    - Full details revealed only after user authentication
 *   **Editable Site Configuration:** Contact information and footer content are dynamically managed via the admin panel.
 *   **Editable Homepage Content (Super Admin):** All public homepage text content is fully editable via the Admin Panel → "Contenido Homepage" section, including:
     - Hero section (title, subtitle, button texts)
