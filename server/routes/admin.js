@@ -11,6 +11,15 @@ const router = express.Router();
 router.use(authenticateToken);
 router.use(requireRole('ADMIN'));
 
+// Middleware para verificar Super Admin
+const requireSuperAdmin = (req, res, next) => {
+  const currentAdmin = db.prepare('SELECT is_super_admin FROM users WHERE id = ?').get(req.user.id);
+  if (currentAdmin?.is_super_admin !== 1) {
+    return res.status(403).json({ error: 'Acceso restringido: Solo Super Admins pueden realizar esta accion' });
+  }
+  next();
+};
+
 router.get('/dashboard', (req, res) => {
   try {
     const stats = {
@@ -57,7 +66,7 @@ router.get('/users', (req, res) => {
     const users = db.prepare(`
       SELECT id, email, role, person_type, first_name, last_name, company_name,
              ci, nit, phone, city, department, street, street_number, country,
-             classification, is_verified, is_active, is_blocked,
+             classification, is_verified, is_active, is_blocked, is_super_admin,
              anti_bypass_accepted, anti_bypass_accepted_at, created_at
       FROM users
       ORDER BY created_at DESC
@@ -250,7 +259,7 @@ router.put('/panel/users/:id', (req, res) => {
   }
 });
 
-router.put('/users/:id/status', [
+router.put('/users/:id/status', requireSuperAdmin, [
   body('is_active').isBoolean()
 ], (req, res) => {
   try {
@@ -276,7 +285,7 @@ router.put('/users/:id/status', [
   }
 });
 
-router.put('/users/:id/password', [
+router.put('/users/:id/password', requireSuperAdmin, [
   body('new_password').isLength({ min: 8 }).withMessage('La contraseña debe tener al menos 8 caracteres'),
   body('confirm_password').custom((value, { req }) => {
     if (value !== req.body.new_password) {
@@ -311,7 +320,7 @@ router.put('/users/:id/password', [
   }
 });
 
-router.put('/users/:id/role', [
+router.put('/users/:id/role', requireSuperAdmin, [
   body('role').isIn(['GUEST', 'HOST', 'ADMIN'])
 ], (req, res) => {
   try {
@@ -430,19 +439,27 @@ router.put('/users/:id', [
   }
 });
 
-router.delete('/users/:id', (req, res) => {
+router.delete('/users/:id', requireSuperAdmin, (req, res) => {
   try {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    if (user.role === 'ADMIN') {
-      return res.status(403).json({ error: 'No se puede eliminar a un administrador' });
-    }
-
     if (req.params.id === req.user.id) {
       return res.status(403).json({ error: 'No puedes eliminarte a ti mismo' });
+    }
+
+    // Obtener información del admin que está haciendo la eliminación
+    const currentAdmin = db.prepare('SELECT is_super_admin FROM users WHERE id = ?').get(req.user.id);
+    const isSuperAdmin = currentAdmin?.is_super_admin === 1;
+
+    // Lógica de permisos para eliminar administradores
+    if (user.role === 'ADMIN') {
+      if (!isSuperAdmin) {
+        return res.status(403).json({ error: 'Solo un Super Admin puede eliminar a otros administradores' });
+      }
+      // Super Admin puede eliminar a otros admins (incluyendo otros super admins)
     }
 
     const hasContracts = db.prepare('SELECT COUNT(*) as count FROM contracts WHERE guest_id = ? OR host_id = ?').get(req.params.id, req.params.id);
@@ -473,6 +490,41 @@ router.delete('/users/:id', (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al eliminar usuario' });
+  }
+});
+
+// Promover/Degradar Super Admin (solo Super Admins pueden usar esto)
+router.put('/users/:id/super-admin', requireSuperAdmin, (req, res) => {
+  try {
+    const { is_super_admin } = req.body;
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    if (user.role !== 'ADMIN') {
+      return res.status(400).json({ error: 'Solo se puede promover/degradar a usuarios con rol ADMIN' });
+    }
+
+    if (req.params.id === req.user.id) {
+      return res.status(403).json({ error: 'No puedes modificar tu propio estado de Super Admin' });
+    }
+
+    const newValue = is_super_admin ? 1 : 0;
+    db.prepare('UPDATE users SET is_super_admin = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(newValue, req.params.id);
+
+    const action = is_super_admin ? 'PROMOTED_TO_SUPER_ADMIN' : 'DEMOTED_FROM_SUPER_ADMIN';
+    logAudit(req.user.id, action, 'users', req.params.id, { is_super_admin: user.is_super_admin }, { is_super_admin: newValue }, req);
+
+    res.json({ 
+      message: is_super_admin ? 'Usuario promovido a Super Admin' : 'Usuario degradado de Super Admin',
+      is_super_admin: newValue
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar estado de Super Admin' });
   }
 });
 
@@ -1021,7 +1073,7 @@ router.delete('/invoices/:id', (req, res) => {
   }
 });
 
-router.get('/config', (req, res) => {
+router.get('/config', requireSuperAdmin, (req, res) => {
   try {
     const config = db.prepare('SELECT * FROM system_config').all();
     res.json(config);
@@ -1031,7 +1083,7 @@ router.get('/config', (req, res) => {
   }
 });
 
-router.put('/config/:key', [
+router.put('/config/:key', requireSuperAdmin, [
   body('value').notEmpty()
 ], (req, res) => {
   try {
@@ -1066,7 +1118,7 @@ router.put('/config/:key', [
 
 // ==================== GESTION DE METODOS DE PAGO ====================
 
-router.get('/payment-methods', (req, res) => {
+router.get('/payment-methods', requireSuperAdmin, (req, res) => {
   try {
     const methods = db.prepare('SELECT * FROM payment_methods ORDER BY order_index ASC, created_at ASC').all();
     res.json(methods);
@@ -1076,7 +1128,7 @@ router.get('/payment-methods', (req, res) => {
   }
 });
 
-router.post('/payment-methods', [
+router.post('/payment-methods', requireSuperAdmin, [
   body('code').trim().notEmpty().withMessage('El codigo es requerido'),
   body('name').trim().notEmpty().withMessage('El nombre es requerido'),
   body('description').optional().trim(),
@@ -1116,7 +1168,7 @@ router.post('/payment-methods', [
   }
 });
 
-router.put('/payment-methods/:id', [
+router.put('/payment-methods/:id', requireSuperAdmin, [
   body('code').optional().trim().notEmpty(),
   body('name').optional().trim().notEmpty(),
   body('description').optional().trim(),
@@ -1175,7 +1227,7 @@ router.put('/payment-methods/:id', [
   }
 });
 
-router.delete('/payment-methods/:id', (req, res) => {
+router.delete('/payment-methods/:id', requireSuperAdmin, (req, res) => {
   try {
     const method = db.prepare('SELECT * FROM payment_methods WHERE id = ?').get(req.params.id);
     if (!method) {
@@ -1200,7 +1252,7 @@ router.delete('/payment-methods/:id', (req, res) => {
   }
 });
 
-router.get('/audit-log', (req, res) => {
+router.get('/audit-log', requireSuperAdmin, (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
     const { from_date, to_date, user_id, event_type } = req.query;
@@ -1623,7 +1675,7 @@ router.put('/refunds/:id/review', [
   }
 });
 
-router.get('/accounting/summary', (req, res) => {
+router.get('/accounting/summary', requireSuperAdmin, (req, res) => {
   try {
     const { from_date, to_date } = req.query;
     
@@ -1740,7 +1792,7 @@ const LEGAL_TEXT_TYPES = [
   'liability_limitation', 'applicable_law'
 ];
 
-router.get('/legal-texts', (req, res) => {
+router.get('/legal-texts', requireSuperAdmin, (req, res) => {
   try {
     const { type, is_active } = req.query;
     
@@ -1769,7 +1821,7 @@ router.get('/legal-texts', (req, res) => {
   }
 });
 
-router.get('/legal-texts/:id', (req, res) => {
+router.get('/legal-texts/:id', requireSuperAdmin, (req, res) => {
   try {
     const text = db.prepare('SELECT * FROM legal_texts WHERE id = ?').get(req.params.id);
     if (!text) {
@@ -1782,7 +1834,7 @@ router.get('/legal-texts/:id', (req, res) => {
   }
 });
 
-router.post('/legal-texts', [
+router.post('/legal-texts', requireSuperAdmin, [
   body('type').isIn(LEGAL_TEXT_TYPES),
   body('title').notEmpty().trim(),
   body('content').notEmpty(),
@@ -1821,7 +1873,7 @@ router.post('/legal-texts', [
   }
 });
 
-router.put('/legal-texts/:id', [
+router.put('/legal-texts/:id', requireSuperAdmin, [
   body('title').optional().trim(),
   body('content').optional(),
   body('effective_date').optional().isISO8601()
@@ -1870,7 +1922,7 @@ router.put('/legal-texts/:id', [
   }
 });
 
-router.put('/legal-texts/:id/activate', (req, res) => {
+router.put('/legal-texts/:id/activate', requireSuperAdmin, (req, res) => {
   try {
     const text = db.prepare('SELECT * FROM legal_texts WHERE id = ?').get(req.params.id);
     if (!text) {
@@ -1908,7 +1960,7 @@ router.put('/legal-texts/:id/activate', (req, res) => {
   }
 });
 
-router.put('/legal-texts/:id/deactivate', (req, res) => {
+router.put('/legal-texts/:id/deactivate', requireSuperAdmin, (req, res) => {
   try {
     const text = db.prepare('SELECT * FROM legal_texts WHERE id = ?').get(req.params.id);
     if (!text) {
@@ -1944,7 +1996,7 @@ router.put('/legal-texts/:id/deactivate', (req, res) => {
   }
 });
 
-router.get('/legal-texts/history/:type', (req, res) => {
+router.get('/legal-texts/history/:type', requireSuperAdmin, (req, res) => {
   try {
     if (!LEGAL_TEXT_TYPES.includes(req.params.type)) {
       return res.status(400).json({ error: 'Tipo de texto legal no valido' });
@@ -1968,7 +2020,7 @@ router.get('/legal-texts/history/:type', (req, res) => {
   }
 });
 
-router.delete('/legal-texts/:id', (req, res) => {
+router.delete('/legal-texts/:id', requireSuperAdmin, (req, res) => {
   try {
     const text = db.prepare('SELECT * FROM legal_texts WHERE id = ?').get(req.params.id);
     if (!text) {
@@ -1990,7 +2042,7 @@ router.delete('/legal-texts/:id', (req, res) => {
   }
 });
 
-router.get('/legal-categories', (req, res) => {
+router.get('/legal-categories', requireSuperAdmin, (req, res) => {
   try {
     const categories = db.prepare('SELECT * FROM legal_categories ORDER BY label').all();
     res.json(categories);
@@ -2000,7 +2052,7 @@ router.get('/legal-categories', (req, res) => {
   }
 });
 
-router.post('/legal-categories', [
+router.post('/legal-categories', requireSuperAdmin, [
   body('key').notEmpty().trim().matches(/^[a-z_]+$/),
   body('label').notEmpty().trim()
 ], (req, res) => {
@@ -2027,7 +2079,7 @@ router.post('/legal-categories', [
   }
 });
 
-router.put('/legal-categories/:id', [
+router.put('/legal-categories/:id', requireSuperAdmin, [
   body('label').notEmpty().trim()
 ], (req, res) => {
   try {
@@ -2052,7 +2104,7 @@ router.put('/legal-categories/:id', [
   }
 });
 
-router.delete('/legal-categories/:id', (req, res) => {
+router.delete('/legal-categories/:id', requireSuperAdmin, (req, res) => {
   try {
     const category = db.prepare('SELECT * FROM legal_categories WHERE id = ?').get(req.params.id);
     if (!category) {
@@ -2337,7 +2389,7 @@ const TAX_RATES = {
 };
 
 // Dashboard de contabilidad - Resumen general
-router.get('/accounting/dashboard', (req, res) => {
+router.get('/accounting/dashboard', requireSuperAdmin, (req, res) => {
   try {
     const { year, month } = req.query;
     const currentYear = year || new Date().getFullYear();
@@ -2506,7 +2558,7 @@ router.get('/accounting/dashboard', (req, res) => {
 });
 
 // Asientos contables - CRUD
-router.get('/accounting/entries', (req, res) => {
+router.get('/accounting/entries', requireSuperAdmin, (req, res) => {
   try {
     const { from_date, to_date, entry_type, limit = 100 } = req.query;
     let query = 'SELECT * FROM accounting_entries WHERE 1=1';
@@ -2527,7 +2579,7 @@ router.get('/accounting/entries', (req, res) => {
   }
 });
 
-router.post('/accounting/entries', [
+router.post('/accounting/entries', requireSuperAdmin, [
   body('entry_date').notEmpty(),
   body('description').notEmpty(),
   body('entry_type').isIn(['income', 'expense', 'transfer', 'tax', 'dividend', 'capital', 'adjustment']),
@@ -2561,7 +2613,7 @@ router.post('/accounting/entries', [
   }
 });
 
-router.put('/accounting/entries/:id', (req, res) => {
+router.put('/accounting/entries/:id', requireSuperAdmin, (req, res) => {
   try {
     const entry = db.prepare('SELECT * FROM accounting_entries WHERE id = ?').get(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Asiento no encontrado' });
@@ -2592,7 +2644,7 @@ router.put('/accounting/entries/:id', (req, res) => {
   }
 });
 
-router.delete('/accounting/entries/:id', (req, res) => {
+router.delete('/accounting/entries/:id', requireSuperAdmin, (req, res) => {
   try {
     const entry = db.prepare('SELECT * FROM accounting_entries WHERE id = ?').get(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Asiento no encontrado' });
@@ -2608,7 +2660,7 @@ router.delete('/accounting/entries/:id', (req, res) => {
 });
 
 // Períodos fiscales
-router.get('/accounting/tax-periods', (req, res) => {
+router.get('/accounting/tax-periods', requireSuperAdmin, (req, res) => {
   try {
     const { year, tax_type, status } = req.query;
     let query = 'SELECT * FROM tax_periods WHERE 1=1';
@@ -2627,7 +2679,7 @@ router.get('/accounting/tax-periods', (req, res) => {
   }
 });
 
-router.post('/accounting/tax-periods', [
+router.post('/accounting/tax-periods', requireSuperAdmin, [
   body('tax_type').isIn(['IVA', 'IT', 'IUE', 'RC-IVA']),
   body('year').isInt({ min: 2020 }),
   body('month').optional().isInt({ min: 1, max: 12 })
@@ -2674,7 +2726,7 @@ router.post('/accounting/tax-periods', [
   }
 });
 
-router.put('/accounting/tax-periods/:id', (req, res) => {
+router.put('/accounting/tax-periods/:id', requireSuperAdmin, (req, res) => {
   try {
     const period = db.prepare('SELECT * FROM tax_periods WHERE id = ?').get(req.params.id);
     if (!period) return res.status(404).json({ error: 'Período no encontrado' });
@@ -2709,7 +2761,7 @@ router.put('/accounting/tax-periods/:id', (req, res) => {
   }
 });
 
-router.delete('/accounting/tax-periods/:id', (req, res) => {
+router.delete('/accounting/tax-periods/:id', requireSuperAdmin, (req, res) => {
   try {
     const period = db.prepare('SELECT * FROM tax_periods WHERE id = ?').get(req.params.id);
     if (!period) return res.status(404).json({ error: 'Período no encontrado' });
@@ -2727,7 +2779,7 @@ router.delete('/accounting/tax-periods/:id', (req, res) => {
 });
 
 // Pagos de impuestos
-router.get('/accounting/tax-payments', (req, res) => {
+router.get('/accounting/tax-payments', requireSuperAdmin, (req, res) => {
   try {
     const payments = db.prepare(`
       SELECT tp.*, per.tax_type, per.year, per.month, per.period_type
@@ -2742,7 +2794,7 @@ router.get('/accounting/tax-payments', (req, res) => {
   }
 });
 
-router.post('/accounting/tax-payments', [
+router.post('/accounting/tax-payments', requireSuperAdmin, [
   body('tax_period_id').notEmpty(),
   body('payment_date').notEmpty(),
   body('amount').isFloat({ min: 0.01 })
@@ -2771,7 +2823,7 @@ router.post('/accounting/tax-payments', [
   }
 });
 
-router.delete('/accounting/tax-payments/:id', (req, res) => {
+router.delete('/accounting/tax-payments/:id', requireSuperAdmin, (req, res) => {
   try {
     const payment = db.prepare('SELECT * FROM tax_payments WHERE id = ?').get(req.params.id);
     if (!payment) return res.status(404).json({ error: 'Pago no encontrado' });
@@ -2787,7 +2839,7 @@ router.delete('/accounting/tax-payments/:id', (req, res) => {
 });
 
 // Socios/Accionistas
-router.get('/accounting/shareholders', (req, res) => {
+router.get('/accounting/shareholders', requireSuperAdmin, (req, res) => {
   try {
     const shareholders = db.prepare('SELECT * FROM shareholders ORDER BY share_percentage DESC').all();
     res.json({ shareholders });
@@ -2797,7 +2849,7 @@ router.get('/accounting/shareholders', (req, res) => {
   }
 });
 
-router.post('/accounting/shareholders', [
+router.post('/accounting/shareholders', requireSuperAdmin, [
   body('name').notEmpty(),
   body('share_percentage').isFloat({ min: 0, max: 100 })
 ], (req, res) => {
@@ -2821,7 +2873,7 @@ router.post('/accounting/shareholders', [
   }
 });
 
-router.put('/accounting/shareholders/:id', (req, res) => {
+router.put('/accounting/shareholders/:id', requireSuperAdmin, (req, res) => {
   try {
     const shareholder = db.prepare('SELECT * FROM shareholders WHERE id = ?').get(req.params.id);
     if (!shareholder) return res.status(404).json({ error: 'Socio no encontrado' });
@@ -2853,7 +2905,7 @@ router.put('/accounting/shareholders/:id', (req, res) => {
   }
 });
 
-router.delete('/accounting/shareholders/:id', (req, res) => {
+router.delete('/accounting/shareholders/:id', requireSuperAdmin, (req, res) => {
   try {
     const shareholder = db.prepare('SELECT * FROM shareholders WHERE id = ?').get(req.params.id);
     if (!shareholder) return res.status(404).json({ error: 'Socio no encontrado' });
@@ -2873,7 +2925,7 @@ router.delete('/accounting/shareholders/:id', (req, res) => {
 });
 
 // Dividendos
-router.get('/accounting/dividends', (req, res) => {
+router.get('/accounting/dividends', requireSuperAdmin, (req, res) => {
   try {
     const distributions = db.prepare('SELECT * FROM dividend_distributions ORDER BY fiscal_year DESC, distribution_date DESC').all();
     res.json({ distributions });
@@ -2883,7 +2935,7 @@ router.get('/accounting/dividends', (req, res) => {
   }
 });
 
-router.post('/accounting/dividends', [
+router.post('/accounting/dividends', requireSuperAdmin, [
   body('fiscal_year').isInt({ min: 2020 }),
   body('total_profit').isFloat({ min: 0 }),
   body('distributable_profit').isFloat({ min: 0 })
@@ -2927,7 +2979,7 @@ router.post('/accounting/dividends', [
   }
 });
 
-router.get('/accounting/dividends/:id/details', (req, res) => {
+router.get('/accounting/dividends/:id/details', requireSuperAdmin, (req, res) => {
   try {
     const details = db.prepare(`
       SELECT dd.*, s.name as shareholder_name, s.email as shareholder_email
@@ -2942,7 +2994,7 @@ router.get('/accounting/dividends/:id/details', (req, res) => {
   }
 });
 
-router.put('/accounting/dividends/:id', (req, res) => {
+router.put('/accounting/dividends/:id', requireSuperAdmin, (req, res) => {
   try {
     const distribution = db.prepare('SELECT * FROM dividend_distributions WHERE id = ?').get(req.params.id);
     if (!distribution) return res.status(404).json({ error: 'Distribución no encontrada' });
@@ -2975,7 +3027,7 @@ router.put('/accounting/dividends/:id', (req, res) => {
   }
 });
 
-router.delete('/accounting/dividends/:id', (req, res) => {
+router.delete('/accounting/dividends/:id', requireSuperAdmin, (req, res) => {
   try {
     const distribution = db.prepare('SELECT * FROM dividend_distributions WHERE id = ?').get(req.params.id);
     if (!distribution) return res.status(404).json({ error: 'Distribución no encontrada' });
@@ -2992,7 +3044,7 @@ router.delete('/accounting/dividends/:id', (req, res) => {
 });
 
 // Capital
-router.get('/accounting/capital', (req, res) => {
+router.get('/accounting/capital', requireSuperAdmin, (req, res) => {
   try {
     const transactions = db.prepare('SELECT ct.*, s.name as shareholder_name FROM capital_transactions ct LEFT JOIN shareholders s ON ct.shareholder_id = s.id ORDER BY ct.transaction_date DESC').all();
     const totalCapital = db.prepare("SELECT COALESCE(SUM(capital_contributed), 0) as total FROM shareholders WHERE status = 'active'").get();
@@ -3003,7 +3055,7 @@ router.get('/accounting/capital', (req, res) => {
   }
 });
 
-router.post('/accounting/capital', [
+router.post('/accounting/capital', requireSuperAdmin, [
   body('transaction_type').isIn(['aporte', 'retiro', 'aumento', 'reduccion', 'reserva']),
   body('amount').isFloat({ min: 0.01 })
 ], (req, res) => {
@@ -3038,7 +3090,7 @@ router.post('/accounting/capital', [
   }
 });
 
-router.delete('/accounting/capital/:id', (req, res) => {
+router.delete('/accounting/capital/:id', requireSuperAdmin, (req, res) => {
   try {
     const transaction = db.prepare('SELECT * FROM capital_transactions WHERE id = ?').get(req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Movimiento no encontrado' });
@@ -3059,7 +3111,7 @@ router.delete('/accounting/capital/:id', (req, res) => {
 });
 
 // Plan de cuentas
-router.get('/accounting/chart-of-accounts', (req, res) => {
+router.get('/accounting/chart-of-accounts', requireSuperAdmin, (req, res) => {
   try {
     const accounts = db.prepare('SELECT * FROM chart_of_accounts ORDER BY code').all();
     res.json({ accounts });
@@ -3073,7 +3125,7 @@ router.get('/accounting/chart-of-accounts', (req, res) => {
 // #7: ROLES Y PERMISOS DE ADMINISTRADOR
 // ============================================
 
-router.get('/roles', (req, res) => {
+router.get('/roles', requireSuperAdmin, (req, res) => {
   try {
     const roles = db.prepare(`
       SELECT r.*, 
@@ -3087,7 +3139,7 @@ router.get('/roles', (req, res) => {
   }
 });
 
-router.get('/roles/:id', (req, res) => {
+router.get('/roles/:id', requireSuperAdmin, (req, res) => {
   try {
     const role = db.prepare('SELECT * FROM admin_roles WHERE id = ?').get(req.params.id);
     if (!role) return res.status(404).json({ error: 'Rol no encontrado' });
@@ -3099,7 +3151,7 @@ router.get('/roles/:id', (req, res) => {
   }
 });
 
-router.post('/roles', [
+router.post('/roles', requireSuperAdmin, [
   body('name').notEmpty().trim()
 ], (req, res) => {
   try {
@@ -3126,7 +3178,7 @@ router.post('/roles', [
   }
 });
 
-router.put('/roles/:id', (req, res) => {
+router.put('/roles/:id', requireSuperAdmin, (req, res) => {
   try {
     const role = db.prepare('SELECT * FROM admin_roles WHERE id = ?').get(req.params.id);
     if (!role) return res.status(404).json({ error: 'Rol no encontrado' });
@@ -3151,7 +3203,7 @@ router.put('/roles/:id', (req, res) => {
   }
 });
 
-router.delete('/roles/:id', (req, res) => {
+router.delete('/roles/:id', requireSuperAdmin, (req, res) => {
   try {
     const role = db.prepare('SELECT * FROM admin_roles WHERE id = ?').get(req.params.id);
     if (!role) return res.status(404).json({ error: 'Rol no encontrado' });
@@ -3170,14 +3222,14 @@ router.delete('/roles/:id', (req, res) => {
   }
 });
 
-router.get('/admin-users', (req, res) => {
+router.get('/admin-users', requireSuperAdmin, (req, res) => {
   try {
     const adminUsers = db.prepare(`
-      SELECT au.*, u.email, u.first_name, u.last_name, r.name as role_name
+      SELECT au.*, u.email, u.first_name, u.last_name, u.is_super_admin, r.name as role_name
       FROM admin_users au
       JOIN users u ON au.user_id = u.id
       JOIN admin_roles r ON au.role_id = r.id
-      ORDER BY au.created_at DESC
+      ORDER BY u.is_super_admin DESC, au.created_at DESC
     `).all();
     res.json(adminUsers);
   } catch (error) {
@@ -3186,7 +3238,7 @@ router.get('/admin-users', (req, res) => {
   }
 });
 
-router.post('/admin-users', [
+router.post('/admin-users', requireSuperAdmin, [
   body('user_id').notEmpty(),
   body('role_id').notEmpty()
 ], (req, res) => {
@@ -3210,7 +3262,7 @@ router.post('/admin-users', [
   }
 });
 
-router.put('/admin-users/:id', (req, res) => {
+router.put('/admin-users/:id', requireSuperAdmin, (req, res) => {
   try {
     const adminUser = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(req.params.id);
     if (!adminUser) return res.status(404).json({ error: 'Administrador no encontrado' });
@@ -3233,7 +3285,7 @@ router.put('/admin-users/:id', (req, res) => {
   }
 });
 
-router.delete('/admin-users/:id', (req, res) => {
+router.delete('/admin-users/:id', requireSuperAdmin, (req, res) => {
   try {
     const adminUser = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(req.params.id);
     if (!adminUser) return res.status(404).json({ error: 'Administrador no encontrado' });

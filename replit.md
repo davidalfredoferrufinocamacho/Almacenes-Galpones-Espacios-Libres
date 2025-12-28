@@ -18,6 +18,7 @@ The project utilizes a Node.js 20 backend with Express.js and SQLite for data pe
 *   **Anti-Bypass Clause:** Enforced for both guests and hosts to protect platform commissions.
 *   **Email Verification System:** New user registration requires email verification for account activation.
 *   **Admin Panel:** A comprehensive interface for managing users (Clients/Hosts), spaces, reservations, contracts, payments, legal texts, notifications, and system configuration, with role-based access and audit logging.
+*   **Hierarchical Admin System:** Two-tier admin structure with Super Admin (full access to all 27 sections including config, legal texts, accounting, roles, payment methods) and Admin (limited to operational sections like users, spaces, reservations). Backend protection via `requireSuperAdmin` middleware on all sensitive endpoints.
 *   **Dynamic Payment Methods:** Payment options are configurable and manageable via the admin panel.
 *   **Map Search:** Interactive map functionality using Leaflet allows geographic space discovery.
 *   **Client Portal (Portal del Cliente):** A dedicated dashboard for guests to manage reservations, contracts, payments, invoices, favorites, and profile, including account deletion with safety checks.

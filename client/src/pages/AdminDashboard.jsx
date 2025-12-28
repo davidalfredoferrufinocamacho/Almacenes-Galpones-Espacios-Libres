@@ -6,10 +6,21 @@ function AdminDashboard() {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeSection, setActiveSection] = useState('dashboard')
+  const [currentAdmin, setCurrentAdmin] = useState(null)
 
   useEffect(() => {
     loadStats()
+    loadCurrentAdmin()
   }, [])
+
+  const loadCurrentAdmin = async () => {
+    try {
+      const response = await api.get('/users/me')
+      setCurrentAdmin(response.data)
+    } catch (error) {
+      console.error('Error loading current admin:', error)
+    }
+  }
 
   const loadStats = async () => {
     try {
@@ -22,18 +33,23 @@ function AdminDashboard() {
     }
   }
 
+  const isSuperAdmin = currentAdmin?.is_super_admin === 1
+
   if (loading) {
     return <div className="loading"><div className="spinner"></div></div>
   }
 
-  const menuItems = [
+  // Secciones restringidas solo para Super Admin
+  const superAdminOnlySections = ['admin-roles', 'config', 'legal-texts', 'audit-log', 'accounting', 'payment-methods']
+
+  const allMenuItems = [
     { label: 'Dashboard', key: 'dashboard' },
     { label: 'Reportes', key: 'reports' },
     { label: 'Clientes', key: 'clients' },
     { label: 'Hosts', key: 'hosts' },
     { label: 'Verificacion Hosts', key: 'host-verifications' },
     { label: 'Usuarios', key: 'users' },
-    { label: 'Roles Admin', key: 'admin-roles' },
+    { label: 'Roles Admin', key: 'admin-roles', superAdminOnly: true },
     { label: 'Espacios', key: 'spaces' },
     { label: 'Reservaciones', key: 'reservations' },
     { label: 'Contratos', key: 'contracts' },
@@ -42,27 +58,46 @@ function AdminDashboard() {
     { label: 'Depositos Seguridad', key: 'security-deposits' },
     { label: 'Facturas', key: 'invoices' },
     { label: 'Estados de Cuenta', key: 'host-statements' },
-    { label: 'Metodos de Pago', key: 'payment-methods' },
+    { label: 'Metodos de Pago', key: 'payment-methods', superAdminOnly: true },
     { label: 'Campanas', key: 'campaigns' },
     { label: 'Badges', key: 'badges' },
     { label: 'FAQ', key: 'faq' },
     { label: 'Alertas', key: 'alerts' },
-    { label: 'Configuracion', key: 'config' },
-    { label: 'Textos Legales', key: 'legal-texts' },
+    { label: 'Configuracion', key: 'config', superAdminOnly: true },
+    { label: 'Textos Legales', key: 'legal-texts', superAdminOnly: true },
     { label: 'Notificaciones', key: 'notifications' },
-    { label: 'Auditoria', key: 'audit-log' },
-    { label: 'Contabilidad', key: 'accounting' },
+    { label: 'Auditoria', key: 'audit-log', superAdminOnly: true },
+    { label: 'Contabilidad', key: 'accounting', superAdminOnly: true },
     { label: 'Exportar', key: 'export' },
     { label: 'Mensajes', key: 'messages' },
   ]
 
+  // Filtrar menú según rol
+  const menuItems = isSuperAdmin 
+    ? allMenuItems 
+    : allMenuItems.filter(item => !item.superAdminOnly)
+
   const renderContent = () => {
+    // Verificar acceso a secciones restringidas
+    const restrictedSections = ['admin-roles', 'config', 'legal-texts', 'audit-log', 'accounting', 'payment-methods']
+    if (restrictedSections.includes(activeSection) && !isSuperAdmin) {
+      return (
+        <div style={{padding: '2rem', textAlign: 'center'}}>
+          <h2 style={{color: '#dc3545'}}>Acceso Restringido</h2>
+          <p>Esta seccion solo esta disponible para Super Administradores.</p>
+          <button onClick={() => setActiveSection('dashboard')} className="btn btn-primary">
+            Volver al Dashboard
+          </button>
+        </div>
+      )
+    }
+
     switch (activeSection) {
       case 'reports': return <AdminReports />
       case 'clients': return <AdminClients />
       case 'hosts': return <AdminHosts />
       case 'host-verifications': return <AdminHostVerifications />
-      case 'users': return <AdminUsers />
+      case 'users': return <AdminUsers isSuperAdmin={isSuperAdmin} />
       case 'admin-roles': return <AdminRoles />
       case 'spaces': return <AdminSpaces />
       case 'reservations': return <AdminReservations />
@@ -981,7 +1016,7 @@ function ItemEditModal({ editingItem, setEditingItem, itemForm, setItemForm, sav
   )
 }
 
-function AdminUsers() {
+function AdminUsers({ isSuperAdmin }) {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState({ role: '', status: '' })
@@ -1135,11 +1170,38 @@ function AdminUsers() {
                 {user.is_blocked && <span className="blocked-badge">BLOQUEADO</span>}
               </td>
               <td>
-                <select value={user.role} onChange={e => changeRole(user.id, e.target.value)} style={{padding: '0.25rem', fontSize: '0.8rem'}}>
-                  <option value="GUEST">GUEST</option>
-                  <option value="HOST">HOST</option>
-                  <option value="ADMIN">ADMIN</option>
-                </select>
+                <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
+                  {user.role === 'ADMIN' ? (
+                    <span style={{
+                      padding: '0.2rem 0.5rem',
+                      borderRadius: '12px',
+                      fontSize: '0.7rem',
+                      fontWeight: 'bold',
+                      background: user.is_super_admin ? '#dc3545' : '#fd7e14',
+                      color: 'white',
+                      textAlign: 'center'
+                    }}>
+                      {user.is_super_admin ? 'SUPER ADMIN' : 'ADMIN'}
+                    </span>
+                  ) : (
+                    <>
+                      <select value={user.role} onChange={e => changeRole(user.id, e.target.value)} style={{padding: '0.25rem', fontSize: '0.8rem'}}>
+                        <option value="GUEST">GUEST</option>
+                        <option value="HOST">HOST</option>
+                      </select>
+                      <span style={{
+                        padding: '0.15rem 0.4rem',
+                        borderRadius: '10px',
+                        fontSize: '0.65rem',
+                        background: user.role === 'HOST' ? '#198754' : '#0d6efd',
+                        color: 'white',
+                        textAlign: 'center'
+                      }}>
+                        {user.role === 'HOST' ? 'Propietario' : 'Cliente'}
+                      </span>
+                    </>
+                  )}
+                </div>
               </td>
               <td>{user.first_name} {user.last_name}</td>
               <td style={{fontSize: '0.75rem'}}>
@@ -1188,7 +1250,7 @@ function AdminUsers() {
                   <button onClick={() => toggleBlock(user.id, user.is_blocked)} className={`btn btn-sm ${user.is_blocked ? 'btn-info' : 'btn-dark'}`}>
                     {user.is_blocked ? 'Desblq.' : 'Bloquear'}
                   </button>
-                  {user.role !== 'ADMIN' && (
+                  {(user.role !== 'ADMIN' || isSuperAdmin) && (
                     <button onClick={() => deleteUser(user.id, user.email)} className="btn btn-sm btn-danger" title="Eliminar">
                       Elim.
                     </button>
@@ -4840,6 +4902,18 @@ function AdminRoles() {
     }
   }
 
+  const toggleSuperAdmin = async (userId, currentStatus) => {
+    const action = currentStatus ? 'degradar de Super Admin' : 'promover a Super Admin'
+    if (!confirm(`¿Está seguro de que desea ${action} a este usuario?`)) return
+    try {
+      await api.put(`/admin/users/${userId}/super-admin`, { is_super_admin: !currentStatus })
+      alert(currentStatus ? 'Usuario degradado de Super Admin' : 'Usuario promovido a Super Admin')
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
@@ -4891,17 +4965,39 @@ function AdminRoles() {
           <button onClick={() => { setForm({}); setShowModal('admin') }} className="btn btn-primary" style={{marginBottom: '1rem'}}>+ Agregar Administrador</button>
           <table className="admin-table">
             <thead>
-              <tr><th>Usuario</th><th>Email</th><th>Rol</th><th>MFA</th><th>Ultimo Login</th><th>Acciones</th></tr>
+              <tr><th>Usuario</th><th>Email</th><th>Tipo</th><th>MFA</th><th>Ultimo Login</th><th>Acciones</th></tr>
             </thead>
             <tbody>
               {adminUsers.map(a => (
                 <tr key={a.id}>
                   <td>{a.first_name} {a.last_name}</td>
                   <td>{a.email}</td>
-                  <td>{a.role_name}</td>
+                  <td>
+                    <span style={{
+                      padding: '0.2rem 0.5rem',
+                      borderRadius: '12px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                      background: a.is_super_admin ? '#dc3545' : '#fd7e14',
+                      color: 'white'
+                    }}>
+                      {a.is_super_admin ? 'SUPER ADMIN' : 'ADMIN'}
+                    </span>
+                  </td>
                   <td>{a.mfa_enabled ? 'Activo' : 'No'}</td>
                   <td>{a.last_login ? new Date(a.last_login).toLocaleString() : 'Nunca'}</td>
-                  <td><button onClick={() => handleRemoveAdmin(a.id)} className="btn btn-small btn-danger">Quitar</button></td>
+                  <td>
+                    <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                      <button 
+                        onClick={() => toggleSuperAdmin(a.id, a.is_super_admin)} 
+                        className={`btn btn-small ${a.is_super_admin ? 'btn-warning' : 'btn-success'}`}
+                        title={a.is_super_admin ? 'Degradar a Admin normal' : 'Promover a Super Admin'}
+                      >
+                        {a.is_super_admin ? 'Degradar' : 'Promover'}
+                      </button>
+                      <button onClick={() => handleRemoveAdmin(a.id)} className="btn btn-small btn-danger">Quitar</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

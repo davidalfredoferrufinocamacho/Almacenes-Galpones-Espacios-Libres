@@ -1053,7 +1053,8 @@ function initDatabase() {
     { table: 'users', column: 'email_verification_token', type: 'TEXT' },
     { table: 'users', column: 'email_verification_expires', type: 'TEXT' },
     { table: 'users', column: 'email_verified_at', type: 'TEXT' },
-    { table: 'users', column: 'floor', type: 'TEXT' }
+    { table: 'users', column: 'floor', type: 'TEXT' },
+    { table: 'users', column: 'is_super_admin', type: 'INTEGER DEFAULT 0' }
   ];
 
   // Backfill null categories to 'legal'
@@ -1073,6 +1074,13 @@ function initDatabase() {
     } catch (e) {
       console.log(`Migracion ${m.column}: ${e.message}`);
     }
+  }
+
+  // Marcar al admin principal como Super Admin
+  try {
+    db.exec(`UPDATE users SET is_super_admin = 1 WHERE email = 'admin@almacenes-galpones-espacios-libres.com' AND role = 'ADMIN'`);
+  } catch (e) {
+    console.log('Super Admin setup:', e.message);
   }
 
   console.log('Base de datos inicializada correctamente');
