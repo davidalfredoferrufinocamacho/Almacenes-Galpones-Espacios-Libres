@@ -28,7 +28,8 @@ function AdminDashboard() {
 
   const menuItems = [
     { label: 'Dashboard', key: 'dashboard' },
-    { label: 'Clientes/Hosts', key: 'my-panel' },
+    { label: 'Clientes', key: 'clients' },
+    { label: 'Hosts', key: 'hosts' },
     { label: 'Usuarios', key: 'users' },
     { label: 'Espacios', key: 'spaces' },
     { label: 'Reservaciones', key: 'reservations' },
@@ -46,7 +47,8 @@ function AdminDashboard() {
 
   const renderContent = () => {
     switch (activeSection) {
-      case 'my-panel': return <AdminMyPanel />
+      case 'clients': return <AdminClients />
+      case 'hosts': return <AdminHosts />
       case 'users': return <AdminUsers />
       case 'spaces': return <AdminSpaces />
       case 'reservations': return <AdminReservations />
@@ -134,10 +136,9 @@ function AdminOverview({ stats, onNavigate }) {
   )
 }
 
-function AdminMyPanel() {
+function useUserPanel(role) {
   const [data, setData] = useState({ users: [], stats: {} })
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [selectedUser, setSelectedUser] = useState(null)
@@ -149,15 +150,12 @@ function AdminMyPanel() {
   const [editingItem, setEditingItem] = useState(null)
   const [itemForm, setItemForm] = useState({})
 
-  const loadUsers = (role = '') => {
+  const loadUsers = () => {
     setLoading(true)
-    const url = role ? `/admin/panel/users?role=${role}` : '/admin/panel/users'
-    api.get(url).then(r => setData(r.data)).finally(() => setLoading(false))
+    api.get(`/admin/panel/users?role=${role}`).then(r => setData(r.data)).finally(() => setLoading(false))
   }
 
-  useEffect(() => {
-    loadUsers(activeTab === 'all' ? '' : activeTab === 'guests' ? 'GUEST' : 'HOST')
-  }, [activeTab])
+  useEffect(() => { loadUsers() }, [])
 
   const loadUserDetails = async (userId) => {
     setDetailsLoading(true)
@@ -192,7 +190,7 @@ function AdminMyPanel() {
     try {
       await api.put(`/admin/panel/users/${editingUser.id}`, editForm)
       setEditingUser(null)
-      loadUsers(activeTab === 'all' ? '' : activeTab === 'guests' ? 'GUEST' : 'HOST')
+      loadUsers()
       alert('Usuario actualizado')
     } catch (error) {
       alert(error.response?.data?.error || 'Error al actualizar')
@@ -202,7 +200,7 @@ function AdminMyPanel() {
   const toggleUserStatus = async (userId, field, currentValue) => {
     try {
       await api.put(`/admin/panel/users/${userId}`, { [field]: !currentValue })
-      loadUsers(activeTab === 'all' ? '' : activeTab === 'guests' ? 'GUEST' : 'HOST')
+      loadUsers()
       if (userDetails && userDetails.user.id === userId) {
         loadUserDetails(userId)
       }
@@ -287,6 +285,8 @@ function AdminMyPanel() {
     if (filterStatus === 'inactive' && u.is_active) return false
     if (filterStatus === 'verified' && !u.is_verified) return false
     if (filterStatus === 'with_contracts' && u.contracts_count === 0) return false
+    if (filterStatus === 'with_reservations' && u.reservations_count === 0) return false
+    if (filterStatus === 'with_spaces' && u.spaces_count === 0) return false
     return true
   })
 
@@ -299,62 +299,57 @@ function AdminMyPanel() {
     return <span style={{background: '#ffc107', color: 'black', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.7rem'}}>Activo</span>
   }
 
-  const getRoleBadge = (role) => {
-    const colors = { GUEST: '#17a2b8', HOST: '#6f42c1', ADMIN: '#dc3545' }
-    return <span style={{background: colors[role] || '#6c757d', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '3px', fontSize: '0.7rem'}}>{role}</span>
+  return {
+    data, loading, searchTerm, setSearchTerm, filterStatus, setFilterStatus,
+    selectedUser, setSelectedUser, userDetails, detailsLoading, detailTab, setDetailTab,
+    editingUser, setEditingUser, editForm, setEditForm, editingItem, setEditingItem, itemForm, setItemForm,
+    loadUsers, loadUserDetails, openEditModal, saveEdit, toggleUserStatus, exportUserData,
+    openItemEdit, saveItemEdit, deleteItem, filteredUsers, formatMoney, getStatusBadge
   }
+}
+
+function AdminClients() {
+  const p = useUserPanel('GUEST')
+  const { data, loading, searchTerm, setSearchTerm, filterStatus, setFilterStatus,
+    selectedUser, setSelectedUser, userDetails, detailsLoading, detailTab, setDetailTab,
+    editingUser, setEditingUser, editForm, setEditForm, editingItem, setEditingItem, itemForm, setItemForm,
+    loadUserDetails, openEditModal, saveEdit, toggleUserStatus, exportUserData,
+    openItemEdit, saveItemEdit, deleteItem, filteredUsers, formatMoney, getStatusBadge } = p
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
-      <h1>Clientes/Hosts</h1>
+      <h1>Clientes (Arrendatarios)</h1>
 
       <div className="stats-grid" style={{marginBottom: '1.5rem'}}>
-        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #007bff', cursor: 'pointer'}} onClick={() => { setActiveTab('all'); setFilterStatus(''); }}>
-          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Total Usuarios</h4>
+        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #17a2b8', cursor: 'pointer'}} onClick={() => setFilterStatus('')}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Total Clientes</h4>
           <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.8rem'}}>{data.stats.total || 0}</p>
           <small style={{color: '#666'}}>Activos: {data.stats.active || 0}</small>
           <small className="card-link" style={{display: 'block', marginTop: '0.25rem'}}>Ver todos →</small>
         </div>
-        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #28a745', cursor: 'pointer'}} onClick={() => { setActiveTab('all'); setFilterStatus('with_contracts'); }}>
+        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #28a745', cursor: 'pointer'}} onClick={() => setFilterStatus('with_reservations')}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Con Reservaciones</h4>
+          <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.8rem'}}>{data.users.filter(u => u.reservations_count > 0).length}</p>
+          <small style={{color: '#666'}}>Clientes activos</small>
+          <small className="card-link" style={{display: 'block', marginTop: '0.25rem'}}>Filtrar →</small>
+        </div>
+        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #6f42c1', cursor: 'pointer'}} onClick={() => setFilterStatus('with_contracts')}>
           <h4 style={{margin: 0, fontSize: '0.9rem'}}>Con Contratos</h4>
           <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.8rem'}}>{data.stats.with_contracts || 0}</p>
           <small style={{color: '#666'}}>Verificados: {data.stats.verified || 0}</small>
           <small className="card-link" style={{display: 'block', marginTop: '0.25rem'}}>Filtrar →</small>
         </div>
-        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #17a2b8', cursor: 'pointer'}} onClick={() => { setActiveTab('all'); setFilterStatus('active'); }}>
-          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Ingresos Totales</h4>
+        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #fd7e14', cursor: 'pointer'}} onClick={() => setFilterStatus('verified')}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Pagos Totales</h4>
           <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.4rem'}}>{formatMoney(data.stats.total_revenue)}</p>
-          <small style={{color: '#666'}}>Pagos completados</small>
-          <small className="card-link" style={{display: 'block', marginTop: '0.25rem'}}>Ver activos →</small>
-        </div>
-        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #6f42c1', cursor: 'pointer'}} onClick={() => { setActiveTab('hosts'); setFilterStatus(''); }}>
-          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Comisiones</h4>
-          <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.4rem'}}>{formatMoney(data.stats.total_commissions)}</p>
-          <small style={{color: '#666'}}>Total generado</small>
-          <small className="card-link" style={{display: 'block', marginTop: '0.25rem'}}>Ver hosts →</small>
+          <small style={{color: '#666'}}>Transacciones</small>
+          <small className="card-link" style={{display: 'block', marginTop: '0.25rem'}}>Ver verificados →</small>
         </div>
       </div>
 
       <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center'}}>
-        <div style={{display: 'flex', gap: '0'}}>
-          <button 
-            onClick={() => setActiveTab('all')} 
-            className={`btn ${activeTab === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{borderRadius: '4px 0 0 4px'}}
-          >Todos</button>
-          <button 
-            onClick={() => setActiveTab('guests')} 
-            className={`btn ${activeTab === 'guests' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{borderRadius: '0'}}
-          >Clientes (GUEST)</button>
-          <button 
-            onClick={() => setActiveTab('hosts')} 
-            className={`btn ${activeTab === 'hosts' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{borderRadius: '0 4px 4px 0'}}
-          >Anfitriones (HOST)</button>
-        </div>
         <input 
           type="text" 
           placeholder="Buscar por nombre, empresa o email..."
@@ -369,488 +364,488 @@ function AdminMyPanel() {
           <option value="blocked">Bloqueados</option>
           <option value="verified">Verificados</option>
           <option value="with_contracts">Con contratos</option>
+          <option value="with_reservations">Con reservaciones</option>
         </select>
       </div>
 
-      <div style={{display: 'grid', gridTemplateColumns: selectedUser ? '1fr 1.5fr' : '1fr', gap: '1rem'}}>
-        <div>
-          <table className="admin-table" style={{fontSize: '0.85rem'}}>
-            <thead>
-              <tr>
-                <th>Usuario</th>
-                <th>Rol</th>
-                <th>Estado</th>
-                <th>Actividad</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.map(u => (
-                <tr key={u.id} style={{background: selectedUser === u.id ? '#e3f2fd' : 'inherit', cursor: 'pointer'}} onClick={() => loadUserDetails(u.id)}>
-                  <td>
-                    <div style={{fontWeight: '500'}}>{u.first_name || u.company_name || 'Sin nombre'} {u.last_name || ''}</div>
-                    <div style={{fontSize: '0.75rem', color: '#666'}}>{u.email}</div>
-                    <div style={{fontSize: '0.7rem', color: '#999'}}>{u.city || 'Sin ciudad'}</div>
-                  </td>
-                  <td>{getRoleBadge(u.role)}</td>
-                  <td>{getStatusBadge(u)}</td>
-                  <td style={{fontSize: '0.75rem'}}>
-                    <div>Espacios: {u.spaces_count || 0}</div>
-                    <div>Reservas: {u.reservations_count || 0}</div>
-                    <div>Contratos: {u.contracts_count || 0}</div>
-                  </td>
-                  <td onClick={e => e.stopPropagation()}>
-                    <button onClick={() => openEditModal(u)} className="btn btn-sm btn-secondary">Editar</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredUsers.length === 0 && <p style={{textAlign: 'center', color: '#666', padding: '2rem'}}>No se encontraron usuarios</p>}
+      <UserPanelContent 
+        filteredUsers={filteredUsers} selectedUser={selectedUser} userDetails={userDetails}
+        detailsLoading={detailsLoading} detailTab={detailTab} setDetailTab={setDetailTab}
+        loadUserDetails={loadUserDetails} openEditModal={openEditModal} getStatusBadge={getStatusBadge}
+        setSelectedUser={setSelectedUser} exportUserData={exportUserData} toggleUserStatus={toggleUserStatus}
+        formatMoney={formatMoney} openItemEdit={openItemEdit} deleteItem={deleteItem} showSpaces={false}
+      />
+
+      <UserEditModal editingUser={editingUser} setEditingUser={setEditingUser} editForm={editForm} setEditForm={setEditForm} saveEdit={saveEdit} />
+      <ItemEditModal editingItem={editingItem} setEditingItem={setEditingItem} itemForm={itemForm} setItemForm={setItemForm} saveItemEdit={saveItemEdit} formatMoney={formatMoney} />
+    </div>
+  )
+}
+
+function AdminHosts() {
+  const p = useUserPanel('HOST')
+  const { data, loading, searchTerm, setSearchTerm, filterStatus, setFilterStatus,
+    selectedUser, setSelectedUser, userDetails, detailsLoading, detailTab, setDetailTab,
+    editingUser, setEditingUser, editForm, setEditForm, editingItem, setEditingItem, itemForm, setItemForm,
+    loadUserDetails, openEditModal, saveEdit, toggleUserStatus, exportUserData,
+    openItemEdit, saveItemEdit, deleteItem, filteredUsers, formatMoney, getStatusBadge } = p
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Hosts (Anfitriones)</h1>
+
+      <div className="stats-grid" style={{marginBottom: '1.5rem'}}>
+        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #6f42c1', cursor: 'pointer'}} onClick={() => setFilterStatus('')}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Total Hosts</h4>
+          <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.8rem'}}>{data.stats.total || 0}</p>
+          <small style={{color: '#666'}}>Activos: {data.stats.active || 0}</small>
+          <small className="card-link" style={{display: 'block', marginTop: '0.25rem'}}>Ver todos →</small>
         </div>
-
-        {selectedUser && userDetails && (
-          <div className="card" style={{padding: '1rem', maxHeight: '80vh', overflowY: 'auto'}}>
-            {detailsLoading ? (
-              <div className="loading"><div className="spinner"></div></div>
-            ) : (
-              <>
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem'}}>
-                  <div>
-                    <h2 style={{margin: 0}}>{userDetails.user.first_name || userDetails.user.company_name || 'Usuario'} {userDetails.user.last_name || ''}</h2>
-                    <p style={{margin: '0.25rem 0', color: '#666'}}>{userDetails.user.email}</p>
-                    <div style={{display: 'flex', gap: '0.5rem', marginTop: '0.5rem'}}>
-                      {getRoleBadge(userDetails.user.role)}
-                      {getStatusBadge(userDetails.user)}
-                    </div>
-                  </div>
-                  <div style={{display: 'flex', gap: '0.5rem'}}>
-                    <button onClick={() => exportUserData(userDetails.user.id, userDetails.user.email)} className="btn btn-sm btn-secondary">Exportar</button>
-                    <button onClick={() => setSelectedUser(null)} className="btn btn-sm btn-secondary">Cerrar</button>
-                  </div>
-                </div>
-
-                <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap'}}>
-                  {['resumen', 'espacios', 'reservaciones', 'contratos', 'pagos', 'facturas', 'busquedas'].map(tab => (
-                    <button 
-                      key={tab}
-                      onClick={() => setDetailTab(tab)}
-                      className={`btn btn-sm ${detailTab === tab ? 'btn-primary' : 'btn-secondary'}`}
-                    >{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>
-                  ))}
-                </div>
-
-                {detailTab === 'resumen' && (
-                  <div className="stats-grid" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))'}}>
-                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
-                      <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#007bff'}}>{userDetails.summary.total_spaces}</div>
-                      <div style={{fontSize: '0.75rem'}}>Espacios ({userDetails.summary.published_spaces} pub.)</div>
-                    </div>
-                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
-                      <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#17a2b8'}}>{userDetails.summary.total_reservations}</div>
-                      <div style={{fontSize: '0.75rem'}}>Reservaciones ({userDetails.summary.active_reservations} act.)</div>
-                    </div>
-                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
-                      <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#28a745'}}>{userDetails.summary.total_contracts}</div>
-                      <div style={{fontSize: '0.75rem'}}>Contratos ({userDetails.summary.signed_contracts} firm.)</div>
-                    </div>
-                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
-                      <div style={{fontSize: '1.2rem', fontWeight: 'bold', color: '#6f42c1'}}>{formatMoney(userDetails.summary.total_payments)}</div>
-                      <div style={{fontSize: '0.75rem'}}>Total Pagado</div>
-                    </div>
-                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
-                      <div style={{fontSize: '1.2rem', fontWeight: 'bold', color: '#fd7e14'}}>{formatMoney(userDetails.summary.total_commissions)}</div>
-                      <div style={{fontSize: '0.75rem'}}>Comisiones</div>
-                    </div>
-                    <div className="card" style={{padding: '0.75rem', textAlign: 'center'}}>
-                      <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#dc3545'}}>{userDetails.summary.pending_payments}</div>
-                      <div style={{fontSize: '0.75rem'}}>Pagos Pend.</div>
-                    </div>
-                  </div>
-                )}
-
-                {detailTab === 'espacios' && (
-                  <div>
-                    {userDetails.spaces.length === 0 ? (
-                      <p style={{textAlign: 'center', color: '#666'}}>Sin espacios registrados</p>
-                    ) : (
-                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
-                        <thead><tr><th>Titulo</th><th>Tipo</th><th>Ubicacion</th><th>Precio</th><th>Estado</th><th>Acciones</th></tr></thead>
-                        <tbody>
-                          {userDetails.spaces.map(s => (
-                            <tr key={s.id}>
-                              <td style={{cursor: 'pointer', color: '#007bff', textDecoration: 'underline'}} onClick={() => openItemEdit('space', s)}>{s.title}</td>
-                              <td>{s.type}</td>
-                              <td>{s.city}, {s.department}</td>
-                              <td>{s.price_per_day ? `Bs. ${s.price_per_day}/dia` : `Bs. ${s.price_per_month}/mes`}</td>
-                              <td><span style={{background: s.status === 'published' ? '#28a745' : '#6c757d', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{s.status}</span></td>
-                              <td>
-                                <button onClick={() => openItemEdit('space', s)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>Editar</button>
-                                <button onClick={() => deleteItem('space', s.id, s.title)} className="btn btn-sm btn-danger">Eliminar</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
-
-                {detailTab === 'reservaciones' && (
-                  <div>
-                    {userDetails.reservations.length === 0 ? (
-                      <p style={{textAlign: 'center', color: '#666'}}>Sin reservaciones</p>
-                    ) : (
-                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
-                        <thead><tr><th>Espacio</th><th>Periodo</th><th>Monto</th><th>Comision</th><th>Estado</th><th>Rol</th><th>Acciones</th></tr></thead>
-                        <tbody>
-                          {userDetails.reservations.map(r => (
-                            <tr key={r.id}>
-                              <td style={{cursor: 'pointer', color: '#007bff', textDecoration: 'underline'}} onClick={() => openItemEdit('reservation', r)}>{r.space_title || 'N/A'}</td>
-                              <td style={{fontSize: '0.75rem'}}>{new Date(r.start_date).toLocaleDateString('es-BO')} - {new Date(r.end_date).toLocaleDateString('es-BO')}</td>
-                              <td>{formatMoney(r.total_price)}</td>
-                              <td>{formatMoney(r.commission_amount)}</td>
-                              <td><span style={{background: r.status === 'confirmed' ? '#28a745' : r.status === 'pending' ? '#ffc107' : '#6c757d', color: r.status === 'pending' ? 'black' : 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{r.status}</span></td>
-                              <td><span style={{background: r.user_role_in_reservation === 'guest' ? '#17a2b8' : '#6f42c1', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{r.user_role_in_reservation}</span></td>
-                              <td>
-                                <button onClick={() => openItemEdit('reservation', r)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>Editar</button>
-                                <button onClick={() => deleteItem('reservation', r.id, r.space_title)} className="btn btn-sm btn-danger">Eliminar</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
-
-                {detailTab === 'contratos' && (
-                  <div>
-                    {userDetails.contracts.length === 0 ? (
-                      <p style={{textAlign: 'center', color: '#666'}}>Sin contratos</p>
-                    ) : (
-                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
-                        <thead><tr><th>Numero</th><th>Espacio</th><th>Contraparte</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
-                        <tbody>
-                          {userDetails.contracts.map(c => (
-                            <tr key={c.id}>
-                              <td style={{cursor: 'pointer', color: '#007bff', textDecoration: 'underline'}} onClick={() => openItemEdit('contract', c)}>{c.contract_number || c.id.slice(0,8)}</td>
-                              <td>{c.space_title || 'N/A'}</td>
-                              <td style={{fontSize: '0.75rem'}}>{c.guest_id === userDetails.user.id ? c.host_email : c.guest_email}</td>
-                              <td><span style={{background: c.status === 'signed' ? '#28a745' : c.status === 'pending' ? '#ffc107' : '#6c757d', color: c.status === 'pending' ? 'black' : 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{c.status}</span></td>
-                              <td style={{fontSize: '0.75rem'}}>{new Date(c.created_at).toLocaleDateString('es-BO')}</td>
-                              <td>
-                                <button onClick={() => openItemEdit('contract', c)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>Editar</button>
-                                <button onClick={() => deleteItem('contract', c.id, c.contract_number || c.id.slice(0,8))} className="btn btn-sm btn-danger">Eliminar</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
-
-                {detailTab === 'pagos' && (
-                  <div>
-                    {userDetails.payments.length === 0 ? (
-                      <p style={{textAlign: 'center', color: '#666'}}>Sin pagos registrados</p>
-                    ) : (
-                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
-                        <thead><tr><th>Tipo</th><th>Monto</th><th>Metodo</th><th>Estado</th><th>Escrow</th><th>Fecha</th><th>Acciones</th></tr></thead>
-                        <tbody>
-                          {userDetails.payments.map(p => (
-                            <tr key={p.id}>
-                              <td style={{cursor: 'pointer', color: '#007bff', textDecoration: 'underline'}} onClick={() => openItemEdit('payment', p)}>{p.payment_type}</td>
-                              <td style={{fontWeight: '500'}}>{formatMoney(p.amount)}</td>
-                              <td>{p.payment_method || 'N/A'}</td>
-                              <td><span style={{background: p.status === 'completed' ? '#28a745' : p.status === 'pending' ? '#ffc107' : '#dc3545', color: p.status === 'pending' ? 'black' : 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{p.status}</span></td>
-                              <td>{p.escrow_status || 'N/A'}</td>
-                              <td style={{fontSize: '0.75rem'}}>{new Date(p.created_at).toLocaleDateString('es-BO')}</td>
-                              <td>
-                                <button onClick={() => openItemEdit('payment', p)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>Editar</button>
-                                <button onClick={() => deleteItem('payment', p.id, p.payment_type)} className="btn btn-sm btn-danger">Eliminar</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
-
-                {detailTab === 'facturas' && (
-                  <div>
-                    {userDetails.invoices.length === 0 ? (
-                      <p style={{textAlign: 'center', color: '#666'}}>Sin facturas</p>
-                    ) : (
-                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
-                        <thead><tr><th>Numero</th><th>Monto</th><th>IVA</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
-                        <tbody>
-                          {userDetails.invoices.map(i => (
-                            <tr key={i.id}>
-                              <td style={{cursor: 'pointer', color: '#007bff', textDecoration: 'underline'}} onClick={() => openItemEdit('invoice', i)}>{i.invoice_number || i.id.slice(0,8)}</td>
-                              <td style={{fontWeight: '500'}}>{formatMoney(i.total_amount)}</td>
-                              <td>{formatMoney(i.iva_amount)}</td>
-                              <td><span style={{background: i.status === 'paid' ? '#28a745' : i.status === 'issued' ? '#17a2b8' : '#6c757d', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{i.status}</span></td>
-                              <td style={{fontSize: '0.75rem'}}>{new Date(i.created_at).toLocaleDateString('es-BO')}</td>
-                              <td>
-                                <button onClick={() => openItemEdit('invoice', i)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>Editar</button>
-                                <button onClick={() => deleteItem('invoice', i.id, i.invoice_number || i.id.slice(0,8))} className="btn btn-sm btn-danger">Eliminar</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
-
-                {detailTab === 'busquedas' && (
-                  <div>
-                    {userDetails.searches.length === 0 ? (
-                      <p style={{textAlign: 'center', color: '#666'}}>Sin historial de busquedas</p>
-                    ) : (
-                      <table className="admin-table" style={{fontSize: '0.8rem'}}>
-                        <thead><tr><th>Termino</th><th>Filtros</th><th>Resultados</th><th>Fecha</th></tr></thead>
-                        <tbody>
-                          {userDetails.searches.map((s, i) => (
-                            <tr key={i}>
-                              <td>{s.search_term || 'N/A'}</td>
-                              <td style={{fontSize: '0.7rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis'}}>{s.filters || 'Sin filtros'}</td>
-                              <td>{s.results_count || 0}</td>
-                              <td style={{fontSize: '0.75rem'}}>{new Date(s.created_at).toLocaleString('es-BO')}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
-
-                <div style={{marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #ddd'}}>
-                  <h4 style={{margin: '0 0 0.5rem 0'}}>Acciones Rapidas</h4>
-                  <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
-                    <button 
-                      onClick={() => toggleUserStatus(userDetails.user.id, 'is_active', userDetails.user.is_active)} 
-                      className={`btn btn-sm ${userDetails.user.is_active ? 'btn-warning' : 'btn-success'}`}
-                    >{userDetails.user.is_active ? 'Desactivar' : 'Activar'}</button>
-                    <button 
-                      onClick={() => toggleUserStatus(userDetails.user.id, 'is_blocked', userDetails.user.is_blocked)} 
-                      className={`btn btn-sm ${userDetails.user.is_blocked ? 'btn-success' : 'btn-danger'}`}
-                    >{userDetails.user.is_blocked ? 'Desbloquear' : 'Bloquear'}</button>
-                    <button 
-                      onClick={() => toggleUserStatus(userDetails.user.id, 'is_verified', userDetails.user.is_verified)} 
-                      className={`btn btn-sm ${userDetails.user.is_verified ? 'btn-secondary' : 'btn-primary'}`}
-                    >{userDetails.user.is_verified ? 'Quitar Verificacion' : 'Verificar'}</button>
-                    <button onClick={() => openEditModal(userDetails.user)} className="btn btn-sm btn-secondary">Editar Datos</button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #007bff', cursor: 'pointer'}} onClick={() => setFilterStatus('with_spaces')}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Con Espacios</h4>
+          <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.8rem'}}>{data.users.filter(u => u.spaces_count > 0).length}</p>
+          <small style={{color: '#666'}}>Publicando</small>
+          <small className="card-link" style={{display: 'block', marginTop: '0.25rem'}}>Filtrar →</small>
+        </div>
+        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #28a745', cursor: 'pointer'}} onClick={() => setFilterStatus('with_contracts')}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Con Contratos</h4>
+          <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.8rem'}}>{data.stats.with_contracts || 0}</p>
+          <small style={{color: '#666'}}>Arrendando</small>
+          <small className="card-link" style={{display: 'block', marginTop: '0.25rem'}}>Filtrar →</small>
+        </div>
+        <div className="stat-card card clickable" style={{padding: '1rem', borderLeft: '4px solid #fd7e14', cursor: 'pointer'}} onClick={() => setFilterStatus('verified')}>
+          <h4 style={{margin: 0, fontSize: '0.9rem'}}>Comisiones</h4>
+          <p className="stat-number" style={{margin: '0.5rem 0', fontSize: '1.4rem'}}>{formatMoney(data.stats.total_commissions)}</p>
+          <small style={{color: '#666'}}>Generadas</small>
+          <small className="card-link" style={{display: 'block', marginTop: '0.25rem'}}>Ver verificados →</small>
+        </div>
       </div>
 
-      {editingUser && (
-        <div className="modal-overlay" onClick={() => setEditingUser(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
-            <h2>Editar Usuario</h2>
-            <p style={{color: '#666', marginBottom: '1rem'}}>{editingUser.email}</p>
-            
-            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
-              <div>
-                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Nombre:</label>
-                <input type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
-              </div>
-              <div>
-                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Apellido:</label>
-                <input type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
-              </div>
-            </div>
+      <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center'}}>
+        <input 
+          type="text" 
+          placeholder="Buscar por nombre, empresa o email..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          style={{padding: '0.5rem', flex: 1, minWidth: '200px'}}
+        />
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{padding: '0.5rem'}}>
+          <option value="">Todos los estados</option>
+          <option value="active">Activos</option>
+          <option value="inactive">Inactivos</option>
+          <option value="blocked">Bloqueados</option>
+          <option value="verified">Verificados</option>
+          <option value="with_contracts">Con contratos</option>
+          <option value="with_spaces">Con espacios</option>
+        </select>
+      </div>
 
-            <div style={{marginBottom: '1rem'}}>
-              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Empresa:</label>
-              <input type="text" value={editForm.company_name} onChange={e => setEditForm({...editForm, company_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
-            </div>
+      <UserPanelContent 
+        filteredUsers={filteredUsers} selectedUser={selectedUser} userDetails={userDetails}
+        detailsLoading={detailsLoading} detailTab={detailTab} setDetailTab={setDetailTab}
+        loadUserDetails={loadUserDetails} openEditModal={openEditModal} getStatusBadge={getStatusBadge}
+        setSelectedUser={setSelectedUser} exportUserData={exportUserData} toggleUserStatus={toggleUserStatus}
+        formatMoney={formatMoney} openItemEdit={openItemEdit} deleteItem={deleteItem} showSpaces={true}
+      />
 
-            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
-              <div>
-                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Telefono:</label>
-                <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
-              </div>
-              <div>
-                <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Ciudad:</label>
-                <input type="text" value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
-              </div>
-            </div>
+      <UserEditModal editingUser={editingUser} setEditingUser={setEditingUser} editForm={editForm} setEditForm={setEditForm} saveEdit={saveEdit} />
+      <ItemEditModal editingItem={editingItem} setEditingItem={setEditingItem} itemForm={itemForm} setItemForm={setItemForm} saveItemEdit={saveItemEdit} formatMoney={formatMoney} />
+    </div>
+  )
+}
 
-            <div style={{marginBottom: '1rem'}}>
-              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Departamento:</label>
-              <select value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
-                <option value="">Seleccionar...</option>
-                {['La Paz', 'Cochabamba', 'Santa Cruz', 'Oruro', 'Potosi', 'Tarija', 'Chuquisaca', 'Beni', 'Pando'].map(d => (
-                  <option key={d} value={d}>{d}</option>
+function UserPanelContent({ filteredUsers, selectedUser, userDetails, detailsLoading, detailTab, setDetailTab,
+  loadUserDetails, openEditModal, getStatusBadge, setSelectedUser, exportUserData, toggleUserStatus,
+  formatMoney, openItemEdit, deleteItem, showSpaces }) {
+  
+  const detailTabs = showSpaces ? ['resumen', 'espacios', 'reservaciones', 'contratos', 'pagos', 'facturas'] : ['resumen', 'reservaciones', 'contratos', 'pagos', 'facturas']
+
+  return (
+    <div style={{display: 'grid', gridTemplateColumns: selectedUser ? '1fr 1.5fr' : '1fr', gap: '1rem'}}>
+      <div>
+        <table className="admin-table" style={{fontSize: '0.85rem'}}>
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Estado</th>
+              <th>Actividad</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredUsers.map(u => (
+              <tr key={u.id} style={{background: selectedUser === u.id ? '#e3f2fd' : 'inherit', cursor: 'pointer'}} onClick={() => loadUserDetails(u.id)}>
+                <td>
+                  <div style={{fontWeight: '500'}}>{u.first_name || u.company_name || 'Sin nombre'} {u.last_name || ''}</div>
+                  <div style={{fontSize: '0.75rem', color: '#666'}}>{u.email}</div>
+                  <div style={{fontSize: '0.7rem', color: '#999'}}>{u.city || 'Sin ciudad'}</div>
+                </td>
+                <td>{getStatusBadge(u)}</td>
+                <td style={{fontSize: '0.75rem'}}>
+                  {showSpaces && <div>Espacios: {u.spaces_count || 0}</div>}
+                  <div>Reservas: {u.reservations_count || 0}</div>
+                  <div>Contratos: {u.contracts_count || 0}</div>
+                </td>
+                <td onClick={e => e.stopPropagation()}>
+                  <button onClick={() => openEditModal(u)} className="btn btn-sm btn-secondary">Editar</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filteredUsers.length === 0 && <p style={{textAlign: 'center', color: '#666', padding: '2rem'}}>No se encontraron usuarios</p>}
+      </div>
+
+      {selectedUser && userDetails && (
+        <div className="card" style={{padding: '1rem', maxHeight: '80vh', overflowY: 'auto'}}>
+          {detailsLoading ? (
+            <div className="loading"><div className="spinner"></div></div>
+          ) : (
+            <>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem'}}>
+                <div>
+                  <h2 style={{margin: 0}}>{userDetails.user.first_name || userDetails.user.company_name || 'Usuario'} {userDetails.user.last_name || ''}</h2>
+                  <p style={{margin: '0.25rem 0', color: '#666'}}>{userDetails.user.email}</p>
+                  <div style={{display: 'flex', gap: '0.5rem', marginTop: '0.5rem'}}>{getStatusBadge(userDetails.user)}</div>
+                </div>
+                <div style={{display: 'flex', gap: '0.5rem'}}>
+                  <button onClick={() => exportUserData(userDetails.user.id, userDetails.user.email)} className="btn btn-sm btn-secondary">Exportar</button>
+                  <button onClick={() => setSelectedUser(null)} className="btn btn-sm btn-secondary">Cerrar</button>
+                </div>
+              </div>
+
+              <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap'}}>
+                {detailTabs.map(tab => (
+                  <button key={tab} onClick={() => setDetailTab(tab)} className={`btn btn-sm ${detailTab === tab ? 'btn-primary' : 'btn-secondary'}`}>
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
                 ))}
+              </div>
+
+              {detailTab === 'resumen' && (
+                <div className="stats-grid" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))'}}>
+                  {showSpaces && (
+                    <div className="card" style={{padding: '0.75rem', textAlign: 'center', cursor: 'pointer'}} onClick={() => setDetailTab('espacios')}>
+                      <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#007bff'}}>{userDetails.summary.total_spaces}</div>
+                      <div style={{fontSize: '0.75rem'}}>Espacios</div>
+                    </div>
+                  )}
+                  <div className="card" style={{padding: '0.75rem', textAlign: 'center', cursor: 'pointer'}} onClick={() => setDetailTab('reservaciones')}>
+                    <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#17a2b8'}}>{userDetails.summary.total_reservations}</div>
+                    <div style={{fontSize: '0.75rem'}}>Reservaciones</div>
+                  </div>
+                  <div className="card" style={{padding: '0.75rem', textAlign: 'center', cursor: 'pointer'}} onClick={() => setDetailTab('contratos')}>
+                    <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#28a745'}}>{userDetails.summary.total_contracts}</div>
+                    <div style={{fontSize: '0.75rem'}}>Contratos</div>
+                  </div>
+                  <div className="card" style={{padding: '0.75rem', textAlign: 'center', cursor: 'pointer'}} onClick={() => setDetailTab('pagos')}>
+                    <div style={{fontSize: '1.2rem', fontWeight: 'bold', color: '#6f42c1'}}>{formatMoney(userDetails.summary.total_payments)}</div>
+                    <div style={{fontSize: '0.75rem'}}>Pagos</div>
+                  </div>
+                  <div className="card" style={{padding: '0.75rem', textAlign: 'center', cursor: 'pointer'}} onClick={() => setDetailTab('facturas')}>
+                    <div style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#fd7e14'}}>{userDetails.summary.total_invoices}</div>
+                    <div style={{fontSize: '0.75rem'}}>Facturas</div>
+                  </div>
+                </div>
+              )}
+
+              {detailTab === 'espacios' && showSpaces && (
+                <div>
+                  {userDetails.spaces.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>Sin espacios</p> : (
+                    <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                      <thead><tr><th>Titulo</th><th>Tipo</th><th>Precio</th><th>Estado</th><th>Acciones</th></tr></thead>
+                      <tbody>
+                        {userDetails.spaces.map(s => (
+                          <tr key={s.id}>
+                            <td style={{cursor: 'pointer', color: '#007bff'}} onClick={() => openItemEdit('space', s)}>{s.title}</td>
+                            <td>{s.type}</td>
+                            <td>{s.price_per_day ? `Bs. ${s.price_per_day}/dia` : `Bs. ${s.price_per_month}/mes`}</td>
+                            <td><span style={{background: s.status === 'published' ? '#28a745' : '#6c757d', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{s.status}</span></td>
+                            <td>
+                              <button onClick={() => openItemEdit('space', s)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>Editar</button>
+                              <button onClick={() => deleteItem('space', s.id, s.title)} className="btn btn-sm btn-danger">Eliminar</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
+              {detailTab === 'reservaciones' && (
+                <div>
+                  {userDetails.reservations.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>Sin reservaciones</p> : (
+                    <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                      <thead><tr><th>Espacio</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead>
+                      <tbody>
+                        {userDetails.reservations.map(r => (
+                          <tr key={r.id}>
+                            <td style={{cursor: 'pointer', color: '#007bff'}} onClick={() => openItemEdit('reservation', r)}>{r.space_title || 'N/A'}</td>
+                            <td style={{fontSize: '0.75rem'}}>{new Date(r.start_date).toLocaleDateString('es-BO')} - {new Date(r.end_date).toLocaleDateString('es-BO')}</td>
+                            <td>{formatMoney(r.total_price)}</td>
+                            <td><span style={{background: r.status === 'confirmed' ? '#28a745' : r.status === 'pending' ? '#ffc107' : '#6c757d', color: r.status === 'pending' ? 'black' : 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{r.status}</span></td>
+                            <td>
+                              <button onClick={() => openItemEdit('reservation', r)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>Editar</button>
+                              <button onClick={() => deleteItem('reservation', r.id, r.space_title)} className="btn btn-sm btn-danger">Eliminar</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
+              {detailTab === 'contratos' && (
+                <div>
+                  {userDetails.contracts.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>Sin contratos</p> : (
+                    <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                      <thead><tr><th>Numero</th><th>Espacio</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
+                      <tbody>
+                        {userDetails.contracts.map(c => (
+                          <tr key={c.id}>
+                            <td style={{cursor: 'pointer', color: '#007bff'}} onClick={() => openItemEdit('contract', c)}>{c.contract_number || c.id.slice(0,8)}</td>
+                            <td>{c.space_title || 'N/A'}</td>
+                            <td><span style={{background: c.status === 'signed' ? '#28a745' : c.status === 'pending' ? '#ffc107' : '#6c757d', color: c.status === 'pending' ? 'black' : 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{c.status}</span></td>
+                            <td style={{fontSize: '0.75rem'}}>{new Date(c.created_at).toLocaleDateString('es-BO')}</td>
+                            <td>
+                              <button onClick={() => openItemEdit('contract', c)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>Editar</button>
+                              <button onClick={() => deleteItem('contract', c.id, c.contract_number)} className="btn btn-sm btn-danger">Eliminar</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
+              {detailTab === 'pagos' && (
+                <div>
+                  {userDetails.payments.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>Sin pagos</p> : (
+                    <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                      <thead><tr><th>Tipo</th><th>Monto</th><th>Estado</th><th>Escrow</th><th>Acciones</th></tr></thead>
+                      <tbody>
+                        {userDetails.payments.map(pay => (
+                          <tr key={pay.id}>
+                            <td style={{cursor: 'pointer', color: '#007bff'}} onClick={() => openItemEdit('payment', pay)}>{pay.payment_type}</td>
+                            <td style={{fontWeight: '500'}}>{formatMoney(pay.amount)}</td>
+                            <td><span style={{background: pay.status === 'completed' ? '#28a745' : pay.status === 'pending' ? '#ffc107' : '#dc3545', color: pay.status === 'pending' ? 'black' : 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{pay.status}</span></td>
+                            <td>{pay.escrow_status || 'N/A'}</td>
+                            <td>
+                              <button onClick={() => openItemEdit('payment', pay)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>Editar</button>
+                              <button onClick={() => deleteItem('payment', pay.id, pay.payment_type)} className="btn btn-sm btn-danger">Eliminar</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
+              {detailTab === 'facturas' && (
+                <div>
+                  {userDetails.invoices.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>Sin facturas</p> : (
+                    <table className="admin-table" style={{fontSize: '0.8rem'}}>
+                      <thead><tr><th>Numero</th><th>Monto</th><th>IVA</th><th>Estado</th><th>Acciones</th></tr></thead>
+                      <tbody>
+                        {userDetails.invoices.map(inv => (
+                          <tr key={inv.id}>
+                            <td style={{cursor: 'pointer', color: '#007bff'}} onClick={() => openItemEdit('invoice', inv)}>{inv.invoice_number || inv.id.slice(0,8)}</td>
+                            <td style={{fontWeight: '500'}}>{formatMoney(inv.total_amount)}</td>
+                            <td>{formatMoney(inv.iva_amount)}</td>
+                            <td><span style={{background: inv.status === 'paid' ? '#28a745' : inv.status === 'issued' ? '#17a2b8' : '#6c757d', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.7rem'}}>{inv.status}</span></td>
+                            <td>
+                              <button onClick={() => openItemEdit('invoice', inv)} className="btn btn-sm btn-secondary" style={{marginRight: '0.25rem'}}>Editar</button>
+                              <button onClick={() => deleteItem('invoice', inv.id, inv.invoice_number)} className="btn btn-sm btn-danger">Eliminar</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
+              <div style={{marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #ddd'}}>
+                <h4 style={{margin: '0 0 0.5rem 0'}}>Acciones Rapidas</h4>
+                <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
+                  <button onClick={() => toggleUserStatus(userDetails.user.id, 'is_active', userDetails.user.is_active)} className={`btn btn-sm ${userDetails.user.is_active ? 'btn-warning' : 'btn-success'}`}>
+                    {userDetails.user.is_active ? 'Desactivar' : 'Activar'}
+                  </button>
+                  <button onClick={() => toggleUserStatus(userDetails.user.id, 'is_blocked', userDetails.user.is_blocked)} className={`btn btn-sm ${userDetails.user.is_blocked ? 'btn-success' : 'btn-danger'}`}>
+                    {userDetails.user.is_blocked ? 'Desbloquear' : 'Bloquear'}
+                  </button>
+                  <button onClick={() => toggleUserStatus(userDetails.user.id, 'is_verified', userDetails.user.is_verified)} className={`btn btn-sm ${userDetails.user.is_verified ? 'btn-secondary' : 'btn-primary'}`}>
+                    {userDetails.user.is_verified ? 'Quitar Verificacion' : 'Verificar'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UserEditModal({ editingUser, setEditingUser, editForm, setEditForm, saveEdit }) {
+  if (!editingUser) return null
+  return (
+    <div className="modal-overlay" onClick={() => setEditingUser(null)}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
+        <h2>Editar Usuario</h2>
+        <p style={{color: '#666', marginBottom: '1rem'}}>{editingUser.email}</p>
+        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+          <div>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Nombre:</label>
+            <input type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+          </div>
+          <div>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Apellido:</label>
+            <input type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+          </div>
+        </div>
+        <div style={{marginBottom: '1rem'}}>
+          <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Empresa:</label>
+          <input type="text" value={editForm.company_name} onChange={e => setEditForm({...editForm, company_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+        </div>
+        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+          <div>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Telefono:</label>
+            <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+          </div>
+          <div>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Ciudad:</label>
+            <input type="text" value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+          </div>
+        </div>
+        <div style={{marginBottom: '1rem'}}>
+          <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Departamento:</label>
+          <select value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+            <option value="">Seleccionar...</option>
+            {['La Paz', 'Cochabamba', 'Santa Cruz', 'Oruro', 'Potosi', 'Tarija', 'Chuquisaca', 'Beni', 'Pando'].map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem'}}>
+          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}><input type="checkbox" checked={editForm.is_active} onChange={e => setEditForm({...editForm, is_active: e.target.checked})} /> Activo</label>
+          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}><input type="checkbox" checked={editForm.is_verified} onChange={e => setEditForm({...editForm, is_verified: e.target.checked})} /> Verificado</label>
+          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#dc3545'}}><input type="checkbox" checked={editForm.is_blocked} onChange={e => setEditForm({...editForm, is_blocked: e.target.checked})} /> Bloqueado</label>
+        </div>
+        <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
+          <button onClick={() => setEditingUser(null)} className="btn btn-secondary">Cancelar</button>
+          <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ItemEditModal({ editingItem, setEditingItem, itemForm, setItemForm, saveItemEdit, formatMoney }) {
+  if (!editingItem) return null
+  return (
+    <div className="modal-overlay" onClick={() => setEditingItem(null)}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
+        <h2>Editar {editingItem.type === 'space' ? 'Espacio' : editingItem.type === 'reservation' ? 'Reservacion' : editingItem.type === 'contract' ? 'Contrato' : editingItem.type === 'payment' ? 'Pago' : 'Factura'}</h2>
+
+        {editingItem.type === 'space' && (
+          <>
+            <div style={{marginBottom: '1rem'}}>
+              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Titulo:</label>
+              <input type="text" value={itemForm.title || ''} onChange={e => setItemForm({...itemForm, title: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+            </div>
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+              <div><label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Precio/Dia:</label><input type="number" value={itemForm.price_per_day || ''} onChange={e => setItemForm({...itemForm, price_per_day: e.target.value})} style={{width: '100%', padding: '0.5rem'}} /></div>
+              <div><label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Precio/Mes:</label><input type="number" value={itemForm.price_per_month || ''} onChange={e => setItemForm({...itemForm, price_per_month: e.target.value})} style={{width: '100%', padding: '0.5rem'}} /></div>
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
+              <select value={itemForm.status || ''} onChange={e => setItemForm({...itemForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                <option value="draft">Borrador</option><option value="published">Publicado</option><option value="rented">Alquilado</option><option value="inactive">Inactivo</option>
               </select>
             </div>
+          </>
+        )}
 
-            <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem'}}>
-              <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                <input type="checkbox" checked={editForm.is_active} onChange={e => setEditForm({...editForm, is_active: e.target.checked})} /> Activo
-              </label>
-              <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                <input type="checkbox" checked={editForm.is_verified} onChange={e => setEditForm({...editForm, is_verified: e.target.checked})} /> Verificado
-              </label>
-              <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#dc3545'}}>
-                <input type="checkbox" checked={editForm.is_blocked} onChange={e => setEditForm({...editForm, is_blocked: e.target.checked})} /> Bloqueado
-              </label>
+        {editingItem.type === 'reservation' && (
+          <>
+            <div style={{marginBottom: '1rem', background: '#f8f9fa', padding: '0.75rem', borderRadius: '4px'}}>
+              <p style={{margin: 0}}><strong>Espacio:</strong> {editingItem.item.space_title}</p>
+              <p style={{margin: '0.25rem 0'}}><strong>Monto:</strong> {formatMoney(editingItem.item.total_price)}</p>
             </div>
-
-            <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
-              <button onClick={() => setEditingUser(null)} className="btn btn-secondary">Cancelar</button>
-              <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editingItem && (
-        <div className="modal-overlay" onClick={() => setEditingItem(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
-            <h2>Editar {editingItem.type === 'space' ? 'Espacio' : editingItem.type === 'reservation' ? 'Reservacion' : editingItem.type === 'contract' ? 'Contrato' : editingItem.type === 'payment' ? 'Pago' : 'Factura'}</h2>
-            
-            {editingItem.type === 'space' && (
-              <>
-                <div style={{marginBottom: '1rem'}}>
-                  <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Titulo:</label>
-                  <input type="text" value={itemForm.title || ''} onChange={e => setItemForm({...itemForm, title: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
-                </div>
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
-                  <div>
-                    <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Precio/Dia:</label>
-                    <input type="number" value={itemForm.price_per_day || ''} onChange={e => setItemForm({...itemForm, price_per_day: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
-                  </div>
-                  <div>
-                    <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Precio/Mes:</label>
-                    <input type="number" value={itemForm.price_per_month || ''} onChange={e => setItemForm({...itemForm, price_per_month: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
-                  </div>
-                </div>
-                <div style={{marginBottom: '1rem'}}>
-                  <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
-                  <select value={itemForm.status || ''} onChange={e => setItemForm({...itemForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
-                    <option value="draft">Borrador</option>
-                    <option value="published">Publicado</option>
-                    <option value="rented">Alquilado</option>
-                    <option value="inactive">Inactivo</option>
-                  </select>
-                </div>
-              </>
-            )}
-
-            {editingItem.type === 'reservation' && (
-              <>
-                <div style={{marginBottom: '1rem', background: '#f8f9fa', padding: '0.75rem', borderRadius: '4px'}}>
-                  <p style={{margin: 0}}><strong>Espacio:</strong> {editingItem.item.space_title}</p>
-                  <p style={{margin: '0.25rem 0'}}><strong>Monto:</strong> {formatMoney(editingItem.item.total_price)}</p>
-                </div>
-                <div style={{marginBottom: '1rem'}}>
-                  <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
-                  <select value={itemForm.status || ''} onChange={e => setItemForm({...itemForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
-                    <option value="pending">Pendiente</option>
-                    <option value="confirmed">Confirmado</option>
-                    <option value="deposit_paid">Deposito Pagado</option>
-                    <option value="contract_signed">Contrato Firmado</option>
-                    <option value="completed">Completado</option>
-                    <option value="cancelled">Cancelado</option>
-                  </select>
-                </div>
-              </>
-            )}
-
-            {editingItem.type === 'contract' && (
-              <>
-                <div style={{marginBottom: '1rem', background: '#f8f9fa', padding: '0.75rem', borderRadius: '4px'}}>
-                  <p style={{margin: 0}}><strong>Numero:</strong> {editingItem.item.contract_number || editingItem.item.id.slice(0,8)}</p>
-                  <p style={{margin: '0.25rem 0'}}><strong>Espacio:</strong> {editingItem.item.space_title}</p>
-                </div>
-                <div style={{marginBottom: '1rem'}}>
-                  <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
-                  <select value={itemForm.status || ''} onChange={e => setItemForm({...itemForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
-                    <option value="pending">Pendiente</option>
-                    <option value="signed">Firmado</option>
-                    <option value="active">Activo</option>
-                    <option value="completed">Completado</option>
-                    <option value="cancelled">Cancelado</option>
-                  </select>
-                </div>
-              </>
-            )}
-
-            {editingItem.type === 'payment' && (
-              <>
-                <div style={{marginBottom: '1rem', background: '#f8f9fa', padding: '0.75rem', borderRadius: '4px'}}>
-                  <p style={{margin: 0}}><strong>Tipo:</strong> {editingItem.item.payment_type}</p>
-                  <p style={{margin: '0.25rem 0'}}><strong>Monto:</strong> {formatMoney(editingItem.item.amount)}</p>
-                </div>
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
-                  <div>
-                    <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
-                    <select value={itemForm.status || ''} onChange={e => setItemForm({...itemForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
-                      <option value="pending">Pendiente</option>
-                      <option value="completed">Completado</option>
-                      <option value="failed">Fallido</option>
-                      <option value="refunded">Reembolsado</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado Escrow:</label>
-                    <select value={itemForm.escrow_status || ''} onChange={e => setItemForm({...itemForm, escrow_status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
-                      <option value="">Sin escrow</option>
-                      <option value="held">Retenido</option>
-                      <option value="released">Liberado</option>
-                      <option value="refunded">Reembolsado</option>
-                    </select>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {editingItem.type === 'invoice' && (
-              <>
-                <div style={{marginBottom: '1rem', background: '#f8f9fa', padding: '0.75rem', borderRadius: '4px'}}>
-                  <p style={{margin: 0}}><strong>Numero:</strong> {editingItem.item.invoice_number || editingItem.item.id.slice(0,8)}</p>
-                  <p style={{margin: '0.25rem 0'}}><strong>Monto:</strong> {formatMoney(editingItem.item.total_amount)}</p>
-                </div>
-                <div style={{marginBottom: '1rem'}}>
-                  <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
-                  <select value={itemForm.status || ''} onChange={e => setItemForm({...itemForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
-                    <option value="draft">Borrador</option>
-                    <option value="issued">Emitida</option>
-                    <option value="paid">Pagada</option>
-                    <option value="cancelled">Cancelada</option>
-                  </select>
-                </div>
-              </>
-            )}
-
             <div style={{marginBottom: '1rem'}}>
-              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Notas administrativas:</label>
-              <textarea 
-                value={itemForm.notes || ''} 
-                onChange={e => setItemForm({...itemForm, notes: e.target.value})}
-                placeholder="Notas internas..."
-                style={{width: '100%', padding: '0.5rem', minHeight: '60px'}}
-              />
+              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
+              <select value={itemForm.status || ''} onChange={e => setItemForm({...itemForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                <option value="pending">Pendiente</option><option value="confirmed">Confirmado</option><option value="deposit_paid">Deposito Pagado</option><option value="contract_signed">Contrato Firmado</option><option value="completed">Completado</option><option value="cancelled">Cancelado</option>
+              </select>
             </div>
+          </>
+        )}
 
-            <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
-              <button onClick={() => setEditingItem(null)} className="btn btn-secondary">Cancelar</button>
-              <button onClick={saveItemEdit} className="btn btn-primary">Guardar Cambios</button>
+        {editingItem.type === 'contract' && (
+          <>
+            <div style={{marginBottom: '1rem', background: '#f8f9fa', padding: '0.75rem', borderRadius: '4px'}}>
+              <p style={{margin: 0}}><strong>Numero:</strong> {editingItem.item.contract_number || editingItem.item.id?.slice(0,8)}</p>
             </div>
-          </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
+              <select value={itemForm.status || ''} onChange={e => setItemForm({...itemForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                <option value="pending">Pendiente</option><option value="signed">Firmado</option><option value="active">Activo</option><option value="completed">Completado</option><option value="cancelled">Cancelado</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {editingItem.type === 'payment' && (
+          <>
+            <div style={{marginBottom: '1rem', background: '#f8f9fa', padding: '0.75rem', borderRadius: '4px'}}>
+              <p style={{margin: 0}}><strong>Tipo:</strong> {editingItem.item.payment_type}</p>
+              <p style={{margin: '0.25rem 0'}}><strong>Monto:</strong> {formatMoney(editingItem.item.amount)}</p>
+            </div>
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+              <div><label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
+                <select value={itemForm.status || ''} onChange={e => setItemForm({...itemForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                  <option value="pending">Pendiente</option><option value="completed">Completado</option><option value="failed">Fallido</option><option value="refunded">Reembolsado</option>
+                </select>
+              </div>
+              <div><label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Escrow:</label>
+                <select value={itemForm.escrow_status || ''} onChange={e => setItemForm({...itemForm, escrow_status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                  <option value="">Sin escrow</option><option value="held">Retenido</option><option value="released">Liberado</option><option value="refunded">Reembolsado</option>
+                </select>
+              </div>
+            </div>
+          </>
+        )}
+
+        {editingItem.type === 'invoice' && (
+          <>
+            <div style={{marginBottom: '1rem', background: '#f8f9fa', padding: '0.75rem', borderRadius: '4px'}}>
+              <p style={{margin: 0}}><strong>Numero:</strong> {editingItem.item.invoice_number || editingItem.item.id?.slice(0,8)}</p>
+              <p style={{margin: '0.25rem 0'}}><strong>Monto:</strong> {formatMoney(editingItem.item.total_amount)}</p>
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Estado:</label>
+              <select value={itemForm.status || ''} onChange={e => setItemForm({...itemForm, status: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+                <option value="draft">Borrador</option><option value="issued">Emitida</option><option value="paid">Pagada</option><option value="cancelled">Cancelada</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        <div style={{marginBottom: '1rem'}}>
+          <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Notas:</label>
+          <textarea value={itemForm.notes || ''} onChange={e => setItemForm({...itemForm, notes: e.target.value})} placeholder="Notas internas..." style={{width: '100%', padding: '0.5rem', minHeight: '60px'}} />
         </div>
-      )}
+
+        <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
+          <button onClick={() => setEditingItem(null)} className="btn btn-secondary">Cancelar</button>
+          <button onClick={saveItemEdit} className="btn btn-primary">Guardar</button>
+        </div>
+      </div>
     </div>
   )
 }
