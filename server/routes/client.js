@@ -121,7 +121,7 @@ router.get('/reservations', (req, res) => {
     let query = `
       SELECT r.*, s.title as space_title, s.city, s.type as space_type,
              u.first_name || ' ' || u.last_name as host_name,
-             (SELECT photo_url FROM space_photos WHERE space_id = s.id LIMIT 1) as space_photo
+             (SELECT url FROM space_photos WHERE space_id = s.id LIMIT 1) as space_photo
       FROM reservations r
       JOIN spaces s ON r.space_id = s.id
       JOIN users u ON s.host_id = u.id
@@ -433,7 +433,7 @@ router.get('/favorites', (req, res) => {
     const favorites = db.prepare(`
       SELECT f.id as favorite_id, f.created_at as favorited_at,
              s.*, u.first_name || ' ' || u.last_name as host_name,
-             (SELECT photo_url FROM space_photos WHERE space_id = s.id LIMIT 1) as photo_url
+             (SELECT url FROM space_photos WHERE space_id = s.id LIMIT 1) as photo_url
       FROM favorites f
       JOIN spaces s ON f.space_id = s.id
       JOIN users u ON s.host_id = u.id

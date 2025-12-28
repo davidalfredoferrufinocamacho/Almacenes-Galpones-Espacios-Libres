@@ -34,6 +34,18 @@ The project uses a Node.js 20 backend with Express.js and SQLite (better-sqlite3
     *   **UserPanelContent Component:** Reusable component for displaying user lists and details with role-aware tabs (Hosts see "Espacios" tab, Clients do not).
     *   **UserEditModal/ItemEditModal:** Modal components for editing users and related items (spaces, reservations, contracts, payments, invoices).
 *   **Map Search:** Interactive map search using Leaflet/react-leaflet allows users to find spaces by geographic location. Spaces with latitude/longitude coordinates are displayed as pins on a map centered on Bolivia. The GET /api/spaces/map endpoint filters by geographic bounds.
+*   **Client Portal (Portal del Cliente):** A comprehensive dashboard for guests (GUEST users) to manage their rental experience:
+    *   **Dashboard:** KPIs showing total reservations, active reservations, signed contracts, total paid. Widgets for next reservation, pending contract signatures, and pending payments. Recent activity table.
+    *   **Mis Reservaciones:** Filterable grid of reservations with status and period filters. Detail modal with space info, host info, payment history, and contract status. Cancel reservation capability for pending/confirmed reservations.
+    *   **Contratos:** Table of contracts with signature status. View modal with electronic signature capability, extension/annex history, and PDF download for fully signed contracts.
+    *   **Pagos:** Payment summary KPIs (total paid, deposits, refunds, pending). Filterable payment history table with type and status filters.
+    *   **Facturas:** Invoice list with SIAT fiscal disclaimer. PDF download capability for each invoice.
+    *   **Favoritos:** Grid of favorited spaces with quick actions to view space or remove from favorites.
+    *   **Mi Perfil:** Profile photo upload (max 2MB, JPG/PNG), personal info editing, address management, notification preferences (email/newsletter), password change.
+    *   **Anti-Bypass Modal:** Mandatory modal shown on first login for GUEST users who haven't accepted the anti-bypass clause. Must accept to use the portal.
+    *   **Database Tables:** `favorites` (user_id, space_id with unique constraint), user columns: profile_photo, email_notifications, newsletter.
+    *   **API Endpoints:** All under `/api/client/*` with JWT authentication and GUEST role requirement. 15+ endpoints covering all sections.
+    *   **Route:** `/cliente/*` accessible only to GUEST users via Header navigation ("Mi Portal" link).
 *   **Owner Portal (Portal de Propietarios):** A dedicated dashboard for property owners (HOST users) to manage their business on the platform:
     *   **Dashboard:** KPIs showing spaces count (total/published/draft), reservations stats (total/active/pending/completed), earnings summary (total/escrow/released), recent reservations table, and monthly earnings chart.
     *   **Mis Espacios:** Full CRUD for spaces with card grid view, publish/unpublish workflow (requires anti-bypass acceptance), form with type/pricing/location/coordinates/amenities.
