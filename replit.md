@@ -6,6 +6,13 @@ This project is a web platform for the technological intermediation of temporary
 ## User Preferences
 I want the agent to use a formal and professional tone. When making significant changes or architectural decisions, please ask for confirmation first. I prefer clear and concise explanations for any proposed solutions or code modifications. Do not make changes to the `uploads/` folder.
 
+**Flujo de trabajo para correcciones:**
+1. **Analizar** el problema primero
+2. **Presentar un resumen** con el diagnóstico y la solución propuesta
+3. **Esperar confirmación** del usuario antes de proceder con los cambios
+4. **Aplicar** los cambios solo después de recibir aprobación
+5. **Verificar** que funcione correctamente
+
 ## System Architecture
 The project utilizes a Node.js 20 backend with Express.js and SQLite for data persistence, while the frontend is built with React and Vite. Key architectural decisions and features include:
 
