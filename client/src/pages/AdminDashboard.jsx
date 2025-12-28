@@ -1743,12 +1743,12 @@ function AdminReservations() {
           {filteredReservations.length} de {reservations.length} reservaciones
         </span>
       </div>
-      <table className="admin-table">
+      <table className="admin-table" style={{fontSize: '0.85rem'}}>
         <thead>
           <tr>
-            <th onClick={() => handleSort('space')} style={{cursor: 'pointer', userSelect: 'none'}}>Espacio{getSortIcon('space')}</th>
-            <th onClick={() => handleSort('guest')} style={{cursor: 'pointer', userSelect: 'none'}}>Guest{getSortIcon('guest')}</th>
+            <th onClick={() => handleSort('guest')} style={{cursor: 'pointer', userSelect: 'none'}}>Cliente{getSortIcon('guest')}</th>
             <th onClick={() => handleSort('host')} style={{cursor: 'pointer', userSelect: 'none'}}>Host{getSortIcon('host')}</th>
+            <th onClick={() => handleSort('space')} style={{cursor: 'pointer', userSelect: 'none'}}>Espacio{getSortIcon('space')}</th>
             <th onClick={() => handleSort('sqm_requested')} style={{cursor: 'pointer', userSelect: 'none'}}>m²{getSortIcon('sqm_requested')}</th>
             <th onClick={() => handleSort('total_amount')} style={{cursor: 'pointer', userSelect: 'none'}}>Total{getSortIcon('total_amount')}</th>
             <th onClick={() => handleSort('deposit_amount')} style={{cursor: 'pointer', userSelect: 'none'}}>Anticipo{getSortIcon('deposit_amount')}</th>
@@ -1759,9 +1759,15 @@ function AdminReservations() {
         <tbody>
           {filteredReservations.map(r => (
             <tr key={r.id}>
+              <td>
+                <div style={{fontWeight: '500', color: '#3498db'}}>{r.guest_first_name || 'Sin nombre'}</div>
+                <div style={{fontSize: '0.7rem', color: '#666'}}>{r.guest_email}</div>
+              </td>
+              <td>
+                <div style={{fontWeight: '500', color: '#27ae60'}}>{r.host_first_name || 'Sin nombre'}</div>
+                <div style={{fontSize: '0.7rem', color: '#666'}}>{r.host_email}</div>
+              </td>
               <td>{r.space_title}</td>
-              <td>{r.guest_email}</td>
-              <td>{r.host_email}</td>
               <td>{r.sqm_requested}</td>
               <td>Bs. {r.total_amount?.toFixed(2) || '0.00'}</td>
               <td>Bs. {r.deposit_amount?.toFixed(2) || '0.00'}</td>
