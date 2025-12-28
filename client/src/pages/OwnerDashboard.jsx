@@ -248,8 +248,10 @@ function OwnerSpaces() {
     try {
       if (form.id) {
         await api.put(`/spaces/${form.id}`, form)
+        alert('Espacio actualizado exitosamente')
       } else {
         await api.post('/spaces', form)
+        alert('Espacio creado exitosamente')
       }
       setShowModal(false)
       setForm({})
