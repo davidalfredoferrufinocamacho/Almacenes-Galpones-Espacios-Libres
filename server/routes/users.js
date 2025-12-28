@@ -12,7 +12,7 @@ router.get('/me', authenticateToken, (req, res) => {
     const user = db.prepare(`
       SELECT id, email, role, person_type, first_name, last_name, company_name, 
              ci, ci_extension, nit, phone, address, city, department, 
-             is_verified, anti_bypass_accepted, created_at
+             is_verified, anti_bypass_accepted, is_super_admin, created_at
       FROM users WHERE id = ?
     `).get(req.user.id);
 
