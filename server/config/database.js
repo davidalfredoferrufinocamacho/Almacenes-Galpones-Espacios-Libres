@@ -1049,7 +1049,10 @@ function initDatabase() {
     { table: 'contact_messages', column: 'admin_notes', type: 'TEXT' },
     { table: 'users', column: 'profile_photo', type: 'TEXT' },
     { table: 'users', column: 'email_notifications', type: 'INTEGER DEFAULT 1' },
-    { table: 'users', column: 'newsletter', type: 'INTEGER DEFAULT 0' }
+    { table: 'users', column: 'newsletter', type: 'INTEGER DEFAULT 0' },
+    { table: 'users', column: 'email_verification_token', type: 'TEXT' },
+    { table: 'users', column: 'email_verification_expires', type: 'TEXT' },
+    { table: 'users', column: 'email_verified_at', type: 'TEXT' }
   ];
 
   // Backfill null categories to 'legal'

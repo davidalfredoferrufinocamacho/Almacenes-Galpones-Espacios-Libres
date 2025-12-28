@@ -791,6 +791,7 @@ function ClientProfile() {
   const [passwordForm, setPasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
   const [changingPassword, setChangingPassword] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [resendingVerification, setResendingVerification] = useState(false)
 
   useEffect(() => { loadProfile() }, [])
 
@@ -900,6 +901,17 @@ function ClientProfile() {
     setChangingPassword(false)
   }
 
+  const handleResendVerification = async () => {
+    setResendingVerification(true)
+    try {
+      await api.post('/auth/resend-verification')
+      alert('Correo de verificacion enviado. Revisa tu bandeja de entrada.')
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setResendingVerification(false)
+  }
+
   if (loading) return <div className="loading"><div className="spinner"></div></div>
   if (!profile) return <div>Error al cargar perfil</div>
 
@@ -930,6 +942,15 @@ function ClientProfile() {
           <div className={`verification-badge ${profile.is_verified ? 'verified' : ''}`}>
             {profile.is_verified ? '✓ Cuenta Verificada' : 'Cuenta No Verificada'}
           </div>
+          {!profile.is_verified && (
+            <button 
+              onClick={handleResendVerification} 
+              className="btn btn-sm btn-outline resend-verification-btn"
+              disabled={resendingVerification}
+            >
+              {resendingVerification ? 'Enviando...' : 'Reenviar Correo de Verificacion'}
+            </button>
+          )}
           <div className={`anti-bypass-badge ${profile.anti_bypass_accepted ? 'accepted' : ''}`}>
             {profile.anti_bypass_accepted ? '✓ Clausula Anti-Bypass Aceptada' : 'Anti-Bypass Pendiente'}
           </div>

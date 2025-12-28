@@ -18,6 +18,7 @@ import OwnerDashboard from './pages/OwnerDashboard'
 import ClientDashboard from './pages/ClientDashboard'
 import Legal from './pages/Legal'
 import Contact from './pages/Contact'
+import VerifyEmail from './pages/VerifyEmail'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -34,6 +35,7 @@ function App() {
           <Route path="/registro" element={<Register />} />
           <Route path="/legal/:type" element={<Legal />} />
           <Route path="/contacto" element={<Contact />} />
+          <Route path="/verificar-email/:token" element={<VerifyEmail />} />
           
           <Route path="/dashboard" element={
             <ProtectedRoute>

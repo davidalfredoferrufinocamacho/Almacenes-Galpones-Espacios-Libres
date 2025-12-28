@@ -861,6 +861,32 @@
   margin-bottom: 0.25rem;
 }
 
+.resend-verification-btn {
+  font-size: 0.75rem;
+  padding: 0.4rem 0.8rem;
+  background: transparent;
+  border: 1px solid #3b82f6;
+  color: #3b82f6;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.resend-verification-btn:hover {
+  background: #3b82f6;
+  color: white;
+}
+
+.resend-verification-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
 .danger-zone {
   background: #fef2f2;
   border: 1px solid #fecaca;

@@ -171,8 +171,82 @@ Almacenes, Galpones, Espacios Libres
   return sendEmail({ to: recipientEmail, subject, htmlBody, textBody });
 }
 
+async function sendVerificationEmail({ recipientEmail, recipientName, verificationToken, verificationUrl }) {
+  const subject = 'Verifica tu cuenta - Almacenes, Galpones, Espacios Libres';
+  
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: #f9f9f9; padding: 30px; border: 1px solid #ddd; }
+    .verify-button { display: inline-block; background: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
+    .verify-button:hover { background: #218838; }
+    .code-box { background: #e8e8e8; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 24px; letter-spacing: 5px; text-align: center; margin: 20px 0; }
+    .footer { background: #1e3a5f; color: white; padding: 15px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px; }
+    .warning { color: #856404; background: #fff3cd; padding: 10px; border-radius: 5px; font-size: 12px; }
+    h1 { margin: 0; font-size: 24px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Almacenes, Galpones, Espacios Libres</h1>
+    </div>
+    <div class="content">
+      <p>Hola <strong>${recipientName}</strong>,</p>
+      <p>Gracias por registrarte en nuestra plataforma. Para completar tu registro y verificar tu cuenta, haz clic en el siguiente boton:</p>
+      
+      <div style="text-align: center;">
+        <a href="${verificationUrl}" class="verify-button" style="color: white;">Verificar Mi Cuenta</a>
+      </div>
+      
+      <p>O copia y pega el siguiente enlace en tu navegador:</p>
+      <p style="word-break: break-all; font-size: 12px; color: #666;">${verificationUrl}</p>
+      
+      <div class="warning">
+        <strong>Importante:</strong> Este enlace expira en 24 horas. Si no solicitaste esta verificacion, puedes ignorar este correo.
+      </div>
+      
+      <p>Atentamente,<br>
+      <strong>Equipo de Soporte</strong><br>
+      Almacenes, Galpones, Espacios Libres</p>
+    </div>
+    <div class="footer">
+      <p>Este es un correo automatico. Por favor no responda directamente a este mensaje.</p>
+      <p>Bolivia - Todos los derechos reservados</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const textBody = `
+Hola ${recipientName},
+
+Gracias por registrarte en Almacenes, Galpones, Espacios Libres.
+
+Para verificar tu cuenta, visita el siguiente enlace:
+${verificationUrl}
+
+Este enlace expira en 24 horas.
+
+Si no solicitaste esta verificacion, puedes ignorar este correo.
+
+Atentamente,
+Equipo de Soporte
+Almacenes, Galpones, Espacios Libres
+`;
+
+  return sendEmail({ to: recipientEmail, subject, htmlBody, textBody });
+}
+
 module.exports = {
   sendEmail,
   sendContactResponseEmail,
+  sendVerificationEmail,
   getGmailClient
 };
