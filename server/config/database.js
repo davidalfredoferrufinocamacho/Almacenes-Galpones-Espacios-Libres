@@ -151,7 +151,7 @@ function initDatabase() {
       user_id TEXT NOT NULL,
       amount REAL NOT NULL,
       payment_type TEXT NOT NULL CHECK(payment_type IN ('deposit', 'remaining', 'extension', 'refund')),
-      payment_method TEXT CHECK(payment_method IN ('card', 'qr')),
+      payment_method TEXT,
       status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'failed', 'refunded', 'approved', 'rejected')),
       escrow_status TEXT CHECK(escrow_status IN ('held', 'released', 'refunded')),
       transaction_id TEXT,
