@@ -500,7 +500,7 @@ router.get('/profile', (req, res) => {
   try {
     const user = db.prepare(`
       SELECT id, email, role, person_type, first_name, last_name, company_name,
-             ci, nit, phone, address, city, department, country, street, street_number,
+             ci, nit, phone, address, city, department, country, street, street_number, floor,
              profile_photo, email_notifications, newsletter,
              is_verified, anti_bypass_accepted, anti_bypass_accepted_at,
              created_at
@@ -524,6 +524,7 @@ router.put('/profile', [
   body('phone').optional().trim(),
   body('address').optional().trim().isLength({ max: 200 }),
   body('street_number').optional().trim().isLength({ max: 20 }),
+  body('floor').optional().trim().isLength({ max: 20 }),
   body('city').optional().trim().isLength({ max: 50 }),
   body('department').optional().trim(),
   body('country').optional().trim(),
@@ -535,8 +536,8 @@ router.put('/profile', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const allowedFields = ['first_name', 'last_name', 'phone', 'address', 'street_number', 'city', 
-      'department', 'country', 'nit', 'email_notifications', 'newsletter', 'anti_bypass_accepted'];
+    const allowedFields = ['first_name', 'last_name', 'phone', 'address', 'street_number', 'floor',
+      'city', 'department', 'country', 'nit', 'email_notifications', 'newsletter', 'anti_bypass_accepted'];
     
     // Check if user has already accepted anti-bypass (one-way enforcement)
     const currentUser = db.prepare('SELECT anti_bypass_accepted FROM users WHERE id = ?').get(req.user.id);

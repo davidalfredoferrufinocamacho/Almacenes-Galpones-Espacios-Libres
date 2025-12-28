@@ -4,6 +4,33 @@ const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { getClientInfo, generateId } = require('../utils/helpers');
+const bcrypt = require('bcryptjs');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = 'uploads/profile-photos';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${req.user.id}-${Date.now()}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error('Solo se permiten imagenes JPG o PNG'));
+  }
+});
 
 const router = express.Router();
 
@@ -429,7 +456,8 @@ router.get('/profile', (req, res) => {
     const userId = req.user.id;
     const user = db.prepare(`
       SELECT id, email, role, person_type, first_name, last_name, company_name,
-             ci, nit, phone, city, department, street, street_number, country,
+             ci, nit, phone, address, city, department, street, street_number, floor, country,
+             profile_photo, email_notifications, newsletter,
              is_verified, anti_bypass_accepted, anti_bypass_accepted_at, created_at
       FROM users WHERE id = ?
     `).get(userId);
@@ -448,6 +476,228 @@ router.get('/profile', (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener perfil' });
+  }
+});
+
+router.put('/profile', [
+  body('first_name').optional().trim().isLength({ min: 2, max: 50 }),
+  body('last_name').optional().trim().isLength({ min: 2, max: 50 }),
+  body('phone').optional().trim(),
+  body('address').optional().trim().isLength({ max: 200 }),
+  body('street_number').optional().trim().isLength({ max: 20 }),
+  body('floor').optional().trim().isLength({ max: 20 }),
+  body('city').optional().trim().isLength({ max: 50 }),
+  body('department').optional().trim(),
+  body('country').optional().trim(),
+  body('nit').optional().trim().isLength({ max: 20 })
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const allowedFields = ['first_name', 'last_name', 'phone', 'address', 'street_number', 'floor',
+      'city', 'department', 'country', 'nit', 'email_notifications', 'newsletter', 'anti_bypass_accepted'];
+    
+    const currentUser = db.prepare('SELECT anti_bypass_accepted FROM users WHERE id = ?').get(req.user.id);
+    
+    const updates = [];
+    const values = [];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        const val = req.body[field];
+        
+        if (field === 'anti_bypass_accepted') {
+          if (currentUser.anti_bypass_accepted === 1) {
+            continue;
+          }
+          if (!val) {
+            continue;
+          }
+          updates.push(`${field} = ?`);
+          values.push(1);
+          updates.push('anti_bypass_accepted_at = ?');
+          values.push(new Date().toISOString());
+          continue;
+        }
+        
+        updates.push(`${field} = ?`);
+        if (field === 'email_notifications' || field === 'newsletter') {
+          values.push(val ? 1 : 0);
+        } else {
+          values.push(val);
+        }
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay cambios' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(req.user.id);
+
+    db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    logAudit(req.user.id, 'PROFILE_UPDATED', 'users', req.user.id, null, req.body, req);
+
+    res.json({ message: 'Perfil actualizado exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar perfil' });
+  }
+});
+
+router.post('/profile/photo', upload.single('photo'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se proporciono imagen' });
+    }
+
+    const user = db.prepare('SELECT profile_photo FROM users WHERE id = ?').get(req.user.id);
+    
+    if (user.profile_photo && fs.existsSync(user.profile_photo)) {
+      fs.unlinkSync(user.profile_photo);
+    }
+
+    const photoPath = req.file.path;
+    db.prepare('UPDATE users SET profile_photo = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(photoPath, req.user.id);
+
+    logAudit(req.user.id, 'PROFILE_PHOTO_UPDATED', 'users', req.user.id, 
+      { old_photo: user.profile_photo }, { new_photo: photoPath }, req);
+
+    res.json({ message: 'Foto actualizada', photo_url: photoPath });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al subir foto' });
+  }
+});
+
+router.delete('/profile/photo', (req, res) => {
+  try {
+    const user = db.prepare('SELECT profile_photo FROM users WHERE id = ?').get(req.user.id);
+
+    if (user.profile_photo && fs.existsSync(user.profile_photo)) {
+      fs.unlinkSync(user.profile_photo);
+    }
+
+    db.prepare('UPDATE users SET profile_photo = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(req.user.id);
+
+    logAudit(req.user.id, 'PROFILE_PHOTO_DELETED', 'users', req.user.id, 
+      { photo: user.profile_photo }, null, req);
+
+    res.json({ message: 'Foto eliminada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar foto' });
+  }
+});
+
+router.put('/profile/password', [
+  body('current_password').notEmpty(),
+  body('new_password').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/),
+  body('confirm_password').custom((value, { req }) => value === req.body.new_password)
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const user = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user.id);
+
+    const isValid = await bcrypt.compare(req.body.current_password, user.password);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Contrasena actual incorrecta' });
+    }
+
+    const hashedPassword = await bcrypt.hash(req.body.new_password, 10);
+    db.prepare('UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(hashedPassword, req.user.id);
+
+    logAudit(req.user.id, 'PASSWORD_CHANGED', 'users', req.user.id, null, null, req);
+
+    res.json({ message: 'Contrasena actualizada exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al cambiar contrasena' });
+  }
+});
+
+router.delete('/account', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = db.prepare('SELECT email, first_name, last_name, profile_photo FROM users WHERE id = ?').get(userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const hasActiveSpaces = db.prepare(`
+      SELECT COUNT(*) as count FROM spaces s
+      WHERE s.user_id = ? AND s.status IN ('published', 'paused')
+      AND EXISTS (
+        SELECT 1 FROM reservations r 
+        WHERE r.space_id = s.id AND r.status NOT IN ('cancelled', 'refunded', 'completed', 'expired')
+      )
+    `).get(userId);
+
+    if (hasActiveSpaces.count > 0) {
+      return res.status(400).json({ 
+        error: 'No puede eliminar su cuenta mientras tenga espacios con reservaciones activas. Por favor espere a que se completen o cancelen las reservaciones.' 
+      });
+    }
+
+    const hasActiveContracts = db.prepare(`
+      SELECT COUNT(*) as count FROM contracts c
+      JOIN spaces s ON c.space_id = s.id
+      WHERE s.user_id = ? AND c.status NOT IN ('cancelled', 'completed', 'expired')
+    `).get(userId);
+
+    if (hasActiveContracts.count > 0) {
+      return res.status(400).json({ 
+        error: 'No puede eliminar su cuenta mientras tenga contratos activos o pendientes de firma.' 
+      });
+    }
+
+    const hasPendingPayments = db.prepare(`
+      SELECT COUNT(*) as count FROM payments p
+      JOIN reservations r ON p.reservation_id = r.id
+      JOIN spaces s ON r.space_id = s.id
+      WHERE s.user_id = ? AND p.escrow_status = 'held'
+    `).get(userId);
+
+    if (hasPendingPayments.count > 0) {
+      return res.status(400).json({ 
+        error: 'No puede eliminar su cuenta mientras tenga pagos pendientes de liberacion en escrow.' 
+      });
+    }
+
+    if (user.profile_photo && fs.existsSync(user.profile_photo)) {
+      fs.unlinkSync(user.profile_photo);
+    }
+
+    db.prepare('UPDATE spaces SET status = "deleted" WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM notification_log WHERE recipient_id = ?').run(userId);
+    db.prepare('UPDATE audit_log SET user_id = NULL WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM campaign_recipients WHERE user_id = ?').run(userId);
+
+    const auditData = { email: user.email, name: `${user.first_name} ${user.last_name}`, deleted_at: new Date().toISOString() };
+    db.prepare(`
+      INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, old_data, new_data, ip_address, user_agent, created_at)
+      VALUES (?, NULL, 'HOST_ACCOUNT_DELETED', 'users', ?, ?, NULL, ?, ?, CURRENT_TIMESTAMP)
+    `).run(`audit_${Date.now()}`, userId, JSON.stringify(auditData), req.ip, req.get('User-Agent'));
+
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+    res.json({ message: 'Cuenta eliminada exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar cuenta' });
   }
 });
 

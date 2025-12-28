@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import './OwnerDashboard.css'
 
@@ -738,15 +739,140 @@ function OwnerStatements() {
 }
 
 function OwnerProfile() {
+  const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [resendingVerification, setResendingVerification] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
-  useEffect(() => {
-    api.get('/profile').then(res => {
+  useEffect(() => { loadProfile() }, [])
+
+  const loadProfile = () => {
+    api.get('/owner/profile').then(res => {
       setProfile(res.data)
+      setForm(res.data)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [])
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await api.put('/owner/profile', {
+        first_name: form.first_name,
+        last_name: form.last_name,
+        phone: form.phone,
+        nit: form.nit,
+        address: form.address,
+        street_number: form.street_number,
+        floor: form.floor,
+        city: form.city,
+        department: form.department,
+        country: form.country,
+        email_notifications: form.email_notifications,
+        newsletter: form.newsletter
+      })
+      loadProfile()
+      setEditing(false)
+      alert('Perfil actualizado exitosamente')
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setSaving(false)
+  }
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('La imagen no debe superar 2MB')
+      return
+    }
+
+    setUploadingPhoto(true)
+    const formData = new FormData()
+    formData.append('photo', file)
+
+    try {
+      const res = await api.post('/owner/profile/photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setProfile({ ...profile, profile_photo: res.data.photo_url })
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setUploadingPhoto(false)
+  }
+
+  const handleDeletePhoto = async () => {
+    if (!confirm('Eliminar foto de perfil?')) return
+    try {
+      await api.delete('/owner/profile/photo')
+      setProfile({ ...profile, profile_photo: null })
+    } catch (error) {
+      alert('Error al eliminar foto')
+    }
+  }
+
+  const handleChangePassword = async () => {
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      alert('Las contrasenas no coinciden')
+      return
+    }
+    if (passwordForm.new_password.length < 8) {
+      alert('La contrasena debe tener al menos 8 caracteres')
+      return
+    }
+
+    setChangingPassword(true)
+    try {
+      await api.put('/owner/profile/password', passwordForm)
+      alert('Contrasena actualizada exitosamente')
+      setShowPasswordModal(false)
+      setPasswordForm({ current_password: '', new_password: '', confirm_password: '' })
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setChangingPassword(false)
+  }
+
+  const handleResendVerification = async () => {
+    setResendingVerification(true)
+    try {
+      await api.post('/auth/resend-verification')
+      alert('Correo de verificacion enviado. Revisa tu bandeja de entrada.')
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setResendingVerification(false)
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!confirm('Esta seguro que desea eliminar su cuenta? Esta accion es IRREVERSIBLE.')) return
+
+    setDeletingAccount(true)
+    try {
+      await api.delete('/owner/account')
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      alert('Cuenta eliminada exitosamente')
+      navigate('/')
+      window.location.reload()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setDeletingAccount(false)
+    setShowDeleteModal(false)
+  }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
   if (!profile) return <div>Error al cargar perfil</div>
@@ -754,29 +880,243 @@ function OwnerProfile() {
   return (
     <div>
       <h1>Mi Perfil</h1>
-      
-      <div className="profile-section">
-        <h2>Informacion Personal</h2>
-        <div className="detail-grid">
-          <div><strong>Nombre:</strong> {profile.first_name} {profile.last_name}</div>
-          <div><strong>Email:</strong> {profile.email}</div>
-          <div><strong>Telefono:</strong> {profile.phone || 'No registrado'}</div>
-          <div><strong>Tipo:</strong> {profile.person_type === 'individual' ? 'Persona Natural' : 'Empresa'}</div>
-          {profile.company_name && <div><strong>Empresa:</strong> {profile.company_name}</div>}
-          <div><strong>CI:</strong> {profile.ci || 'No registrado'}</div>
-          <div><strong>NIT:</strong> {profile.nit || 'No registrado'}</div>
-          <div><strong>Ciudad:</strong> {profile.city}</div>
-          <div><strong>Departamento:</strong> {profile.department}</div>
-          <div><strong>Direccion:</strong> {profile.street} {profile.street_number}</div>
-          <div><strong>Verificado:</strong> {profile.is_verified ? 'Si' : 'No'}</div>
-          <div><strong>Anti-Bypass:</strong> {profile.anti_bypass_accepted ? 'Aceptado' : 'Pendiente'}</div>
-          <div><strong>Miembro desde:</strong> {new Date(profile.created_at).toLocaleDateString()}</div>
+
+      <div className="profile-header">
+        <div className="profile-photo-section">
+          {profile.profile_photo ? (
+            <img src={`/${profile.profile_photo}`} alt="Foto de perfil" className="profile-photo" />
+          ) : (
+            <div className="profile-photo-placeholder">
+              <span>{profile.first_name?.charAt(0)}{profile.last_name?.charAt(0)}</span>
+            </div>
+          )}
+          <div className="photo-actions">
+            <label className="btn btn-sm">
+              {uploadingPhoto ? 'Subiendo...' : 'Cambiar Foto'}
+              <input type="file" accept="image/jpeg,image/png" onChange={handlePhotoUpload} hidden />
+            </label>
+            {profile.profile_photo && (
+              <button onClick={handleDeletePhoto} className="btn btn-sm btn-danger">Eliminar</button>
+            )}
+          </div>
+        </div>
+        <div className="profile-status">
+          <div className={`verification-badge ${profile.is_verified ? 'verified' : ''}`}>
+            {profile.is_verified ? '✓ Cuenta Verificada' : 'Cuenta No Verificada'}
+          </div>
+          {!profile.is_verified && (
+            <button 
+              onClick={handleResendVerification} 
+              className="btn btn-sm btn-outline resend-verification-btn"
+              disabled={resendingVerification}
+            >
+              {resendingVerification ? 'Enviando...' : 'Reenviar Correo de Verificacion'}
+            </button>
+          )}
+          <div className={`anti-bypass-badge ${profile.anti_bypass_accepted ? 'accepted' : ''}`}>
+            {profile.anti_bypass_accepted ? '✓ Clausula Anti-Bypass Aceptada' : 'Anti-Bypass Pendiente'}
+          </div>
+          <p className="member-since">Miembro desde: {new Date(profile.created_at).toLocaleDateString()}</p>
+        </div>
+      </div>
+
+      <div className="profile-form">
+        <div className="form-section">
+          <h3>Informacion Personal</h3>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Nombre</label>
+              {editing ? (
+                <input value={form.first_name || ''} onChange={e => setForm({ ...form, first_name: e.target.value })} />
+              ) : (
+                <p>{profile.first_name}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Apellido</label>
+              {editing ? (
+                <input value={form.last_name || ''} onChange={e => setForm({ ...form, last_name: e.target.value })} />
+              ) : (
+                <p>{profile.last_name}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Email</label>
+              <p>{profile.email}</p>
+            </div>
+            <div className="form-group">
+              <label>Telefono</label>
+              {editing ? (
+                <input value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} />
+              ) : (
+                <p>{profile.phone || '-'}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Tipo</label>
+              <p>{profile.person_type === 'natural' ? 'Persona Natural' : 'Empresa'}</p>
+            </div>
+            {profile.company_name && (
+              <div className="form-group">
+                <label>Empresa</label>
+                <p>{profile.company_name}</p>
+              </div>
+            )}
+            <div className="form-group">
+              <label>CI</label>
+              <p>{profile.ci || '-'}</p>
+            </div>
+            <div className="form-group">
+              <label>NIT (opcional)</label>
+              {editing ? (
+                <input value={form.nit || ''} onChange={e => setForm({ ...form, nit: e.target.value })} placeholder="Numero de Identificacion Tributaria" />
+              ) : (
+                <p>{profile.nit || '-'}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="form-section">
+          <h3>Direccion</h3>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Direccion</label>
+              {editing ? (
+                <input value={form.address || ''} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Calle, zona, etc." />
+              ) : (
+                <p>{profile.address || '-'}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Numero</label>
+              {editing ? (
+                <input value={form.street_number || ''} onChange={e => setForm({ ...form, street_number: e.target.value })} placeholder="Ej: 123" />
+              ) : (
+                <p>{profile.street_number || '-'}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Piso/Interior</label>
+              {editing ? (
+                <input value={form.floor || ''} onChange={e => setForm({ ...form, floor: e.target.value })} placeholder="Ej: 2do piso, Of. 5" />
+              ) : (
+                <p>{profile.floor || '-'}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Ciudad</label>
+              {editing ? (
+                <input value={form.city || ''} onChange={e => setForm({ ...form, city: e.target.value })} />
+              ) : (
+                <p>{profile.city || '-'}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Departamento</label>
+              {editing ? (
+                <select value={form.department || ''} onChange={e => setForm({ ...form, department: e.target.value })}>
+                  <option value="">Seleccione</option>
+                  <option value="La Paz">La Paz</option>
+                  <option value="Cochabamba">Cochabamba</option>
+                  <option value="Santa Cruz">Santa Cruz</option>
+                  <option value="Oruro">Oruro</option>
+                  <option value="Potosi">Potosi</option>
+                  <option value="Chuquisaca">Chuquisaca</option>
+                  <option value="Tarija">Tarija</option>
+                  <option value="Beni">Beni</option>
+                  <option value="Pando">Pando</option>
+                </select>
+              ) : (
+                <p>{profile.department || '-'}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Pais</label>
+              {editing ? (
+                <input value={form.country || 'Bolivia'} onChange={e => setForm({ ...form, country: e.target.value })} />
+              ) : (
+                <p>{profile.country || 'Bolivia'}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="form-section">
+          <h3>Preferencias de Notificacion</h3>
+          <div className="form-grid">
+            <div className="form-group checkbox-group">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={editing ? (form.email_notifications || false) : (profile.email_notifications || false)}
+                  disabled={!editing}
+                  onChange={e => setForm({ ...form, email_notifications: e.target.checked })}
+                />
+                Recibir notificaciones por email
+              </label>
+            </div>
+            <div className="form-group checkbox-group">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={editing ? (form.newsletter || false) : (profile.newsletter || false)}
+                  disabled={!editing}
+                  onChange={e => setForm({ ...form, newsletter: e.target.checked })}
+                />
+                Suscribirse al boletin informativo
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="form-section">
+          <h3>Clausula Anti-Bypass</h3>
+          {profile.anti_bypass_accepted ? (
+            <div className="anti-bypass-status accepted">
+              <span className="status-icon">✓</span>
+              <div className="status-text">
+                <strong>Clausula Aceptada</strong>
+                <p className="accepted-info">Aceptada el: {new Date(profile.anti_bypass_accepted_at).toLocaleDateString()}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="anti-bypass-status pending">
+              <span className="status-icon">⚠</span>
+              <div className="status-text">
+                <strong>Pendiente de Aceptacion</strong>
+                <p>Debe aceptar la clausula anti-bypass para publicar espacios.</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="form-actions">
+          {editing ? (
+            <>
+              <button onClick={handleSave} className="btn btn-primary" disabled={saving}>
+                {saving ? 'Guardando...' : 'Guardar Cambios'}
+              </button>
+              <button onClick={() => { setEditing(false); setForm(profile) }} className="btn btn-secondary">
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setEditing(true)} className="btn btn-primary">
+                Editar Perfil
+              </button>
+              <button onClick={() => setShowPasswordModal(true)} className="btn btn-secondary">
+                Cambiar Contrasena
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {profile.verification && (
-        <div className="profile-section">
-          <h2>Estado de Verificacion</h2>
+        <div className="profile-section" style={{marginTop: '2rem'}}>
+          <h2>Estado de Verificacion de Documentos</h2>
           <div className="detail-grid">
             <div><strong>Estado:</strong> <span className={`status-badge status-${profile.verification.status}`}>{profile.verification.status}</span></div>
             <div><strong>Tipo Documento:</strong> {profile.verification.document_type}</div>
@@ -788,8 +1128,8 @@ function OwnerProfile() {
       )}
 
       {profile.badges?.length > 0 && (
-        <div className="profile-section">
-          <h2>Insignias</h2>
+        <div className="profile-section" style={{marginTop: '2rem'}}>
+          <h2>Insignias Obtenidas</h2>
           <div className="badges-grid">
             {profile.badges.map(b => (
               <div key={b.id} className="badge-card">
@@ -798,6 +1138,76 @@ function OwnerProfile() {
                 <span className="badge-desc">{b.description}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      <div className="danger-zone" style={{marginTop: '2rem'}}>
+        <h3>Zona de Peligro</h3>
+        <p>La eliminacion de la cuenta es permanente y no se puede deshacer.</p>
+        <button onClick={() => setShowDeleteModal(true)} className="btn btn-danger">
+          Eliminar Mi Cuenta
+        </button>
+      </div>
+
+      {showPasswordModal && (
+        <div className="modal-overlay" onClick={() => setShowPasswordModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Cambiar Contrasena</h2>
+            <div className="form-group">
+              <label>Contrasena Actual</label>
+              <input 
+                type="password" 
+                value={passwordForm.current_password}
+                onChange={e => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label>Nueva Contrasena</label>
+              <input 
+                type="password" 
+                value={passwordForm.new_password}
+                onChange={e => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
+              />
+              <small>Minimo 8 caracteres, con mayuscula, minuscula y numero</small>
+            </div>
+            <div className="form-group">
+              <label>Confirmar Nueva Contrasena</label>
+              <input 
+                type="password" 
+                value={passwordForm.confirm_password}
+                onChange={e => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
+              />
+            </div>
+            <div className="modal-actions">
+              <button onClick={handleChangePassword} className="btn btn-primary" disabled={changingPassword}>
+                {changingPassword ? 'Cambiando...' : 'Cambiar Contrasena'}
+              </button>
+              <button onClick={() => setShowPasswordModal(false)} className="btn btn-secondary">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteModal && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Eliminar Cuenta</h2>
+            <p style={{color: '#dc2626', fontWeight: 'bold'}}>
+              Esta accion eliminara permanentemente su cuenta y todos sus datos.
+            </p>
+            <p>No podra recuperar su cuenta despues de eliminarla.</p>
+            <p>Sus espacios seran marcados como eliminados.</p>
+            <div className="modal-actions">
+              <button onClick={handleDeleteAccount} className="btn btn-danger" disabled={deletingAccount}>
+                {deletingAccount ? 'Eliminando...' : 'Si, Eliminar Mi Cuenta'}
+              </button>
+              <button onClick={() => setShowDeleteModal(false)} className="btn btn-secondary">
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

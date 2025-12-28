@@ -1052,7 +1052,8 @@ function initDatabase() {
     { table: 'users', column: 'newsletter', type: 'INTEGER DEFAULT 0' },
     { table: 'users', column: 'email_verification_token', type: 'TEXT' },
     { table: 'users', column: 'email_verification_expires', type: 'TEXT' },
-    { table: 'users', column: 'email_verified_at', type: 'TEXT' }
+    { table: 'users', column: 'email_verified_at', type: 'TEXT' },
+    { table: 'users', column: 'floor', type: 'TEXT' }
   ];
 
   // Backfill null categories to 'legal'

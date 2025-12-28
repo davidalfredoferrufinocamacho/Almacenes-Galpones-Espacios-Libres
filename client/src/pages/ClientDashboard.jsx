@@ -813,13 +813,15 @@ function ClientProfile() {
         phone: form.phone,
         nit: form.nit,
         address: form.address,
+        street_number: form.street_number,
+        floor: form.floor,
         city: form.city,
         department: form.department,
         country: form.country,
         email_notifications: form.email_notifications ? true : false,
         newsletter: form.newsletter ? true : false
       })
-      setProfile({ ...profile, ...form })
+      loadProfile()
       setEditing(false)
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -1022,6 +1024,14 @@ function ClientProfile() {
                 <input value={form.street_number || ''} onChange={e => setForm({ ...form, street_number: e.target.value })} placeholder="Ej: 123" />
               ) : (
                 <p>{profile.street_number || '-'}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Piso/Interior</label>
+              {editing ? (
+                <input value={form.floor || ''} onChange={e => setForm({ ...form, floor: e.target.value })} placeholder="Ej: 2do piso, Of. 5" />
+              ) : (
+                <p>{profile.floor || '-'}</p>
               )}
             </div>
             <div className="form-group">
