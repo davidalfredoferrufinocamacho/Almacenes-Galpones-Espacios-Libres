@@ -53,6 +53,7 @@ function AdminDashboard() {
     { label: 'Clientes', key: 'clients' },
     { label: 'Configuracion', key: 'config', superAdminOnly: true },
     { label: 'Contabilidad', key: 'accounting', superAdminOnly: true },
+    { label: 'Contenido Homepage', key: 'homepage-content', superAdminOnly: true },
     { label: 'Contratos', key: 'contracts' },
     { label: 'Depositos Seguridad', key: 'security-deposits' },
     { label: 'Disputas', key: 'disputes' },
@@ -81,7 +82,7 @@ function AdminDashboard() {
 
   const renderContent = () => {
     // Verificar acceso a secciones restringidas
-    const restrictedSections = ['admin-roles', 'config', 'legal-texts', 'audit-log', 'accounting', 'payment-methods', 'backup']
+    const restrictedSections = ['admin-roles', 'config', 'legal-texts', 'audit-log', 'accounting', 'payment-methods', 'backup', 'homepage-content']
     if (restrictedSections.includes(activeSection) && !isSuperAdmin) {
       return (
         <div style={{padding: '2rem', textAlign: 'center'}}>
@@ -122,6 +123,7 @@ function AdminDashboard() {
       case 'backup': return <AdminBackup />
       case 'export': return <AdminExport />
       case 'messages': return <AdminMessages />
+      case 'homepage-content': return <AdminHomepageContent />
       default: return <AdminOverview stats={stats} onNavigate={setActiveSection} />
     }
   }
@@ -6464,6 +6466,160 @@ function AdminBackup() {
             </table>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function AdminHomepageContent() {
+  const [content, setContent] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  const contentFields = [
+    { section: 'Hero (Banner Principal)', fields: [
+      { key: 'hero_title', label: 'Titulo Principal' },
+      { key: 'hero_subtitle', label: 'Subtitulo' },
+      { key: 'hero_button1_text', label: 'Texto Boton 1' },
+      { key: 'hero_button2_text', label: 'Texto Boton 2' },
+    ]},
+    { section: 'Como Funciona', fields: [
+      { key: 'howit_section_title', label: 'Titulo Seccion' },
+      { key: 'howit_step1_title', label: 'Paso 1 - Titulo' },
+      { key: 'howit_step1_description', label: 'Paso 1 - Descripcion' },
+      { key: 'howit_step2_title', label: 'Paso 2 - Titulo' },
+      { key: 'howit_step2_description', label: 'Paso 2 - Descripcion' },
+      { key: 'howit_step3_title', label: 'Paso 3 - Titulo' },
+      { key: 'howit_step3_description', label: 'Paso 3 - Descripcion' },
+    ]},
+    { section: 'Espacios Destacados', fields: [
+      { key: 'featured_section_title', label: 'Titulo Seccion' },
+      { key: 'featured_see_all_text', label: 'Texto Link "Ver todos"' },
+    ]},
+    { section: 'Intermediacion Segura (Features)', fields: [
+      { key: 'trust_section_title', label: 'Titulo Seccion' },
+      { key: 'trust_feature1_title', label: 'Feature 1 - Titulo' },
+      { key: 'trust_feature1_description', label: 'Feature 1 - Descripcion' },
+      { key: 'trust_feature2_title', label: 'Feature 2 - Titulo' },
+      { key: 'trust_feature2_description', label: 'Feature 2 - Descripcion' },
+      { key: 'trust_feature3_title', label: 'Feature 3 - Titulo' },
+      { key: 'trust_feature3_description', label: 'Feature 3 - Descripcion' },
+      { key: 'trust_feature4_title', label: 'Feature 4 - Titulo' },
+      { key: 'trust_feature4_description', label: 'Feature 4 - Descripcion' },
+    ]},
+  ]
+
+  useEffect(() => {
+    loadContent()
+  }, [])
+
+  const loadContent = async () => {
+    try {
+      const response = await api.get('/spaces/config/homepage')
+      setContent(response.data)
+    } catch (error) {
+      console.error('Error loading homepage content:', error)
+      setMessage({ type: 'error', text: 'Error al cargar contenido' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleChange = (key, value) => {
+    setContent(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setMessage(null)
+    try {
+      const updates = Object.entries(content).map(([key, value]) => 
+        api.put(`/admin/config/${key}`, { value })
+      )
+      await Promise.all(updates)
+      setMessage({ type: 'success', text: 'Contenido guardado exitosamente' })
+    } catch (error) {
+      console.error('Error saving content:', error)
+      setMessage({ type: 'error', text: 'Error al guardar contenido' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem'}}>
+        <div>
+          <h1>Contenido Pagina Principal</h1>
+          <p style={{color: '#666', margin: 0}}>Edite todos los textos visibles en la pagina principal publica.</p>
+        </div>
+        <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{minWidth: '150px'}}>
+          {saving ? 'Guardando...' : 'Guardar Cambios'}
+        </button>
+      </div>
+
+      {message && (
+        <div style={{
+          padding: '1rem',
+          marginBottom: '1rem',
+          borderRadius: '8px',
+          background: message.type === 'success' ? '#d4edda' : '#f8d7da',
+          color: message.type === 'success' ? '#155724' : '#721c24'
+        }}>
+          {message.text}
+        </div>
+      )}
+
+      {contentFields.map(group => (
+        <div key={group.section} className="card" style={{padding: '1.5rem', marginBottom: '1.5rem'}}>
+          <h3 style={{marginBottom: '1.5rem', paddingBottom: '0.75rem', borderBottom: '2px solid #eee'}}>{group.section}</h3>
+          <div style={{display: 'grid', gap: '1rem'}}>
+            {group.fields.map(field => (
+              <div key={field.key}>
+                <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: '#333'}}>
+                  {field.label}
+                </label>
+                {field.key.includes('description') || field.key.includes('subtitle') ? (
+                  <textarea
+                    value={content[field.key] || ''}
+                    onChange={(e) => handleChange(field.key, e.target.value)}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      fontSize: '1rem',
+                      resize: 'vertical'
+                    }}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={content[field.key] || ''}
+                    onChange={(e) => handleChange(field.key, e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      fontSize: '1rem'
+                    }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div style={{textAlign: 'center', marginTop: '2rem'}}>
+        <button onClick={handleSave} disabled={saving} className="btn btn-primary btn-lg" style={{minWidth: '200px'}}>
+          {saving ? 'Guardando...' : 'Guardar Todos los Cambios'}
+        </button>
       </div>
     </div>
   )
