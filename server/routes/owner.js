@@ -148,8 +148,6 @@ router.get('/spaces/:id', (req, res) => {
 router.post('/spaces', [
   body('title').notEmpty().trim(),
   body('description').notEmpty(),
-  body('price_per_month').isNumeric(),
-  body('area_m2').isNumeric(),
   body('city').notEmpty()
 ], (req, res) => {
   const errors = validationResult(req);
@@ -160,7 +158,9 @@ router.post('/spaces', [
   try {
     const userId = req.user.id;
     const id = generateId();
-    const { title, description, space_type, price_per_sqm_month, price_per_sqm_day, total_sqm, available_sqm,
+    const { title, description, space_type, 
+            price_per_sqm_month, price_per_sqm_day, price_per_month, price_per_day,
+            total_sqm, available_sqm, area_m2,
             city, department, address, street, street_number, latitude, longitude,
             amenities, rules, min_rental_days, max_rental_days } = req.body;
 
