@@ -28,15 +28,25 @@ function AdminDashboard() {
 
   const menuItems = [
     { label: 'Dashboard', key: 'dashboard' },
+    { label: 'Reportes', key: 'reports' },
     { label: 'Clientes', key: 'clients' },
     { label: 'Hosts', key: 'hosts' },
+    { label: 'Verificacion Hosts', key: 'host-verifications' },
     { label: 'Usuarios', key: 'users' },
+    { label: 'Roles Admin', key: 'admin-roles' },
     { label: 'Espacios', key: 'spaces' },
     { label: 'Reservaciones', key: 'reservations' },
     { label: 'Contratos', key: 'contracts' },
+    { label: 'Disputas', key: 'disputes' },
     { label: 'Pagos', key: 'payments' },
+    { label: 'Depositos Seguridad', key: 'security-deposits' },
     { label: 'Facturas', key: 'invoices' },
+    { label: 'Estados de Cuenta', key: 'host-statements' },
     { label: 'Metodos de Pago', key: 'payment-methods' },
+    { label: 'Campanas', key: 'campaigns' },
+    { label: 'Badges', key: 'badges' },
+    { label: 'FAQ', key: 'faq' },
+    { label: 'Alertas', key: 'alerts' },
     { label: 'Configuracion', key: 'config' },
     { label: 'Textos Legales', key: 'legal-texts' },
     { label: 'Notificaciones', key: 'notifications' },
@@ -48,15 +58,25 @@ function AdminDashboard() {
 
   const renderContent = () => {
     switch (activeSection) {
+      case 'reports': return <AdminReports />
       case 'clients': return <AdminClients />
       case 'hosts': return <AdminHosts />
+      case 'host-verifications': return <AdminHostVerifications />
       case 'users': return <AdminUsers />
+      case 'admin-roles': return <AdminRoles />
       case 'spaces': return <AdminSpaces />
       case 'reservations': return <AdminReservations />
       case 'contracts': return <AdminContracts />
+      case 'disputes': return <AdminDisputes />
       case 'payments': return <AdminPayments />
+      case 'security-deposits': return <AdminSecurityDeposits />
       case 'invoices': return <AdminInvoices />
+      case 'host-statements': return <AdminHostStatements />
       case 'payment-methods': return <AdminPaymentMethods />
+      case 'campaigns': return <AdminCampaigns />
+      case 'badges': return <AdminBadges />
+      case 'faq': return <AdminFAQ />
+      case 'alerts': return <AdminAlerts />
       case 'config': return <AdminConfig />
       case 'legal-texts': return <AdminLegalTexts />
       case 'notifications': return <AdminNotificationTemplates />
@@ -4368,6 +4388,1496 @@ function AdminExport() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ============================================
+// #2: REPORTES AVANZADOS
+// ============================================
+function AdminReports() {
+  const [data, setData] = useState(null)
+  const [kpis, setKpis] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [dateRange, setDateRange] = useState({ start: '', end: '' })
+
+  useEffect(() => { loadData() }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [reportsRes, kpisRes] = await Promise.all([
+        api.get('/admin/reports/overview'),
+        api.get('/admin/reports/kpis')
+      ])
+      setData(reportsRes.data)
+      setKpis(kpisRes.data)
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Reportes y Analiticas</h1>
+      
+      <div className="stats-grid" style={{marginBottom: '2rem'}}>
+        <div className="stat-card card">
+          <h3>Ingresos Totales</h3>
+          <p className="stat-number">Bs. {kpis?.total_revenue?.toFixed(2) || '0.00'}</p>
+        </div>
+        <div className="stat-card card">
+          <h3>Ingresos (30 dias)</h3>
+          <p className="stat-number">Bs. {kpis?.monthly_revenue?.toFixed(2) || '0.00'}</p>
+        </div>
+        <div className="stat-card card">
+          <h3>Comisiones Totales</h3>
+          <p className="stat-number">Bs. {kpis?.total_commissions?.toFixed(2) || '0.00'}</p>
+        </div>
+        <div className="stat-card card">
+          <h3>Contratos Activos</h3>
+          <p className="stat-number">{kpis?.active_contracts || 0}</p>
+        </div>
+        <div className="stat-card card">
+          <h3>Verificaciones Pendientes</h3>
+          <p className="stat-number">{kpis?.pending_verifications || 0}</p>
+        </div>
+        <div className="stat-card card">
+          <h3>Disputas Abiertas</h3>
+          <p className="stat-number">{kpis?.open_disputes || 0}</p>
+        </div>
+        <div className="stat-card card">
+          <h3>Tasa de Conversion</h3>
+          <p className="stat-number">{kpis?.conversion_rate || 0}%</p>
+        </div>
+        <div className="stat-card card">
+          <h3>Valor Promedio Contrato</h3>
+          <p className="stat-number">Bs. {kpis?.avg_contract_value?.toFixed(2) || '0.00'}</p>
+        </div>
+        <div className="stat-card card">
+          <h3>Balance Escrow</h3>
+          <p className="stat-number">Bs. {kpis?.escrow_balance?.toFixed(2) || '0.00'}</p>
+        </div>
+        <div className="stat-card card">
+          <h3>Nuevos Usuarios (30d)</h3>
+          <p className="stat-number">{kpis?.new_users_30d || 0}</p>
+        </div>
+      </div>
+
+      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem'}}>
+        <div className="card" style={{padding: '1.5rem'}}>
+          <h3>Top 10 Hosts por Ingresos</h3>
+          <table className="admin-table" style={{marginTop: '1rem'}}>
+            <thead>
+              <tr><th>Host</th><th>Contratos</th><th>Ingresos</th></tr>
+            </thead>
+            <tbody>
+              {data?.topHosts?.map(h => (
+                <tr key={h.id}>
+                  <td>{h.first_name} {h.last_name || h.company_name}</td>
+                  <td>{h.contracts_count}</td>
+                  <td>Bs. {h.total_revenue?.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="card" style={{padding: '1.5rem'}}>
+          <h3>Top 10 Espacios por Ingresos</h3>
+          <table className="admin-table" style={{marginTop: '1rem'}}>
+            <thead>
+              <tr><th>Espacio</th><th>Reservas</th><th>Ingresos</th></tr>
+            </thead>
+            <tbody>
+              {data?.topSpaces?.map(s => (
+                <tr key={s.id}>
+                  <td>{s.title}</td>
+                  <td>{s.reservations_count}</td>
+                  <td>Bs. {s.total_revenue?.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card" style={{padding: '1.5rem', marginTop: '2rem'}}>
+        <h3>Ingresos Mensuales</h3>
+        <table className="admin-table" style={{marginTop: '1rem'}}>
+          <thead>
+            <tr><th>Mes</th><th>Transacciones</th><th>Total</th></tr>
+          </thead>
+          <tbody>
+            {data?.revenue?.map(r => (
+              <tr key={r.month}>
+                <td>{r.month}</td>
+                <td>{r.count}</td>
+                <td>Bs. {r.total?.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ============================================
+// #3: GESTION DE DISPUTAS
+// ============================================
+function AdminDisputes() {
+  const [data, setData] = useState({ disputes: [], stats: {} })
+  const [loading, setLoading] = useState(true)
+  const [selectedDispute, setSelectedDispute] = useState(null)
+  const [filterStatus, setFilterStatus] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [form, setForm] = useState({})
+
+  useEffect(() => { loadData() }, [filterStatus])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const url = filterStatus ? `/admin/disputes?status=${filterStatus}` : '/admin/disputes'
+      const response = await api.get(url)
+      setData(response.data)
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadDisputeDetails = async (id) => {
+    try {
+      const response = await api.get(`/admin/disputes/${id}`)
+      setSelectedDispute(response.data)
+    } catch (error) {
+      alert('Error al cargar detalles')
+    }
+  }
+
+  const handleUpdate = async (id, updates) => {
+    try {
+      await api.put(`/admin/disputes/${id}`, updates)
+      alert('Disputa actualizada')
+      loadData()
+      if (selectedDispute?.id === id) loadDisputeDetails(id)
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleAddComment = async (e) => {
+    e.preventDefault()
+    if (!form.comment) return
+    try {
+      await api.post(`/admin/disputes/${selectedDispute.id}/comments`, {
+        comment: form.comment,
+        is_internal: form.is_internal || false
+      })
+      setForm({})
+      loadDisputeDetails(selectedDispute.id)
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const statusColors = {
+    open: '#ef4444', in_review: '#f59e0b', awaiting_response: '#3b82f6',
+    resolved_favor_guest: '#10b981', resolved_favor_host: '#10b981',
+    resolved_mutual: '#10b981', closed: '#6b7280', escalated: '#dc2626'
+  }
+
+  const statusLabels = {
+    open: 'Abierta', in_review: 'En Revision', awaiting_response: 'Esperando Respuesta',
+    resolved_favor_guest: 'Resuelta (Cliente)', resolved_favor_host: 'Resuelta (Host)',
+    resolved_mutual: 'Resuelta (Mutuo)', closed: 'Cerrada', escalated: 'Escalada'
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Gestion de Disputas</h1>
+      
+      <div className="stats-grid" style={{marginBottom: '1.5rem'}}>
+        <div className="stat-card card"><h4>Total</h4><p className="stat-number">{data.stats.total}</p></div>
+        <div className="stat-card card" style={{borderLeft: '4px solid #ef4444'}}><h4>Abiertas</h4><p className="stat-number">{data.stats.open}</p></div>
+        <div className="stat-card card" style={{borderLeft: '4px solid #f59e0b'}}><h4>En Revision</h4><p className="stat-number">{data.stats.in_review}</p></div>
+        <div className="stat-card card" style={{borderLeft: '4px solid #dc2626'}}><h4>Urgentes</h4><p className="stat-number">{data.stats.urgent}</p></div>
+      </div>
+
+      <div style={{marginBottom: '1rem'}}>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{padding: '0.5rem'}}>
+          <option value="">Todos los estados</option>
+          <option value="open">Abiertas</option>
+          <option value="in_review">En Revision</option>
+          <option value="awaiting_response">Esperando Respuesta</option>
+          <option value="escalated">Escaladas</option>
+        </select>
+      </div>
+
+      <div style={{display: 'grid', gridTemplateColumns: selectedDispute ? '1fr 1fr' : '1fr', gap: '1.5rem'}}>
+        <div>
+          <table className="admin-table">
+            <thead>
+              <tr><th>N°</th><th>Asunto</th><th>Demandante</th><th>Estado</th><th>Prioridad</th><th>Fecha</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              {data.disputes.map(d => (
+                <tr key={d.id} style={{background: selectedDispute?.id === d.id ? '#e7f3ff' : ''}}>
+                  <td>{d.dispute_number}</td>
+                  <td>{d.subject}</td>
+                  <td>{d.complainant_first_name} {d.complainant_last_name}</td>
+                  <td><span className="badge" style={{background: statusColors[d.status]}}>{statusLabels[d.status]}</span></td>
+                  <td><span className="badge" style={{background: d.priority === 'urgent' ? '#dc2626' : d.priority === 'high' ? '#f59e0b' : '#6b7280'}}>{d.priority}</span></td>
+                  <td>{new Date(d.created_at).toLocaleDateString()}</td>
+                  <td><button onClick={() => loadDisputeDetails(d.id)} className="btn btn-small">Ver</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {selectedDispute && (
+          <div className="card" style={{padding: '1.5rem'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
+              <h3>{selectedDispute.dispute_number}</h3>
+              <button onClick={() => setSelectedDispute(null)} className="btn btn-small">X</button>
+            </div>
+            <p><strong>Asunto:</strong> {selectedDispute.subject}</p>
+            <p><strong>Categoria:</strong> {selectedDispute.category}</p>
+            <p><strong>Demandante:</strong> {selectedDispute.complainant_first_name} {selectedDispute.complainant_last_name} ({selectedDispute.complainant_email})</p>
+            <p><strong>Demandado:</strong> {selectedDispute.respondent_first_name} {selectedDispute.respondent_last_name} ({selectedDispute.respondent_email})</p>
+            <p><strong>Descripcion:</strong> {selectedDispute.description}</p>
+
+            <div style={{marginTop: '1rem'}}>
+              <label>Cambiar Estado:</label>
+              <select value={selectedDispute.status} onChange={e => handleUpdate(selectedDispute.id, { status: e.target.value })} style={{marginLeft: '0.5rem', padding: '0.25rem'}}>
+                <option value="open">Abierta</option>
+                <option value="in_review">En Revision</option>
+                <option value="awaiting_response">Esperando Respuesta</option>
+                <option value="resolved_favor_guest">Resuelta (Cliente)</option>
+                <option value="resolved_favor_host">Resuelta (Host)</option>
+                <option value="resolved_mutual">Resuelta (Mutuo)</option>
+                <option value="escalated">Escalada</option>
+                <option value="closed">Cerrada</option>
+              </select>
+            </div>
+
+            <h4 style={{marginTop: '1.5rem'}}>Comentarios ({selectedDispute.comments?.length || 0})</h4>
+            <div style={{maxHeight: '200px', overflowY: 'auto', marginBottom: '1rem'}}>
+              {selectedDispute.comments?.map(c => (
+                <div key={c.id} style={{padding: '0.5rem', marginBottom: '0.5rem', background: c.is_internal ? '#fff3cd' : '#f8f9fa', borderRadius: '4px'}}>
+                  <small><strong>{c.first_name} {c.last_name}</strong> - {new Date(c.created_at).toLocaleString()}{c.is_internal ? ' (Interno)' : ''}</small>
+                  <p style={{margin: '0.25rem 0 0'}}>{c.comment}</p>
+                </div>
+              ))}
+            </div>
+            <form onSubmit={handleAddComment}>
+              <textarea value={form.comment || ''} onChange={e => setForm({...form, comment: e.target.value})} placeholder="Agregar comentario..." style={{width: '100%', padding: '0.5rem', marginBottom: '0.5rem'}} rows="2"></textarea>
+              <label style={{display: 'block', marginBottom: '0.5rem'}}><input type="checkbox" checked={form.is_internal || false} onChange={e => setForm({...form, is_internal: e.target.checked})} /> Comentario interno (no visible para usuarios)</label>
+              <button type="submit" className="btn btn-primary btn-small">Agregar Comentario</button>
+            </form>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============================================
+// #7: ROLES Y PERMISOS
+// ============================================
+function AdminRoles() {
+  const [roles, setRoles] = useState([])
+  const [adminUsers, setAdminUsers] = useState([])
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('roles')
+  const [showModal, setShowModal] = useState(null)
+  const [form, setForm] = useState({})
+
+  useEffect(() => { loadData() }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [rolesRes, adminUsersRes, usersRes] = await Promise.all([
+        api.get('/admin/roles'),
+        api.get('/admin/admin-users'),
+        api.get('/admin/users')
+      ])
+      setRoles(rolesRes.data)
+      setAdminUsers(adminUsersRes.data)
+      setUsers(usersRes.data.filter(u => u.role !== 'ADMIN'))
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSaveRole = async (e) => {
+    e.preventDefault()
+    try {
+      if (form.id) {
+        await api.put(`/admin/roles/${form.id}`, form)
+      } else {
+        await api.post('/admin/roles', form)
+      }
+      alert('Rol guardado')
+      setShowModal(null)
+      setForm({})
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleDeleteRole = async (id) => {
+    if (!confirm('Eliminar este rol?')) return
+    try {
+      await api.delete(`/admin/roles/${id}`)
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleAddAdmin = async (e) => {
+    e.preventDefault()
+    try {
+      await api.post('/admin/admin-users', form)
+      alert('Administrador agregado')
+      setShowModal(null)
+      setForm({})
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleRemoveAdmin = async (id) => {
+    if (!confirm('Quitar permisos de administrador?')) return
+    try {
+      await api.delete(`/admin/admin-users/${id}`)
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Roles y Administradores</h1>
+      
+      <div style={{marginBottom: '1rem'}}>
+        <button onClick={() => setActiveTab('roles')} className={`btn ${activeTab === 'roles' ? 'btn-primary' : 'btn-secondary'}`} style={{marginRight: '0.5rem'}}>Roles</button>
+        <button onClick={() => setActiveTab('admins')} className={`btn ${activeTab === 'admins' ? 'btn-primary' : 'btn-secondary'}`}>Administradores</button>
+      </div>
+
+      {activeTab === 'roles' && (
+        <div>
+          <button onClick={() => { setForm({}); setShowModal('role') }} className="btn btn-primary" style={{marginBottom: '1rem'}}>+ Nuevo Rol</button>
+          <table className="admin-table">
+            <thead>
+              <tr><th>Nombre</th><th>Descripcion</th><th>Usuarios</th><th>Sistema</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              {roles.map(r => (
+                <tr key={r.id}>
+                  <td>{r.name}</td>
+                  <td>{r.description}</td>
+                  <td>{r.users_count}</td>
+                  <td>{r.is_system ? 'Si' : 'No'}</td>
+                  <td>
+                    {!r.is_system && (
+                      <>
+                        <button onClick={async () => { 
+                          try {
+                            const res = await api.get(`/admin/roles/${r.id}`)
+                            setForm(res.data)
+                            setShowModal('role')
+                          } catch (e) { setForm(r); setShowModal('role') }
+                        }} className="btn btn-small" style={{marginRight: '0.25rem'}}>Editar</button>
+                        <button onClick={() => handleDeleteRole(r.id)} className="btn btn-small btn-danger">Eliminar</button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {activeTab === 'admins' && (
+        <div>
+          <button onClick={() => { setForm({}); setShowModal('admin') }} className="btn btn-primary" style={{marginBottom: '1rem'}}>+ Agregar Administrador</button>
+          <table className="admin-table">
+            <thead>
+              <tr><th>Usuario</th><th>Email</th><th>Rol</th><th>MFA</th><th>Ultimo Login</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              {adminUsers.map(a => (
+                <tr key={a.id}>
+                  <td>{a.first_name} {a.last_name}</td>
+                  <td>{a.email}</td>
+                  <td>{a.role_name}</td>
+                  <td>{a.mfa_enabled ? 'Activo' : 'No'}</td>
+                  <td>{a.last_login ? new Date(a.last_login).toLocaleString() : 'Nunca'}</td>
+                  <td><button onClick={() => handleRemoveAdmin(a.id)} className="btn btn-small btn-danger">Quitar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showModal === 'role' && (
+        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto'}}>
+            <h2>{form.id ? 'Editar' : 'Nuevo'} Rol</h2>
+            <form onSubmit={handleSaveRole}>
+              <div className="form-group">
+                <label>Nombre</label>
+                <input type="text" value={form.name || ''} onChange={e => setForm({...form, name: e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label>Descripcion</label>
+                <textarea value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} rows="2"></textarea>
+              </div>
+              <div className="form-group">
+                <label style={{marginBottom: '0.5rem', display: 'block'}}>Permisos por Seccion</label>
+                <table className="admin-table" style={{fontSize: '0.85rem'}}>
+                  <thead>
+                    <tr><th>Seccion</th><th>Ver</th><th>Crear</th><th>Editar</th><th>Eliminar</th></tr>
+                  </thead>
+                  <tbody>
+                    {['dashboard', 'reports', 'clients', 'hosts', 'host-verifications', 'users', 'admin-roles', 'spaces', 'reservations', 'contracts', 'disputes', 'payments', 'security-deposits', 'invoices', 'host-statements', 'payment-methods', 'campaigns', 'badges', 'faq', 'alerts', 'config', 'legal-texts', 'notifications', 'audit-log', 'accounting', 'export', 'messages'].map(section => {
+                      const perm = (form.permissions || []).find(p => p.section === section) || { section, can_view: false, can_create: false, can_edit: false, can_delete: false }
+                      const updatePerm = (field, value) => {
+                        const perms = [...(form.permissions || [])]
+                        const idx = perms.findIndex(p => p.section === section)
+                        if (idx >= 0) {
+                          perms[idx] = { ...perms[idx], [field]: value }
+                        } else {
+                          perms.push({ section, can_view: false, can_create: false, can_edit: false, can_delete: false, [field]: value })
+                        }
+                        setForm({ ...form, permissions: perms })
+                      }
+                      return (
+                        <tr key={section}>
+                          <td style={{textTransform: 'capitalize'}}>{section.replace(/-/g, ' ')}</td>
+                          <td style={{textAlign: 'center'}}><input type="checkbox" checked={perm.can_view} onChange={e => updatePerm('can_view', e.target.checked)} /></td>
+                          <td style={{textAlign: 'center'}}><input type="checkbox" checked={perm.can_create} onChange={e => updatePerm('can_create', e.target.checked)} /></td>
+                          <td style={{textAlign: 'center'}}><input type="checkbox" checked={perm.can_edit} onChange={e => updatePerm('can_edit', e.target.checked)} /></td>
+                          <td style={{textAlign: 'center'}}><input type="checkbox" checked={perm.can_delete} onChange={e => updatePerm('can_delete', e.target.checked)} /></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                <div style={{marginTop: '0.5rem', display: 'flex', gap: '0.5rem'}}>
+                  <button type="button" className="btn btn-small btn-secondary" onClick={() => {
+                    const allPerms = ['dashboard', 'reports', 'clients', 'hosts', 'host-verifications', 'users', 'admin-roles', 'spaces', 'reservations', 'contracts', 'disputes', 'payments', 'security-deposits', 'invoices', 'host-statements', 'payment-methods', 'campaigns', 'badges', 'faq', 'alerts', 'config', 'legal-texts', 'notifications', 'audit-log', 'accounting', 'export', 'messages'].map(s => ({ section: s, can_view: true, can_create: true, can_edit: true, can_delete: true }))
+                    setForm({ ...form, permissions: allPerms })
+                  }}>Seleccionar Todos</button>
+                  <button type="button" className="btn btn-small btn-secondary" onClick={() => setForm({ ...form, permissions: [] })}>Limpiar Todos</button>
+                </div>
+              </div>
+              <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem'}}>
+                <button type="submit" className="btn btn-primary">Guardar</button>
+                <button type="button" onClick={() => setShowModal(null)} className="btn btn-secondary">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'admin' && (
+        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Agregar Administrador</h2>
+            <form onSubmit={handleAddAdmin}>
+              <div className="form-group">
+                <label>Usuario</label>
+                <select value={form.user_id || ''} onChange={e => setForm({...form, user_id: e.target.value})} required>
+                  <option value="">Seleccionar usuario...</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.email} ({u.first_name} {u.last_name})</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Rol</label>
+                <select value={form.role_id || ''} onChange={e => setForm({...form, role_id: e.target.value})} required>
+                  <option value="">Seleccionar rol...</option>
+                  {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
+              <div style={{display: 'flex', gap: '0.5rem'}}>
+                <button type="submit" className="btn btn-primary">Agregar</button>
+                <button type="button" onClick={() => setShowModal(null)} className="btn btn-secondary">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// #8: VERIFICACION DE HOSTS
+// ============================================
+function AdminHostVerifications() {
+  const [data, setData] = useState({ verifications: [], stats: {} })
+  const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState('')
+  const [showModal, setShowModal] = useState(null)
+  const [form, setForm] = useState({})
+
+  useEffect(() => { loadData() }, [filterStatus])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const url = filterStatus ? `/admin/host-verifications?status=${filterStatus}` : '/admin/host-verifications'
+      const response = await api.get(url)
+      setData(response.data)
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleReview = async (id, status, notes) => {
+    try {
+      await api.put(`/admin/host-verifications/${id}`, { status, review_notes: notes, rejection_reason: status === 'rejected' ? notes : null })
+      alert('Verificacion actualizada')
+      setShowModal(null)
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const docTypeLabels = { ci: 'Carnet de Identidad', pasaporte: 'Pasaporte', nit: 'NIT', comprobante_domicilio: 'Comprobante Domicilio', licencia_actividad: 'Licencia Actividad' }
+  const statusColors = { pending: '#f59e0b', in_review: '#3b82f6', approved: '#10b981', rejected: '#ef4444' }
+  const statusLabels = { pending: 'Pendiente', in_review: 'En Revision', approved: 'Aprobado', rejected: 'Rechazado' }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Verificacion de Hosts</h1>
+      
+      <div className="stats-grid" style={{marginBottom: '1.5rem'}}>
+        <div className="stat-card card"><h4>Total</h4><p className="stat-number">{data.stats.total}</p></div>
+        <div className="stat-card card" style={{borderLeft: '4px solid #f59e0b'}}><h4>Pendientes</h4><p className="stat-number">{data.stats.pending}</p></div>
+        <div className="stat-card card" style={{borderLeft: '4px solid #3b82f6'}}><h4>En Revision</h4><p className="stat-number">{data.stats.in_review}</p></div>
+        <div className="stat-card card" style={{borderLeft: '4px solid #10b981'}}><h4>Aprobados</h4><p className="stat-number">{data.stats.approved}</p></div>
+      </div>
+
+      <div style={{marginBottom: '1rem'}}>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{padding: '0.5rem'}}>
+          <option value="">Todos</option>
+          <option value="pending">Pendientes</option>
+          <option value="in_review">En Revision</option>
+          <option value="approved">Aprobados</option>
+          <option value="rejected">Rechazados</option>
+        </select>
+      </div>
+
+      <table className="admin-table">
+        <thead>
+          <tr><th>Host</th><th>Email</th><th>Documento</th><th>Numero</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr>
+        </thead>
+        <tbody>
+          {data.verifications.map(v => (
+            <tr key={v.id}>
+              <td>{v.first_name} {v.last_name || v.company_name}</td>
+              <td>{v.email}</td>
+              <td>{docTypeLabels[v.document_type]}</td>
+              <td>{v.document_number || '-'}</td>
+              <td><span className="badge" style={{background: statusColors[v.status]}}>{statusLabels[v.status]}</span></td>
+              <td>{new Date(v.created_at).toLocaleDateString()}</td>
+              <td>
+                <a href={v.document_url} target="_blank" className="btn btn-small" style={{marginRight: '0.25rem'}}>Ver Doc</a>
+                {v.status !== 'approved' && <button onClick={() => { setForm(v); setShowModal('review') }} className="btn btn-small btn-primary">Revisar</button>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {showModal === 'review' && (
+        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Revisar Documento</h2>
+            <p><strong>Host:</strong> {form.first_name} {form.last_name}</p>
+            <p><strong>Tipo:</strong> {docTypeLabels[form.document_type]}</p>
+            <p><strong>Numero:</strong> {form.document_number || 'No especificado'}</p>
+            <div className="form-group">
+              <label>Notas de revision</label>
+              <textarea value={form.review_notes || ''} onChange={e => setForm({...form, review_notes: e.target.value})} rows="3" placeholder="Notas opcionales..."></textarea>
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem'}}>
+              <button onClick={() => handleReview(form.id, 'approved', form.review_notes)} className="btn btn-primary">Aprobar</button>
+              <button onClick={() => handleReview(form.id, 'in_review', form.review_notes)} className="btn btn-secondary">Marcar En Revision</button>
+              <button onClick={() => handleReview(form.id, 'rejected', form.review_notes)} className="btn btn-danger">Rechazar</button>
+              <button onClick={() => setShowModal(null)} className="btn btn-secondary">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// #9: CAMPANAS
+// ============================================
+function AdminCampaigns() {
+  const [data, setData] = useState({ campaigns: [], stats: {} })
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(null)
+  const [form, setForm] = useState({})
+
+  useEffect(() => { loadData() }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const response = await api.get('/admin/campaigns')
+      setData(response.data)
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    try {
+      if (form.id) {
+        await api.put(`/admin/campaigns/${form.id}`, form)
+      } else {
+        await api.post('/admin/campaigns', form)
+      }
+      alert('Campana guardada')
+      setShowModal(null)
+      setForm({})
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleSend = async (id) => {
+    if (!confirm('Enviar esta campana ahora?')) return
+    try {
+      const response = await api.post(`/admin/campaigns/${id}/send`)
+      alert(`Campana enviada: ${response.data.sent} exitosos, ${response.data.failed} fallidos`)
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Eliminar esta campana?')) return
+    try {
+      await api.delete(`/admin/campaigns/${id}`)
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const statusLabels = { draft: 'Borrador', scheduled: 'Programada', sending: 'Enviando', sent: 'Enviada', cancelled: 'Cancelada' }
+  const audienceLabels = { all: 'Todos', guests: 'Clientes', hosts: 'Hosts', inactive: 'Inactivos', new_users: 'Nuevos', custom: 'Personalizado' }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Campanas de Email/SMS</h1>
+      
+      <div className="stats-grid" style={{marginBottom: '1.5rem'}}>
+        <div className="stat-card card"><h4>Total</h4><p className="stat-number">{data.stats.total}</p></div>
+        <div className="stat-card card"><h4>Borradores</h4><p className="stat-number">{data.stats.draft}</p></div>
+        <div className="stat-card card"><h4>Programadas</h4><p className="stat-number">{data.stats.scheduled}</p></div>
+        <div className="stat-card card"><h4>Enviadas</h4><p className="stat-number">{data.stats.sent}</p></div>
+      </div>
+
+      <button onClick={() => { setForm({ campaign_type: 'email', target_audience: 'all' }); setShowModal('form') }} className="btn btn-primary" style={{marginBottom: '1rem'}}>+ Nueva Campana</button>
+
+      <table className="admin-table">
+        <thead>
+          <tr><th>Nombre</th><th>Tipo</th><th>Audiencia</th><th>Estado</th><th>Destinatarios</th><th>Enviados</th><th>Fecha</th><th>Acciones</th></tr>
+        </thead>
+        <tbody>
+          {data.campaigns.map(c => (
+            <tr key={c.id}>
+              <td>{c.name}</td>
+              <td>{c.campaign_type.toUpperCase()}</td>
+              <td>{audienceLabels[c.target_audience]}</td>
+              <td><span className="badge" style={{background: c.status === 'sent' ? '#10b981' : c.status === 'draft' ? '#6b7280' : '#3b82f6'}}>{statusLabels[c.status]}</span></td>
+              <td>{c.total_recipients}</td>
+              <td>{c.sent_count}/{c.failed_count}</td>
+              <td>{new Date(c.created_at).toLocaleDateString()}</td>
+              <td>
+                {c.status === 'draft' && (
+                  <>
+                    <button onClick={() => { setForm(c); setShowModal('form') }} className="btn btn-small" style={{marginRight: '0.25rem'}}>Editar</button>
+                    <button onClick={() => handleSend(c.id)} className="btn btn-small btn-primary" style={{marginRight: '0.25rem'}}>Enviar</button>
+                  </>
+                )}
+                <button onClick={() => handleDelete(c.id)} className="btn btn-small btn-danger">Eliminar</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {showModal === 'form' && (
+        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '600px'}}>
+            <h2>{form.id ? 'Editar' : 'Nueva'} Campana</h2>
+            <form onSubmit={handleSave}>
+              <div className="form-group">
+                <label>Nombre</label>
+                <input type="text" value={form.name || ''} onChange={e => setForm({...form, name: e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label>Tipo</label>
+                <select value={form.campaign_type || 'email'} onChange={e => setForm({...form, campaign_type: e.target.value})}>
+                  <option value="email">Email</option>
+                  <option value="sms">SMS</option>
+                  <option value="both">Ambos</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Audiencia</label>
+                <select value={form.target_audience || 'all'} onChange={e => setForm({...form, target_audience: e.target.value})}>
+                  <option value="all">Todos</option>
+                  <option value="guests">Solo Clientes</option>
+                  <option value="hosts">Solo Hosts</option>
+                  <option value="new_users">Nuevos Usuarios (30 dias)</option>
+                </select>
+              </div>
+              {form.campaign_type !== 'sms' && (
+                <div className="form-group">
+                  <label>Asunto (Email)</label>
+                  <input type="text" value={form.subject || ''} onChange={e => setForm({...form, subject: e.target.value})} />
+                </div>
+              )}
+              <div className="form-group">
+                <label>Contenido</label>
+                <textarea value={form.content || ''} onChange={e => setForm({...form, content: e.target.value})} rows="6" required placeholder="Use {{nombre}}, {{email}} como variables..."></textarea>
+              </div>
+              <div style={{display: 'flex', gap: '0.5rem'}}>
+                <button type="submit" className="btn btn-primary">Guardar</button>
+                <button type="button" onClick={() => setShowModal(null)} className="btn btn-secondary">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// B: ESTADOS DE CUENTA HOSTS
+// ============================================
+function AdminHostStatements() {
+  const [statements, setStatements] = useState([])
+  const [hosts, setHosts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(null)
+  const [form, setForm] = useState({})
+
+  useEffect(() => { loadData() }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [statementsRes, hostsRes] = await Promise.all([
+        api.get('/admin/host-statements'),
+        api.get('/admin/panel/users?role=HOST')
+      ])
+      setStatements(statementsRes.data)
+      setHosts(hostsRes.data.users)
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGenerate = async (e) => {
+    e.preventDefault()
+    try {
+      await api.post('/admin/host-statements/generate', form)
+      alert('Estado de cuenta generado')
+      setShowModal(null)
+      setForm({})
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleUpdateStatus = async (id, status) => {
+    try {
+      await api.put(`/admin/host-statements/${id}`, { payout_status: status })
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const statusLabels = { pending: 'Pendiente', processing: 'Procesando', paid: 'Pagado', failed: 'Fallido' }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Estados de Cuenta de Hosts</h1>
+      
+      <button onClick={() => { setForm({ period_start: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0], period_end: new Date().toISOString().split('T')[0] }); setShowModal('generate') }} className="btn btn-primary" style={{marginBottom: '1rem'}}>+ Generar Estado de Cuenta</button>
+
+      <table className="admin-table">
+        <thead>
+          <tr><th>N° Estado</th><th>Host</th><th>Periodo</th><th>Reservas</th><th>Ingresos Brutos</th><th>Comision</th><th>Neto</th><th>Estado Pago</th><th>Acciones</th></tr>
+        </thead>
+        <tbody>
+          {statements.map(s => (
+            <tr key={s.id}>
+              <td>{s.statement_number}</td>
+              <td>{s.first_name} {s.last_name || s.company_name}</td>
+              <td>{s.period_start} - {s.period_end}</td>
+              <td>{s.total_bookings}</td>
+              <td>Bs. {s.gross_income?.toFixed(2)}</td>
+              <td>Bs. {s.commission_deducted?.toFixed(2)}</td>
+              <td>Bs. {s.net_payout?.toFixed(2)}</td>
+              <td><span className="badge" style={{background: s.payout_status === 'paid' ? '#10b981' : '#f59e0b'}}>{statusLabels[s.payout_status]}</span></td>
+              <td>
+                {s.payout_status !== 'paid' && (
+                  <button onClick={() => handleUpdateStatus(s.id, 'paid')} className="btn btn-small btn-primary">Marcar Pagado</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {showModal === 'generate' && (
+        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Generar Estado de Cuenta</h2>
+            <form onSubmit={handleGenerate}>
+              <div className="form-group">
+                <label>Host</label>
+                <select value={form.host_id || ''} onChange={e => setForm({...form, host_id: e.target.value})} required>
+                  <option value="">Seleccionar host...</option>
+                  {hosts.map(h => <option key={h.id} value={h.id}>{h.email} ({h.first_name} {h.last_name})</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Fecha Inicio</label>
+                <input type="date" value={form.period_start || ''} onChange={e => setForm({...form, period_start: e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label>Fecha Fin</label>
+                <input type="date" value={form.period_end || ''} onChange={e => setForm({...form, period_end: e.target.value})} required />
+              </div>
+              <div style={{display: 'flex', gap: '0.5rem'}}>
+                <button type="submit" className="btn btn-primary">Generar</button>
+                <button type="button" onClick={() => setShowModal(null)} className="btn btn-secondary">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// C: DEPOSITOS DE SEGURIDAD
+// ============================================
+function AdminSecurityDeposits() {
+  const [data, setData] = useState({ deposits: [], stats: {} })
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(null)
+  const [form, setForm] = useState({})
+
+  useEffect(() => { loadData() }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const response = await api.get('/admin/security-deposits')
+      setData(response.data)
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUpdate = async (e) => {
+    e.preventDefault()
+    try {
+      await api.put(`/admin/security-deposits/${form.id}`, form)
+      alert('Deposito actualizado')
+      setShowModal(null)
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const statusLabels = { pending: 'Pendiente', held: 'Retenido', partially_released: 'Liberado Parcial', released: 'Liberado', claimed: 'Reclamado', refunded: 'Reembolsado' }
+  const statusColors = { pending: '#f59e0b', held: '#3b82f6', partially_released: '#8b5cf6', released: '#10b981', claimed: '#ef4444', refunded: '#6b7280' }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Depositos de Seguridad</h1>
+      
+      <div className="stats-grid" style={{marginBottom: '1.5rem'}}>
+        <div className="stat-card card"><h4>Total</h4><p className="stat-number">{data.stats.total}</p></div>
+        <div className="stat-card card"><h4>Retenidos</h4><p className="stat-number">{data.stats.held}</p></div>
+        <div className="stat-card card"><h4>Monto Retenido</h4><p className="stat-number">Bs. {data.stats.total_amount_held?.toFixed(2) || '0.00'}</p></div>
+      </div>
+
+      <table className="admin-table">
+        <thead>
+          <tr><th>Espacio</th><th>Cliente</th><th>Host</th><th>Monto</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr>
+        </thead>
+        <tbody>
+          {data.deposits.map(d => (
+            <tr key={d.id}>
+              <td>{d.space_title}</td>
+              <td>{d.guest_first_name} {d.guest_last_name}</td>
+              <td>{d.host_first_name} {d.host_last_name}</td>
+              <td>Bs. {d.amount?.toFixed(2)}</td>
+              <td><span className="badge" style={{background: statusColors[d.status]}}>{statusLabels[d.status]}</span></td>
+              <td>{new Date(d.created_at).toLocaleDateString()}</td>
+              <td>
+                {d.status === 'held' && (
+                  <button onClick={() => { setForm(d); setShowModal('process') }} className="btn btn-small btn-primary">Procesar</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {showModal === 'process' && (
+        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Procesar Deposito</h2>
+            <p><strong>Monto:</strong> Bs. {form.amount?.toFixed(2)}</p>
+            <p><strong>Cliente:</strong> {form.guest_first_name} {form.guest_last_name}</p>
+            <div className="form-group">
+              <label>Accion</label>
+              <select value={form.status || ''} onChange={e => setForm({...form, status: e.target.value})}>
+                <option value="">Seleccionar...</option>
+                <option value="released">Liberar Total</option>
+                <option value="partially_released">Liberacion Parcial</option>
+                <option value="claimed">Retener por Danos</option>
+                <option value="refunded">Reembolsar</option>
+              </select>
+            </div>
+            {form.status === 'partially_released' && (
+              <div className="form-group">
+                <label>Monto a Liberar</label>
+                <input type="number" step="0.01" value={form.release_amount || ''} onChange={e => setForm({...form, release_amount: parseFloat(e.target.value)})} max={form.amount} />
+              </div>
+            )}
+            {form.status === 'claimed' && (
+              <>
+                <div className="form-group">
+                  <label>Monto a Retener</label>
+                  <input type="number" step="0.01" value={form.claim_amount || ''} onChange={e => setForm({...form, claim_amount: parseFloat(e.target.value)})} max={form.amount} />
+                </div>
+                <div className="form-group">
+                  <label>Razon del Reclamo</label>
+                  <textarea value={form.claim_reason || ''} onChange={e => setForm({...form, claim_reason: e.target.value})} rows="3"></textarea>
+                </div>
+              </>
+            )}
+            <div className="form-group">
+              <label>Notas</label>
+              <textarea value={form.notes || ''} onChange={e => setForm({...form, notes: e.target.value})} rows="2"></textarea>
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem'}}>
+              <button onClick={handleUpdate} className="btn btn-primary">Procesar</button>
+              <button onClick={() => setShowModal(null)} className="btn btn-secondary">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// D: BADGES
+// ============================================
+function AdminBadges() {
+  const [badges, setBadges] = useState([])
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(null)
+  const [form, setForm] = useState({})
+
+  useEffect(() => { loadData() }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [badgesRes, usersRes] = await Promise.all([
+        api.get('/admin/badges'),
+        api.get('/admin/users')
+      ])
+      setBadges(badgesRes.data)
+      setUsers(usersRes.data)
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    try {
+      if (form.id) {
+        await api.put(`/admin/badges/${form.id}`, form)
+      } else {
+        await api.post('/admin/badges', form)
+      }
+      alert('Badge guardado')
+      setShowModal(null)
+      setForm({})
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleAward = async (e) => {
+    e.preventDefault()
+    try {
+      await api.post('/admin/badges/award', { user_id: form.user_id, badge_id: form.badge_id })
+      alert('Badge otorgado')
+      setShowModal(null)
+      setForm({})
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const typeLabels = { host: 'Solo Hosts', guest: 'Solo Clientes', both: 'Ambos' }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Badges / Insignias</h1>
+      
+      <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1rem'}}>
+        <button onClick={() => { setForm({ badge_type: 'both', is_automatic: true }); setShowModal('badge') }} className="btn btn-primary">+ Nuevo Badge</button>
+        <button onClick={() => { setForm({}); setShowModal('award') }} className="btn btn-secondary">Otorgar Badge</button>
+      </div>
+
+      <table className="admin-table">
+        <thead>
+          <tr><th>Icono</th><th>Codigo</th><th>Nombre</th><th>Descripcion</th><th>Tipo</th><th>Automatico</th><th>Otorgados</th><th>Acciones</th></tr>
+        </thead>
+        <tbody>
+          {badges.map(b => (
+            <tr key={b.id}>
+              <td><span style={{fontSize: '1.5rem', color: b.color}}>⭐</span></td>
+              <td><code>{b.code}</code></td>
+              <td>{b.name}</td>
+              <td>{b.description}</td>
+              <td>{typeLabels[b.badge_type]}</td>
+              <td>{b.is_automatic ? 'Si' : 'No'}</td>
+              <td>{b.awarded_count}</td>
+              <td><button onClick={() => { setForm(b); setShowModal('badge') }} className="btn btn-small">Editar</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {showModal === 'badge' && (
+        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>{form.id ? 'Editar' : 'Nuevo'} Badge</h2>
+            <form onSubmit={handleSave}>
+              <div className="form-group">
+                <label>Codigo</label>
+                <input type="text" value={form.code || ''} onChange={e => setForm({...form, code: e.target.value})} required disabled={!!form.id} />
+              </div>
+              <div className="form-group">
+                <label>Nombre</label>
+                <input type="text" value={form.name || ''} onChange={e => setForm({...form, name: e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label>Descripcion</label>
+                <textarea value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} rows="2"></textarea>
+              </div>
+              <div className="form-group">
+                <label>Tipo</label>
+                <select value={form.badge_type || 'both'} onChange={e => setForm({...form, badge_type: e.target.value})}>
+                  <option value="host">Solo Hosts</option>
+                  <option value="guest">Solo Clientes</option>
+                  <option value="both">Ambos</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Color</label>
+                <input type="color" value={form.color || '#4F46E5'} onChange={e => setForm({...form, color: e.target.value})} />
+              </div>
+              <div style={{display: 'flex', gap: '0.5rem'}}>
+                <button type="submit" className="btn btn-primary">Guardar</button>
+                <button type="button" onClick={() => setShowModal(null)} className="btn btn-secondary">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'award' && (
+        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Otorgar Badge</h2>
+            <form onSubmit={handleAward}>
+              <div className="form-group">
+                <label>Usuario</label>
+                <select value={form.user_id || ''} onChange={e => setForm({...form, user_id: e.target.value})} required>
+                  <option value="">Seleccionar usuario...</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.email} ({u.first_name} {u.last_name})</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Badge</label>
+                <select value={form.badge_id || ''} onChange={e => setForm({...form, badge_id: e.target.value})} required>
+                  <option value="">Seleccionar badge...</option>
+                  {badges.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+              <div style={{display: 'flex', gap: '0.5rem'}}>
+                <button type="submit" className="btn btn-primary">Otorgar</button>
+                <button type="button" onClick={() => setShowModal(null)} className="btn btn-secondary">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// E: FAQ
+// ============================================
+function AdminFAQ() {
+  const [categories, setCategories] = useState([])
+  const [faqs, setFaqs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('faqs')
+  const [showModal, setShowModal] = useState(null)
+  const [form, setForm] = useState({})
+
+  useEffect(() => { loadData() }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [catsRes, faqsRes] = await Promise.all([
+        api.get('/admin/faq-categories'),
+        api.get('/admin/faqs')
+      ])
+      setCategories(catsRes.data)
+      setFaqs(faqsRes.data)
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSaveCategory = async (e) => {
+    e.preventDefault()
+    try {
+      await api.post('/admin/faq-categories', form)
+      alert('Categoria creada')
+      setShowModal(null)
+      setForm({})
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleSaveFAQ = async (e) => {
+    e.preventDefault()
+    try {
+      if (form.id) {
+        await api.put(`/admin/faqs/${form.id}`, form)
+      } else {
+        await api.post('/admin/faqs', form)
+      }
+      alert('FAQ guardada')
+      setShowModal(null)
+      setForm({})
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleDeleteFAQ = async (id) => {
+    if (!confirm('Eliminar esta FAQ?')) return
+    try {
+      await api.delete(`/admin/faqs/${id}`)
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Centro de Ayuda / FAQ</h1>
+      
+      <div style={{marginBottom: '1rem'}}>
+        <button onClick={() => setActiveTab('faqs')} className={`btn ${activeTab === 'faqs' ? 'btn-primary' : 'btn-secondary'}`} style={{marginRight: '0.5rem'}}>Preguntas</button>
+        <button onClick={() => setActiveTab('categories')} className={`btn ${activeTab === 'categories' ? 'btn-primary' : 'btn-secondary'}`}>Categorias</button>
+      </div>
+
+      {activeTab === 'faqs' && (
+        <div>
+          <button onClick={() => { setForm({ is_active: true }); setShowModal('faq') }} className="btn btn-primary" style={{marginBottom: '1rem'}}>+ Nueva Pregunta</button>
+          <table className="admin-table">
+            <thead>
+              <tr><th>Categoria</th><th>Pregunta</th><th>Vistas</th><th>Util</th><th>Activa</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              {faqs.map(f => (
+                <tr key={f.id}>
+                  <td>{f.category_name}</td>
+                  <td>{f.question}</td>
+                  <td>{f.views}</td>
+                  <td>{f.helpful_yes} / {f.helpful_no}</td>
+                  <td>{f.is_active ? 'Si' : 'No'}</td>
+                  <td>
+                    <button onClick={() => { setForm(f); setShowModal('faq') }} className="btn btn-small" style={{marginRight: '0.25rem'}}>Editar</button>
+                    <button onClick={() => handleDeleteFAQ(f.id)} className="btn btn-small btn-danger">Eliminar</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {activeTab === 'categories' && (
+        <div>
+          <button onClick={() => { setForm({}); setShowModal('category') }} className="btn btn-primary" style={{marginBottom: '1rem'}}>+ Nueva Categoria</button>
+          <table className="admin-table">
+            <thead>
+              <tr><th>Nombre</th><th>Slug</th><th>Descripcion</th><th>Preguntas</th><th>Audiencia</th></tr>
+            </thead>
+            <tbody>
+              {categories.map(c => (
+                <tr key={c.id}>
+                  <td>{c.name}</td>
+                  <td><code>{c.slug}</code></td>
+                  <td>{c.description}</td>
+                  <td>{c.faqs_count}</td>
+                  <td>{c.target_audience}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showModal === 'faq' && (
+        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '600px'}}>
+            <h2>{form.id ? 'Editar' : 'Nueva'} Pregunta</h2>
+            <form onSubmit={handleSaveFAQ}>
+              <div className="form-group">
+                <label>Categoria</label>
+                <select value={form.category_id || ''} onChange={e => setForm({...form, category_id: e.target.value})} required>
+                  <option value="">Seleccionar...</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Pregunta</label>
+                <input type="text" value={form.question || ''} onChange={e => setForm({...form, question: e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label>Respuesta</label>
+                <textarea value={form.answer || ''} onChange={e => setForm({...form, answer: e.target.value})} rows="6" required></textarea>
+              </div>
+              <div className="form-group">
+                <label><input type="checkbox" checked={form.is_featured || false} onChange={e => setForm({...form, is_featured: e.target.checked})} /> Destacada</label>
+              </div>
+              <div style={{display: 'flex', gap: '0.5rem'}}>
+                <button type="submit" className="btn btn-primary">Guardar</button>
+                <button type="button" onClick={() => setShowModal(null)} className="btn btn-secondary">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'category' && (
+        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2>Nueva Categoria</h2>
+            <form onSubmit={handleSaveCategory}>
+              <div className="form-group">
+                <label>Nombre</label>
+                <input type="text" value={form.name || ''} onChange={e => setForm({...form, name: e.target.value, slug: e.target.value.toLowerCase().replace(/\s+/g, '-')})} required />
+              </div>
+              <div className="form-group">
+                <label>Slug</label>
+                <input type="text" value={form.slug || ''} onChange={e => setForm({...form, slug: e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label>Descripcion</label>
+                <textarea value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} rows="2"></textarea>
+              </div>
+              <div className="form-group">
+                <label>Audiencia</label>
+                <select value={form.target_audience || 'all'} onChange={e => setForm({...form, target_audience: e.target.value})}>
+                  <option value="all">Todos</option>
+                  <option value="guests">Solo Clientes</option>
+                  <option value="hosts">Solo Hosts</option>
+                </select>
+              </div>
+              <div style={{display: 'flex', gap: '0.5rem'}}>
+                <button type="submit" className="btn btn-primary">Crear</button>
+                <button type="button" onClick={() => setShowModal(null)} className="btn btn-secondary">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// F: ALERTAS ADMIN
+// ============================================
+function AdminAlerts() {
+  const [data, setData] = useState({ alerts: [], unread_count: 0 })
+  const [loading, setLoading] = useState(true)
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false)
+
+  useEffect(() => { loadData() }, [showUnreadOnly])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const url = showUnreadOnly ? '/admin/alerts?unread_only=true' : '/admin/alerts'
+      const response = await api.get(url)
+      setData(response.data)
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleMarkRead = async (id) => {
+    try {
+      await api.put(`/admin/alerts/${id}/read`)
+      loadData()
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const handleMarkAllRead = async () => {
+    try {
+      await api.put('/admin/alerts/read-all')
+      loadData()
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const handleDismiss = async (id) => {
+    try {
+      await api.put(`/admin/alerts/${id}/dismiss`)
+      loadData()
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const severityColors = { info: '#3b82f6', warning: '#f59e0b', error: '#ef4444', success: '#10b981' }
+  const typeLabels = { payment_pending: 'Pago Pendiente', dispute_new: 'Nueva Disputa', host_verification: 'Verificacion', contract_expiring: 'Contrato por Vencer', low_activity: 'Baja Actividad', system: 'Sistema', custom: 'Personalizada' }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
+        <h1>Alertas ({data.unread_count} sin leer)</h1>
+        <div>
+          <label style={{marginRight: '1rem'}}><input type="checkbox" checked={showUnreadOnly} onChange={e => setShowUnreadOnly(e.target.checked)} /> Solo no leidas</label>
+          <button onClick={handleMarkAllRead} className="btn btn-secondary">Marcar todas como leidas</button>
+        </div>
+      </div>
+
+      <div style={{display: 'flex', flexDirection: 'column', gap: '0.5rem'}}>
+        {data.alerts.map(a => (
+          <div key={a.id} className="card" style={{padding: '1rem', borderLeft: `4px solid ${severityColors[a.severity]}`, opacity: a.is_read ? 0.7 : 1}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+              <div>
+                <span className="badge" style={{background: severityColors[a.severity], marginRight: '0.5rem'}}>{typeLabels[a.alert_type]}</span>
+                <strong>{a.title}</strong>
+                <p style={{margin: '0.5rem 0', color: '#666'}}>{a.message}</p>
+                <small style={{color: '#999'}}>{new Date(a.created_at).toLocaleString()}</small>
+              </div>
+              <div style={{display: 'flex', gap: '0.25rem'}}>
+                {!a.is_read && <button onClick={() => handleMarkRead(a.id)} className="btn btn-small">Leida</button>}
+                <button onClick={() => handleDismiss(a.id)} className="btn btn-small btn-danger">X</button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {data.alerts.length === 0 && <p style={{textAlign: 'center', color: '#666', padding: '2rem'}}>No hay alertas</p>}
+      </div>
     </div>
   )
 }

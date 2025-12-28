@@ -3050,4 +3050,1135 @@ router.get('/accounting/chart-of-accounts', (req, res) => {
   }
 });
 
+// ============================================
+// #7: ROLES Y PERMISOS DE ADMINISTRADOR
+// ============================================
+
+router.get('/roles', (req, res) => {
+  try {
+    const roles = db.prepare(`
+      SELECT r.*, 
+        (SELECT COUNT(*) FROM admin_users WHERE role_id = r.id) as users_count
+      FROM admin_roles r ORDER BY r.name
+    `).all();
+    res.json(roles);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener roles' });
+  }
+});
+
+router.get('/roles/:id', (req, res) => {
+  try {
+    const role = db.prepare('SELECT * FROM admin_roles WHERE id = ?').get(req.params.id);
+    if (!role) return res.status(404).json({ error: 'Rol no encontrado' });
+    const permissions = db.prepare('SELECT * FROM admin_permissions WHERE role_id = ?').all(req.params.id);
+    res.json({ ...role, permissions });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener rol' });
+  }
+});
+
+router.post('/roles', [
+  body('name').notEmpty().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { name, description, permissions } = req.body;
+    const id = `role_${Date.now()}`;
+    
+    db.prepare('INSERT INTO admin_roles (id, name, description) VALUES (?, ?, ?)').run(id, name, description || null);
+    
+    if (permissions && Array.isArray(permissions)) {
+      const insertPerm = db.prepare('INSERT INTO admin_permissions (id, role_id, section, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      permissions.forEach(p => {
+        insertPerm.run(`perm_${Date.now()}_${Math.random().toString(36).slice(2)}`, id, p.section, p.can_view ? 1 : 0, p.can_create ? 1 : 0, p.can_edit ? 1 : 0, p.can_delete ? 1 : 0);
+      });
+    }
+    
+    logAudit(req.user.id, 'ADMIN_ROLE_CREATED', 'admin_roles', id, null, req.body, req);
+    res.status(201).json({ id, message: 'Rol creado exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear rol' });
+  }
+});
+
+router.put('/roles/:id', (req, res) => {
+  try {
+    const role = db.prepare('SELECT * FROM admin_roles WHERE id = ?').get(req.params.id);
+    if (!role) return res.status(404).json({ error: 'Rol no encontrado' });
+    if (role.is_system) return res.status(400).json({ error: 'No se puede modificar un rol del sistema' });
+
+    const { name, description, permissions } = req.body;
+    db.prepare('UPDATE admin_roles SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(name || role.name, description !== undefined ? description : role.description, req.params.id);
+
+    if (permissions && Array.isArray(permissions)) {
+      db.prepare('DELETE FROM admin_permissions WHERE role_id = ?').run(req.params.id);
+      const insertPerm = db.prepare('INSERT INTO admin_permissions (id, role_id, section, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      permissions.forEach(p => {
+        insertPerm.run(`perm_${Date.now()}_${Math.random().toString(36).slice(2)}`, req.params.id, p.section, p.can_view ? 1 : 0, p.can_create ? 1 : 0, p.can_edit ? 1 : 0, p.can_delete ? 1 : 0);
+      });
+    }
+
+    logAudit(req.user.id, 'ADMIN_ROLE_UPDATED', 'admin_roles', req.params.id, role, req.body, req);
+    res.json({ message: 'Rol actualizado exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar rol' });
+  }
+});
+
+router.delete('/roles/:id', (req, res) => {
+  try {
+    const role = db.prepare('SELECT * FROM admin_roles WHERE id = ?').get(req.params.id);
+    if (!role) return res.status(404).json({ error: 'Rol no encontrado' });
+    if (role.is_system) return res.status(400).json({ error: 'No se puede eliminar un rol del sistema' });
+    
+    const usersWithRole = db.prepare('SELECT COUNT(*) as count FROM admin_users WHERE role_id = ?').get(req.params.id);
+    if (usersWithRole.count > 0) return res.status(400).json({ error: 'No se puede eliminar un rol con usuarios asignados' });
+
+    db.prepare('DELETE FROM admin_permissions WHERE role_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM admin_roles WHERE id = ?').run(req.params.id);
+    logAudit(req.user.id, 'ADMIN_ROLE_DELETED', 'admin_roles', req.params.id, role, null, req);
+    res.json({ message: 'Rol eliminado exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar rol' });
+  }
+});
+
+router.get('/admin-users', (req, res) => {
+  try {
+    const adminUsers = db.prepare(`
+      SELECT au.*, u.email, u.first_name, u.last_name, r.name as role_name
+      FROM admin_users au
+      JOIN users u ON au.user_id = u.id
+      JOIN admin_roles r ON au.role_id = r.id
+      ORDER BY au.created_at DESC
+    `).all();
+    res.json(adminUsers);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener administradores' });
+  }
+});
+
+router.post('/admin-users', [
+  body('user_id').notEmpty(),
+  body('role_id').notEmpty()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { user_id, role_id } = req.body;
+    const existing = db.prepare('SELECT * FROM admin_users WHERE user_id = ?').get(user_id);
+    if (existing) return res.status(400).json({ error: 'Este usuario ya es administrador' });
+
+    const id = `admusr_${Date.now()}`;
+    db.prepare('INSERT INTO admin_users (id, user_id, role_id) VALUES (?, ?, ?)').run(id, user_id, role_id);
+    db.prepare("UPDATE users SET role = 'ADMIN' WHERE id = ?").run(user_id);
+    
+    logAudit(req.user.id, 'ADMIN_USER_CREATED', 'admin_users', id, null, req.body, req);
+    res.status(201).json({ id, message: 'Administrador creado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear administrador' });
+  }
+});
+
+router.put('/admin-users/:id', (req, res) => {
+  try {
+    const adminUser = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(req.params.id);
+    if (!adminUser) return res.status(404).json({ error: 'Administrador no encontrado' });
+
+    const { role_id, mfa_enabled } = req.body;
+    const updates = ['updated_at = CURRENT_TIMESTAMP'];
+    const params = [];
+    
+    if (role_id) { updates.push('role_id = ?'); params.push(role_id); }
+    if (mfa_enabled !== undefined) { updates.push('mfa_enabled = ?'); params.push(mfa_enabled ? 1 : 0); }
+    
+    params.push(req.params.id);
+    db.prepare(`UPDATE admin_users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    
+    logAudit(req.user.id, 'ADMIN_USER_UPDATED', 'admin_users', req.params.id, adminUser, req.body, req);
+    res.json({ message: 'Administrador actualizado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar administrador' });
+  }
+});
+
+router.delete('/admin-users/:id', (req, res) => {
+  try {
+    const adminUser = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(req.params.id);
+    if (!adminUser) return res.status(404).json({ error: 'Administrador no encontrado' });
+    if (adminUser.user_id === req.user.id) return res.status(400).json({ error: 'No puedes eliminarte a ti mismo' });
+
+    db.prepare('DELETE FROM admin_users WHERE id = ?').run(req.params.id);
+    db.prepare("UPDATE users SET role = 'HOST' WHERE id = ?").run(adminUser.user_id);
+    
+    logAudit(req.user.id, 'ADMIN_USER_DELETED', 'admin_users', req.params.id, adminUser, null, req);
+    res.json({ message: 'Administrador eliminado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar administrador' });
+  }
+});
+
+// ============================================
+// #8: VERIFICACION DE HOSTS
+// ============================================
+
+router.get('/host-verifications', (req, res) => {
+  try {
+    const { status } = req.query;
+    let query = `
+      SELECT hv.*, u.email, u.first_name, u.last_name, u.company_name,
+        reviewer.email as reviewer_email
+      FROM host_verifications hv
+      JOIN users u ON hv.host_id = u.id
+      LEFT JOIN users reviewer ON hv.reviewed_by = reviewer.id
+    `;
+    if (status) query += ` WHERE hv.status = '${status}'`;
+    query += ' ORDER BY hv.created_at DESC';
+    
+    const verifications = db.prepare(query).all();
+    const stats = {
+      total: db.prepare('SELECT COUNT(*) as count FROM host_verifications').get().count,
+      pending: db.prepare("SELECT COUNT(*) as count FROM host_verifications WHERE status = 'pending'").get().count,
+      in_review: db.prepare("SELECT COUNT(*) as count FROM host_verifications WHERE status = 'in_review'").get().count,
+      approved: db.prepare("SELECT COUNT(*) as count FROM host_verifications WHERE status = 'approved'").get().count,
+      rejected: db.prepare("SELECT COUNT(*) as count FROM host_verifications WHERE status = 'rejected'").get().count
+    };
+    res.json({ verifications, stats });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener verificaciones' });
+  }
+});
+
+router.put('/host-verifications/:id', (req, res) => {
+  try {
+    const verification = db.prepare('SELECT * FROM host_verifications WHERE id = ?').get(req.params.id);
+    if (!verification) return res.status(404).json({ error: 'Verificación no encontrada' });
+
+    const { status, review_notes, rejection_reason } = req.body;
+    const updates = ['updated_at = CURRENT_TIMESTAMP', 'reviewed_by = ?', 'reviewed_at = CURRENT_TIMESTAMP'];
+    const params = [req.user.id];
+    
+    if (status) { updates.push('status = ?'); params.push(status); }
+    if (review_notes) { updates.push('review_notes = ?'); params.push(review_notes); }
+    if (rejection_reason) { updates.push('rejection_reason = ?'); params.push(rejection_reason); }
+    
+    params.push(req.params.id);
+    db.prepare(`UPDATE host_verifications SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    // Si se aprueba, verificar si el host tiene todos los documentos aprobados para dar badge
+    if (status === 'approved') {
+      const pendingDocs = db.prepare("SELECT COUNT(*) as count FROM host_verifications WHERE host_id = ? AND status != 'approved'").get(verification.host_id);
+      if (pendingDocs.count === 0) {
+        const existingBadge = db.prepare("SELECT * FROM user_badges WHERE user_id = ? AND badge_id = 'badge_verified_host'").get(verification.host_id);
+        if (!existingBadge) {
+          db.prepare("INSERT INTO user_badges (id, user_id, badge_id, awarded_by) VALUES (?, ?, 'badge_verified_host', ?)").run(`ub_${Date.now()}`, verification.host_id, req.user.id);
+        }
+        db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(verification.host_id);
+      }
+    }
+
+    logAudit(req.user.id, 'HOST_VERIFICATION_REVIEWED', 'host_verifications', req.params.id, verification, req.body, req);
+    res.json({ message: 'Verificación actualizada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar verificación' });
+  }
+});
+
+// ============================================
+// #3: GESTION DE DISPUTAS
+// ============================================
+
+router.get('/disputes', (req, res) => {
+  try {
+    const { status, priority } = req.query;
+    let query = `
+      SELECT d.*, 
+        comp.email as complainant_email, comp.first_name as complainant_first_name, comp.last_name as complainant_last_name,
+        resp.email as respondent_email, resp.first_name as respondent_first_name, resp.last_name as respondent_last_name,
+        assigned.email as assigned_email,
+        r.id as reservation_id,
+        (SELECT COUNT(*) FROM dispute_comments WHERE dispute_id = d.id) as comments_count
+      FROM disputes d
+      JOIN users comp ON d.complainant_id = comp.id
+      JOIN users resp ON d.respondent_id = resp.id
+      LEFT JOIN users assigned ON d.assigned_to = assigned.id
+      LEFT JOIN reservations r ON d.reservation_id = r.id
+      WHERE 1=1
+    `;
+    if (status) query += ` AND d.status = '${status}'`;
+    if (priority) query += ` AND d.priority = '${priority}'`;
+    query += ' ORDER BY d.created_at DESC';
+    
+    const disputes = db.prepare(query).all();
+    const stats = {
+      total: db.prepare('SELECT COUNT(*) as count FROM disputes').get().count,
+      open: db.prepare("SELECT COUNT(*) as count FROM disputes WHERE status = 'open'").get().count,
+      in_review: db.prepare("SELECT COUNT(*) as count FROM disputes WHERE status = 'in_review'").get().count,
+      urgent: db.prepare("SELECT COUNT(*) as count FROM disputes WHERE priority = 'urgent' AND status NOT IN ('closed', 'resolved_favor_guest', 'resolved_favor_host', 'resolved_mutual')").get().count
+    };
+    res.json({ disputes, stats });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener disputas' });
+  }
+});
+
+router.get('/disputes/:id', (req, res) => {
+  try {
+    const dispute = db.prepare(`
+      SELECT d.*, 
+        comp.email as complainant_email, comp.first_name as complainant_first_name, comp.last_name as complainant_last_name,
+        resp.email as respondent_email, resp.first_name as respondent_first_name, resp.last_name as respondent_last_name
+      FROM disputes d
+      JOIN users comp ON d.complainant_id = comp.id
+      JOIN users resp ON d.respondent_id = resp.id
+      WHERE d.id = ?
+    `).get(req.params.id);
+    if (!dispute) return res.status(404).json({ error: 'Disputa no encontrada' });
+
+    const comments = db.prepare(`
+      SELECT dc.*, u.email, u.first_name, u.last_name
+      FROM dispute_comments dc
+      JOIN users u ON dc.user_id = u.id
+      WHERE dc.dispute_id = ?
+      ORDER BY dc.created_at ASC
+    `).all(req.params.id);
+
+    res.json({ ...dispute, comments });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener disputa' });
+  }
+});
+
+router.post('/disputes', [
+  body('complainant_id').notEmpty(),
+  body('respondent_id').notEmpty(),
+  body('category').isIn(['payment', 'property_condition', 'cancellation', 'damage', 'service', 'other']),
+  body('subject').notEmpty().trim(),
+  body('description').notEmpty()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { complainant_id, complainant_type, respondent_id, reservation_id, contract_id, payment_id, category, subject, description, priority, evidence_urls } = req.body;
+    const id = `dispute_${Date.now()}`;
+    const dispute_number = `DSP-${Date.now().toString().slice(-8)}`;
+    const { ip, userAgent } = getClientInfo(req);
+
+    db.prepare(`
+      INSERT INTO disputes (id, dispute_number, reservation_id, contract_id, payment_id, complainant_id, complainant_type, respondent_id, category, subject, description, evidence_urls, priority, ip_address, user_agent)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, dispute_number, reservation_id || null, contract_id || null, payment_id || null, complainant_id, complainant_type || 'guest', respondent_id, category, subject, description, evidence_urls ? JSON.stringify(evidence_urls) : null, priority || 'medium', ip, userAgent);
+
+    // Crear alerta
+    db.prepare(`
+      INSERT INTO admin_alerts (id, alert_type, title, message, severity, entity_type, entity_id, action_url, action_label)
+      VALUES (?, 'dispute_new', ?, ?, 'warning', 'disputes', ?, ?, 'Ver Disputa')
+    `).run(`alert_${Date.now()}`, `Nueva Disputa: ${subject}`, `Se ha creado una nueva disputa (${dispute_number})`, id, `/admin/disputes/${id}`);
+
+    logAudit(req.user.id, 'DISPUTE_CREATED', 'disputes', id, null, req.body, req);
+    res.status(201).json({ id, dispute_number, message: 'Disputa creada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear disputa' });
+  }
+});
+
+router.put('/disputes/:id', (req, res) => {
+  try {
+    const dispute = db.prepare('SELECT * FROM disputes WHERE id = ?').get(req.params.id);
+    if (!dispute) return res.status(404).json({ error: 'Disputa no encontrada' });
+
+    const { status, priority, assigned_to, resolution_notes, resolution_amount } = req.body;
+    const updates = ['updated_at = CURRENT_TIMESTAMP'];
+    const params = [];
+
+    if (status) { 
+      updates.push('status = ?'); 
+      params.push(status);
+      if (status.startsWith('resolved') || status === 'closed') {
+        updates.push('resolved_at = CURRENT_TIMESTAMP', 'resolved_by = ?');
+        params.push(req.user.id);
+      }
+    }
+    if (priority) { updates.push('priority = ?'); params.push(priority); }
+    if (assigned_to) { updates.push('assigned_to = ?'); params.push(assigned_to); }
+    if (resolution_notes) { updates.push('resolution_notes = ?'); params.push(resolution_notes); }
+    if (resolution_amount !== undefined) { updates.push('resolution_amount = ?'); params.push(resolution_amount); }
+
+    params.push(req.params.id);
+    db.prepare(`UPDATE disputes SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    logAudit(req.user.id, 'DISPUTE_UPDATED', 'disputes', req.params.id, dispute, req.body, req);
+    res.json({ message: 'Disputa actualizada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar disputa' });
+  }
+});
+
+router.post('/disputes/:id/comments', [
+  body('comment').notEmpty()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const dispute = db.prepare('SELECT * FROM disputes WHERE id = ?').get(req.params.id);
+    if (!dispute) return res.status(404).json({ error: 'Disputa no encontrada' });
+
+    const { comment, is_internal, attachment_url } = req.body;
+    const id = `dc_${Date.now()}`;
+    
+    db.prepare('INSERT INTO dispute_comments (id, dispute_id, user_id, user_type, comment, is_internal, attachment_url) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, req.params.id, req.user.id, 'admin', comment, is_internal ? 1 : 0, attachment_url || null);
+
+    res.status(201).json({ id, message: 'Comentario agregado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al agregar comentario' });
+  }
+});
+
+// ============================================
+// #9: CAMPANAS DE EMAIL/SMS
+// ============================================
+
+router.get('/campaigns', (req, res) => {
+  try {
+    const campaigns = db.prepare(`
+      SELECT c.*, u.email as created_by_email
+      FROM campaigns c
+      LEFT JOIN users u ON c.created_by = u.id
+      ORDER BY c.created_at DESC
+    `).all();
+    const stats = {
+      total: campaigns.length,
+      draft: campaigns.filter(c => c.status === 'draft').length,
+      scheduled: campaigns.filter(c => c.status === 'scheduled').length,
+      sent: campaigns.filter(c => c.status === 'sent').length
+    };
+    res.json({ campaigns, stats });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener campañas' });
+  }
+});
+
+router.get('/campaigns/:id', (req, res) => {
+  try {
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' });
+
+    const recipients = db.prepare(`
+      SELECT cr.*, u.email, u.first_name, u.last_name
+      FROM campaign_recipients cr
+      JOIN users u ON cr.user_id = u.id
+      WHERE cr.campaign_id = ?
+    `).all(req.params.id);
+
+    res.json({ ...campaign, recipients });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener campaña' });
+  }
+});
+
+router.post('/campaigns', [
+  body('name').notEmpty().trim(),
+  body('campaign_type').isIn(['email', 'sms', 'both']),
+  body('content').notEmpty(),
+  body('target_audience').isIn(['all', 'guests', 'hosts', 'inactive', 'new_users', 'custom'])
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { name, campaign_type, subject, content, template_variables, target_audience, custom_filter, scheduled_at } = req.body;
+    const id = `camp_${Date.now()}`;
+    const status = scheduled_at ? 'scheduled' : 'draft';
+
+    db.prepare(`
+      INSERT INTO campaigns (id, name, campaign_type, subject, content, template_variables, target_audience, custom_filter, status, scheduled_at, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, campaign_type, subject || null, content, template_variables ? JSON.stringify(template_variables) : null, target_audience, custom_filter || null, status, scheduled_at || null, req.user.id);
+
+    logAudit(req.user.id, 'CAMPAIGN_CREATED', 'campaigns', id, null, req.body, req);
+    res.status(201).json({ id, message: 'Campaña creada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear campaña' });
+  }
+});
+
+router.put('/campaigns/:id', (req, res) => {
+  try {
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' });
+    if (campaign.status === 'sent') return res.status(400).json({ error: 'No se puede modificar una campaña enviada' });
+
+    const { name, campaign_type, subject, content, target_audience, custom_filter, scheduled_at, status } = req.body;
+    const updates = ['updated_at = CURRENT_TIMESTAMP'];
+    const params = [];
+
+    if (name) { updates.push('name = ?'); params.push(name); }
+    if (campaign_type) { updates.push('campaign_type = ?'); params.push(campaign_type); }
+    if (subject !== undefined) { updates.push('subject = ?'); params.push(subject); }
+    if (content) { updates.push('content = ?'); params.push(content); }
+    if (target_audience) { updates.push('target_audience = ?'); params.push(target_audience); }
+    if (custom_filter !== undefined) { updates.push('custom_filter = ?'); params.push(custom_filter); }
+    if (scheduled_at !== undefined) { updates.push('scheduled_at = ?'); params.push(scheduled_at); }
+    if (status) { updates.push('status = ?'); params.push(status); }
+
+    params.push(req.params.id);
+    db.prepare(`UPDATE campaigns SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    logAudit(req.user.id, 'CAMPAIGN_UPDATED', 'campaigns', req.params.id, campaign, req.body, req);
+    res.json({ message: 'Campaña actualizada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar campaña' });
+  }
+});
+
+router.post('/campaigns/:id/send', (req, res) => {
+  try {
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' });
+    if (campaign.status === 'sent') return res.status(400).json({ error: 'Campaña ya enviada' });
+
+    // Obtener destinatarios según audiencia
+    let usersQuery = 'SELECT id, email, phone FROM users WHERE is_active = 1';
+    if (campaign.target_audience === 'guests') usersQuery += " AND role = 'GUEST'";
+    else if (campaign.target_audience === 'hosts') usersQuery += " AND role = 'HOST'";
+    else if (campaign.target_audience === 'new_users') usersQuery += " AND created_at >= date('now', '-30 days')";
+
+    const users = db.prepare(usersQuery).all();
+    
+    // Simular envío (MOCK)
+    let sentCount = 0;
+    let failedCount = 0;
+    const insertRecipient = db.prepare('INSERT INTO campaign_recipients (id, campaign_id, user_id, email, phone, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)');
+    
+    users.forEach(user => {
+      const recipientId = `cr_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      // MOCK: 95% éxito
+      const status = Math.random() > 0.05 ? 'sent' : 'failed';
+      if (status === 'sent') sentCount++; else failedCount++;
+      insertRecipient.run(recipientId, req.params.id, user.id, user.email, user.phone, status);
+    });
+
+    db.prepare(`
+      UPDATE campaigns SET status = 'sent', sent_at = CURRENT_TIMESTAMP, total_recipients = ?, sent_count = ?, failed_count = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(users.length, sentCount, failedCount, req.params.id);
+
+    logAudit(req.user.id, 'CAMPAIGN_SENT', 'campaigns', req.params.id, campaign, { sent: sentCount, failed: failedCount }, req);
+    res.json({ message: 'Campaña enviada', total: users.length, sent: sentCount, failed: failedCount });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al enviar campaña' });
+  }
+});
+
+router.delete('/campaigns/:id', (req, res) => {
+  try {
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' });
+
+    db.prepare('DELETE FROM campaign_recipients WHERE campaign_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM campaigns WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'CAMPAIGN_DELETED', 'campaigns', req.params.id, campaign, null, req);
+    res.json({ message: 'Campaña eliminada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar campaña' });
+  }
+});
+
+// ============================================
+// B: ESTADOS DE CUENTA DE HOSTS
+// ============================================
+
+router.get('/host-statements', (req, res) => {
+  try {
+    const statements = db.prepare(`
+      SELECT hs.*, u.email, u.first_name, u.last_name, u.company_name
+      FROM host_statements hs
+      JOIN users u ON hs.host_id = u.id
+      ORDER BY hs.created_at DESC
+    `).all();
+    res.json(statements);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener estados de cuenta' });
+  }
+});
+
+router.post('/host-statements/generate', [
+  body('host_id').notEmpty(),
+  body('period_start').notEmpty(),
+  body('period_end').notEmpty()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { host_id, period_start, period_end } = req.body;
+    const id = `stmt_${Date.now()}`;
+    const statement_number = `EC-${Date.now().toString().slice(-8)}`;
+
+    // Calcular totales del período
+    const contracts = db.prepare(`
+      SELECT c.*, r.commission_amount
+      FROM contracts c
+      JOIN reservations r ON c.reservation_id = r.id
+      WHERE c.host_id = ? AND c.created_at BETWEEN ? AND ?
+    `).all(host_id, period_start, period_end);
+
+    const gross_income = contracts.reduce((sum, c) => sum + c.total_amount, 0);
+    const commission_deducted = contracts.reduce((sum, c) => sum + (c.commission_amount || 0), 0);
+    const net_payout = gross_income - commission_deducted;
+
+    db.prepare(`
+      INSERT INTO host_statements (id, host_id, statement_number, period_start, period_end, total_bookings, gross_income, commission_deducted, net_payout)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, host_id, statement_number, period_start, period_end, contracts.length, gross_income, commission_deducted, net_payout);
+
+    // Insertar detalles
+    const insertDetail = db.prepare('INSERT INTO host_statement_details (id, statement_id, contract_id, description, amount, commission, net_amount, transaction_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    contracts.forEach(c => {
+      insertDetail.run(`stmtd_${Date.now()}_${Math.random().toString(36).slice(2)}`, id, c.id, `Contrato ${c.contract_number}`, c.total_amount, c.commission_amount || 0, c.host_payout_amount, c.created_at);
+    });
+
+    logAudit(req.user.id, 'HOST_STATEMENT_GENERATED', 'host_statements', id, null, req.body, req);
+    res.status(201).json({ id, statement_number, message: 'Estado de cuenta generado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al generar estado de cuenta' });
+  }
+});
+
+router.put('/host-statements/:id', (req, res) => {
+  try {
+    const statement = db.prepare('SELECT * FROM host_statements WHERE id = ?').get(req.params.id);
+    if (!statement) return res.status(404).json({ error: 'Estado de cuenta no encontrado' });
+
+    const { payout_status, payout_reference } = req.body;
+    const updates = [];
+    const params = [];
+
+    if (payout_status) { 
+      updates.push('payout_status = ?'); 
+      params.push(payout_status);
+      if (payout_status === 'paid') {
+        updates.push('payout_date = CURRENT_TIMESTAMP');
+      }
+    }
+    if (payout_reference) { updates.push('payout_reference = ?'); params.push(payout_reference); }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'No hay cambios' });
+
+    params.push(req.params.id);
+    db.prepare(`UPDATE host_statements SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    logAudit(req.user.id, 'HOST_STATEMENT_UPDATED', 'host_statements', req.params.id, statement, req.body, req);
+    res.json({ message: 'Estado de cuenta actualizado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar estado de cuenta' });
+  }
+});
+
+// ============================================
+// C: DEPOSITOS DE SEGURIDAD
+// ============================================
+
+router.get('/security-deposits', (req, res) => {
+  try {
+    const deposits = db.prepare(`
+      SELECT sd.*,
+        g.email as guest_email, g.first_name as guest_first_name, g.last_name as guest_last_name,
+        h.email as host_email, h.first_name as host_first_name, h.last_name as host_last_name,
+        s.title as space_title
+      FROM security_deposits sd
+      JOIN users g ON sd.guest_id = g.id
+      JOIN users h ON sd.host_id = h.id
+      LEFT JOIN reservations r ON sd.reservation_id = r.id
+      LEFT JOIN spaces s ON r.space_id = s.id
+      ORDER BY sd.created_at DESC
+    `).all();
+    const stats = {
+      total: deposits.length,
+      held: deposits.filter(d => d.status === 'held').length,
+      pending_release: deposits.filter(d => d.status === 'held').length,
+      total_amount_held: deposits.filter(d => d.status === 'held').reduce((sum, d) => sum + d.amount, 0)
+    };
+    res.json({ deposits, stats });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener depósitos' });
+  }
+});
+
+router.put('/security-deposits/:id', (req, res) => {
+  try {
+    const deposit = db.prepare('SELECT * FROM security_deposits WHERE id = ?').get(req.params.id);
+    if (!deposit) return res.status(404).json({ error: 'Depósito no encontrado' });
+
+    const { status, release_amount, claim_amount, claim_reason, notes } = req.body;
+    const updates = ['updated_at = CURRENT_TIMESTAMP', 'processed_by = ?', 'processed_at = CURRENT_TIMESTAMP'];
+    const params = [req.user.id];
+
+    if (status) { 
+      updates.push('status = ?'); 
+      params.push(status);
+      if (status === 'released') updates.push('released_at = CURRENT_TIMESTAMP');
+      if (status === 'claimed') updates.push('claimed_at = CURRENT_TIMESTAMP');
+    }
+    if (release_amount !== undefined) { updates.push('release_amount = ?'); params.push(release_amount); }
+    if (claim_amount !== undefined) { updates.push('claim_amount = ?'); params.push(claim_amount); }
+    if (claim_reason) { updates.push('claim_reason = ?'); params.push(claim_reason); }
+    if (notes) { updates.push('notes = ?'); params.push(notes); }
+
+    params.push(req.params.id);
+    db.prepare(`UPDATE security_deposits SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    logAudit(req.user.id, 'SECURITY_DEPOSIT_UPDATED', 'security_deposits', req.params.id, deposit, req.body, req);
+    res.json({ message: 'Depósito actualizado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar depósito' });
+  }
+});
+
+// ============================================
+// D: BADGES/INSIGNIAS
+// ============================================
+
+router.get('/badges', (req, res) => {
+  try {
+    const badges = db.prepare(`
+      SELECT bd.*,
+        (SELECT COUNT(*) FROM user_badges WHERE badge_id = bd.id AND is_active = 1) as awarded_count
+      FROM badge_definitions bd
+      ORDER BY bd.badge_type, bd.name
+    `).all();
+    res.json(badges);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener badges' });
+  }
+});
+
+router.post('/badges', [
+  body('code').notEmpty().trim(),
+  body('name').notEmpty().trim(),
+  body('badge_type').isIn(['host', 'guest', 'both'])
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { code, name, description, icon, color, badge_type, criteria, is_automatic } = req.body;
+    const id = `badge_${Date.now()}`;
+
+    db.prepare(`
+      INSERT INTO badge_definitions (id, code, name, description, icon, color, badge_type, criteria, is_automatic)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, code, name, description || null, icon || null, color || '#4F46E5', badge_type, criteria || null, is_automatic ? 1 : 0);
+
+    logAudit(req.user.id, 'BADGE_CREATED', 'badge_definitions', id, null, req.body, req);
+    res.status(201).json({ id, message: 'Badge creado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear badge' });
+  }
+});
+
+router.put('/badges/:id', (req, res) => {
+  try {
+    const badge = db.prepare('SELECT * FROM badge_definitions WHERE id = ?').get(req.params.id);
+    if (!badge) return res.status(404).json({ error: 'Badge no encontrado' });
+
+    const { name, description, icon, color, criteria, is_automatic, is_active } = req.body;
+    const updates = [];
+    const params = [];
+
+    if (name) { updates.push('name = ?'); params.push(name); }
+    if (description !== undefined) { updates.push('description = ?'); params.push(description); }
+    if (icon) { updates.push('icon = ?'); params.push(icon); }
+    if (color) { updates.push('color = ?'); params.push(color); }
+    if (criteria !== undefined) { updates.push('criteria = ?'); params.push(criteria); }
+    if (is_automatic !== undefined) { updates.push('is_automatic = ?'); params.push(is_automatic ? 1 : 0); }
+    if (is_active !== undefined) { updates.push('is_active = ?'); params.push(is_active ? 1 : 0); }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'No hay cambios' });
+
+    params.push(req.params.id);
+    db.prepare(`UPDATE badge_definitions SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    logAudit(req.user.id, 'BADGE_UPDATED', 'badge_definitions', req.params.id, badge, req.body, req);
+    res.json({ message: 'Badge actualizado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar badge' });
+  }
+});
+
+router.post('/badges/award', [
+  body('user_id').notEmpty(),
+  body('badge_id').notEmpty()
+], (req, res) => {
+  try {
+    const { user_id, badge_id } = req.body;
+    const existing = db.prepare('SELECT * FROM user_badges WHERE user_id = ? AND badge_id = ? AND is_active = 1').get(user_id, badge_id);
+    if (existing) return res.status(400).json({ error: 'El usuario ya tiene este badge' });
+
+    const id = `ub_${Date.now()}`;
+    db.prepare('INSERT INTO user_badges (id, user_id, badge_id, awarded_by) VALUES (?, ?, ?, ?)').run(id, user_id, badge_id, req.user.id);
+
+    logAudit(req.user.id, 'BADGE_AWARDED', 'user_badges', id, null, req.body, req);
+    res.status(201).json({ id, message: 'Badge otorgado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al otorgar badge' });
+  }
+});
+
+router.delete('/badges/revoke/:id', (req, res) => {
+  try {
+    const userBadge = db.prepare('SELECT * FROM user_badges WHERE id = ?').get(req.params.id);
+    if (!userBadge) return res.status(404).json({ error: 'Badge de usuario no encontrado' });
+
+    db.prepare('UPDATE user_badges SET is_active = 0 WHERE id = ?').run(req.params.id);
+    logAudit(req.user.id, 'BADGE_REVOKED', 'user_badges', req.params.id, userBadge, null, req);
+    res.json({ message: 'Badge revocado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al revocar badge' });
+  }
+});
+
+// ============================================
+// E: FAQ/CENTRO DE AYUDA
+// ============================================
+
+router.get('/faq-categories', (req, res) => {
+  try {
+    const categories = db.prepare(`
+      SELECT fc.*,
+        (SELECT COUNT(*) FROM faqs WHERE category_id = fc.id AND is_active = 1) as faqs_count
+      FROM faq_categories fc
+      ORDER BY fc.order_index
+    `).all();
+    res.json(categories);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener categorías' });
+  }
+});
+
+router.post('/faq-categories', [
+  body('name').notEmpty().trim(),
+  body('slug').notEmpty().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { name, slug, description, icon, order_index, target_audience } = req.body;
+    const id = `faq_cat_${Date.now()}`;
+
+    db.prepare(`
+      INSERT INTO faq_categories (id, name, slug, description, icon, order_index, target_audience)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, slug, description || null, icon || null, order_index || 0, target_audience || 'all');
+
+    res.status(201).json({ id, message: 'Categoría creada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear categoría' });
+  }
+});
+
+router.get('/faqs', (req, res) => {
+  try {
+    const { category_id } = req.query;
+    let query = `
+      SELECT f.*, fc.name as category_name
+      FROM faqs f
+      JOIN faq_categories fc ON f.category_id = fc.id
+    `;
+    if (category_id) query += ` WHERE f.category_id = '${category_id}'`;
+    query += ' ORDER BY fc.order_index, f.order_index';
+
+    const faqs = db.prepare(query).all();
+    res.json(faqs);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener FAQs' });
+  }
+});
+
+router.post('/faqs', [
+  body('category_id').notEmpty(),
+  body('question').notEmpty().trim(),
+  body('answer').notEmpty()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { category_id, question, answer, order_index, is_featured } = req.body;
+    const id = `faq_${Date.now()}`;
+
+    db.prepare(`
+      INSERT INTO faqs (id, category_id, question, answer, order_index, is_featured, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, category_id, question, answer, order_index || 0, is_featured ? 1 : 0, req.user.id);
+
+    res.status(201).json({ id, message: 'FAQ creada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear FAQ' });
+  }
+});
+
+router.put('/faqs/:id', (req, res) => {
+  try {
+    const faq = db.prepare('SELECT * FROM faqs WHERE id = ?').get(req.params.id);
+    if (!faq) return res.status(404).json({ error: 'FAQ no encontrada' });
+
+    const { category_id, question, answer, order_index, is_featured, is_active } = req.body;
+    const updates = ['updated_at = CURRENT_TIMESTAMP'];
+    const params = [];
+
+    if (category_id) { updates.push('category_id = ?'); params.push(category_id); }
+    if (question) { updates.push('question = ?'); params.push(question); }
+    if (answer) { updates.push('answer = ?'); params.push(answer); }
+    if (order_index !== undefined) { updates.push('order_index = ?'); params.push(order_index); }
+    if (is_featured !== undefined) { updates.push('is_featured = ?'); params.push(is_featured ? 1 : 0); }
+    if (is_active !== undefined) { updates.push('is_active = ?'); params.push(is_active ? 1 : 0); }
+
+    params.push(req.params.id);
+    db.prepare(`UPDATE faqs SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    res.json({ message: 'FAQ actualizada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar FAQ' });
+  }
+});
+
+router.delete('/faqs/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM faqs WHERE id = ?').run(req.params.id);
+    res.json({ message: 'FAQ eliminada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar FAQ' });
+  }
+});
+
+// ============================================
+// F: ALERTAS ADMIN
+// ============================================
+
+router.get('/alerts', (req, res) => {
+  try {
+    const { unread_only } = req.query;
+    let query = 'SELECT * FROM admin_alerts';
+    if (unread_only === 'true') query += ' WHERE is_read = 0 AND is_dismissed = 0';
+    query += ' ORDER BY created_at DESC LIMIT 100';
+
+    const alerts = db.prepare(query).all();
+    const unread_count = db.prepare('SELECT COUNT(*) as count FROM admin_alerts WHERE is_read = 0 AND is_dismissed = 0').get().count;
+    res.json({ alerts, unread_count });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener alertas' });
+  }
+});
+
+router.put('/alerts/:id/read', (req, res) => {
+  try {
+    db.prepare('UPDATE admin_alerts SET is_read = 1 WHERE id = ?').run(req.params.id);
+    res.json({ message: 'Alerta marcada como leída' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al marcar alerta' });
+  }
+});
+
+router.put('/alerts/read-all', (req, res) => {
+  try {
+    db.prepare('UPDATE admin_alerts SET is_read = 1 WHERE is_read = 0').run();
+    res.json({ message: 'Todas las alertas marcadas como leídas' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al marcar alertas' });
+  }
+});
+
+router.put('/alerts/:id/dismiss', (req, res) => {
+  try {
+    db.prepare('UPDATE admin_alerts SET is_dismissed = 1 WHERE id = ?').run(req.params.id);
+    res.json({ message: 'Alerta descartada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al descartar alerta' });
+  }
+});
+
+// ============================================
+// #2: REPORTES AVANZADOS
+// ============================================
+
+router.get('/reports/overview', (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const dateFilter = start_date && end_date ? `AND created_at BETWEEN '${start_date}' AND '${end_date}'` : '';
+
+    const revenue = db.prepare(`
+      SELECT 
+        strftime('%Y-%m', created_at) as month,
+        SUM(amount) as total,
+        COUNT(*) as count
+      FROM payments 
+      WHERE status = 'completed' ${dateFilter}
+      GROUP BY strftime('%Y-%m', created_at)
+      ORDER BY month DESC
+      LIMIT 12
+    `).all();
+
+    const reservations = db.prepare(`
+      SELECT 
+        strftime('%Y-%m', created_at) as month,
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
+      FROM reservations
+      WHERE 1=1 ${dateFilter}
+      GROUP BY strftime('%Y-%m', created_at)
+      ORDER BY month DESC
+      LIMIT 12
+    `).all();
+
+    const users = db.prepare(`
+      SELECT 
+        strftime('%Y-%m', created_at) as month,
+        COUNT(*) as new_users,
+        SUM(CASE WHEN role = 'GUEST' THEN 1 ELSE 0 END) as guests,
+        SUM(CASE WHEN role = 'HOST' THEN 1 ELSE 0 END) as hosts
+      FROM users
+      WHERE 1=1 ${dateFilter}
+      GROUP BY strftime('%Y-%m', created_at)
+      ORDER BY month DESC
+      LIMIT 12
+    `).all();
+
+    const spaces = db.prepare(`
+      SELECT 
+        strftime('%Y-%m', created_at) as month,
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) as published
+      FROM spaces
+      WHERE 1=1 ${dateFilter}
+      GROUP BY strftime('%Y-%m', created_at)
+      ORDER BY month DESC
+      LIMIT 12
+    `).all();
+
+    const commissions = db.prepare(`
+      SELECT COALESCE(SUM(commission_amount), 0) as total
+      FROM reservations
+      WHERE status = 'contract_signed' ${dateFilter}
+    `).get();
+
+    const topHosts = db.prepare(`
+      SELECT u.id, u.email, u.first_name, u.last_name, u.company_name,
+        COUNT(DISTINCT c.id) as contracts_count,
+        COALESCE(SUM(c.total_amount), 0) as total_revenue
+      FROM users u
+      JOIN contracts c ON u.id = c.host_id
+      WHERE u.role = 'HOST' ${dateFilter.replace('created_at', 'c.created_at')}
+      GROUP BY u.id
+      ORDER BY total_revenue DESC
+      LIMIT 10
+    `).all();
+
+    const topSpaces = db.prepare(`
+      SELECT s.id, s.title, s.city, s.department,
+        COUNT(DISTINCT r.id) as reservations_count,
+        COALESCE(SUM(r.total_amount), 0) as total_revenue
+      FROM spaces s
+      JOIN reservations r ON s.id = r.space_id
+      WHERE 1=1 ${dateFilter.replace('created_at', 'r.created_at')}
+      GROUP BY s.id
+      ORDER BY total_revenue DESC
+      LIMIT 10
+    `).all();
+
+    res.json({
+      revenue: revenue.reverse(),
+      reservations: reservations.reverse(),
+      users: users.reverse(),
+      spaces: spaces.reverse(),
+      commissions: commissions.total,
+      topHosts,
+      topSpaces
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al generar reportes' });
+  }
+});
+
+router.get('/reports/kpis', (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const kpis = {
+      total_revenue: db.prepare("SELECT COALESCE(SUM(amount), 0) as value FROM payments WHERE status = 'completed'").get().value,
+      monthly_revenue: db.prepare(`SELECT COALESCE(SUM(amount), 0) as value FROM payments WHERE status = 'completed' AND created_at >= '${thirtyDaysAgo}'`).get().value,
+      total_commissions: db.prepare("SELECT COALESCE(SUM(commission_amount), 0) as value FROM reservations WHERE status = 'contract_signed'").get().value,
+      active_contracts: db.prepare("SELECT COUNT(*) as value FROM contracts WHERE status IN ('active', 'signed')").get().value,
+      pending_verifications: db.prepare("SELECT COUNT(*) as value FROM host_verifications WHERE status = 'pending'").get().value,
+      open_disputes: db.prepare("SELECT COUNT(*) as value FROM disputes WHERE status IN ('open', 'in_review')").get().value,
+      conversion_rate: (() => {
+        const total = db.prepare('SELECT COUNT(*) as count FROM reservations').get().count;
+        const completed = db.prepare("SELECT COUNT(*) as count FROM reservations WHERE status = 'completed'").get().count;
+        return total > 0 ? ((completed / total) * 100).toFixed(2) : 0;
+      })(),
+      avg_contract_value: db.prepare('SELECT COALESCE(AVG(total_amount), 0) as value FROM contracts').get().value,
+      escrow_balance: db.prepare("SELECT COALESCE(SUM(amount), 0) as value FROM payments WHERE escrow_status = 'held'").get().value,
+      new_users_30d: db.prepare(`SELECT COUNT(*) as value FROM users WHERE created_at >= '${thirtyDaysAgo}'`).get().value
+    };
+
+    res.json(kpis);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener KPIs' });
+  }
+});
+
 module.exports = router;
