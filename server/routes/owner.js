@@ -241,6 +241,17 @@ router.put('/spaces/:id', (req, res) => {
             amenities, rules,
             min_rental_days, max_rental_days, status } = req.body;
 
+    const body = req.body;
+    const isOpenVal = Object.prototype.hasOwnProperty.call(body, 'is_open') ? (is_open ? 1 : 0) : space.is_open;
+    const hasRoofVal = Object.prototype.hasOwnProperty.call(body, 'has_roof') ? (has_roof ? 1 : 0) : space.has_roof;
+    const rainProtectedVal = Object.prototype.hasOwnProperty.call(body, 'rain_protected') ? (rain_protected ? 1 : 0) : space.rain_protected;
+    const dustProtectedVal = Object.prototype.hasOwnProperty.call(body, 'dust_protected') ? (dust_protected ? 1 : 0) : space.dust_protected;
+    const hasSecurityVal = Object.prototype.hasOwnProperty.call(body, 'has_security') ? (has_security ? 1 : 0) : space.has_security;
+    const securityDescVal = Object.prototype.hasOwnProperty.call(body, 'security_description') ? (security_description || null) : space.security_description;
+    const scheduleVal = Object.prototype.hasOwnProperty.call(body, 'schedule') ? (schedule || null) : space.schedule;
+    const amenitiesVal = Object.prototype.hasOwnProperty.call(body, 'amenities') ? (amenities || null) : space.amenities;
+    const rulesVal = Object.prototype.hasOwnProperty.call(body, 'rules') ? (rules || null) : space.rules;
+
     db.prepare(`
       UPDATE spaces SET 
         title = COALESCE(?, title),
@@ -284,19 +295,19 @@ router.put('/spaces/:id', (req, res) => {
       price_per_sqm_quarter ? parseFloat(price_per_sqm_quarter) : null,
       price_per_sqm_semester ? parseFloat(price_per_sqm_semester) : null,
       price_per_sqm_year ? parseFloat(price_per_sqm_year) : null,
-      is_open ? 1 : 0,
-      has_roof !== false && has_roof !== 0 ? 1 : 0,
-      rain_protected !== false && rain_protected !== 0 ? 1 : 0,
-      dust_protected !== false && dust_protected !== 0 ? 1 : 0,
+      isOpenVal,
+      hasRoofVal,
+      rainProtectedVal,
+      dustProtectedVal,
       access_type,
-      has_security ? 1 : 0,
-      security_description || null,
-      schedule || null,
+      hasSecurityVal,
+      securityDescVal,
+      scheduleVal,
       city, department, address,
       latitude ? parseFloat(latitude) : null,
       longitude ? parseFloat(longitude) : null,
-      amenities || null,
-      rules || null,
+      amenitiesVal,
+      rulesVal,
       min_rental_days ? parseInt(min_rental_days) : null,
       max_rental_days ? parseInt(max_rental_days) : null,
       status,
