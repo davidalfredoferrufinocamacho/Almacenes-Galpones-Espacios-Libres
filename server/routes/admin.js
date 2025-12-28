@@ -55,8 +55,9 @@ router.get('/users', (req, res) => {
   try {
     const users = db.prepare(`
       SELECT id, email, role, person_type, first_name, last_name, company_name,
-             ci, nit, phone, city, department, is_verified, is_active, is_blocked,
-             anti_bypass_accepted, created_at
+             ci, nit, phone, city, department, street, street_number, country,
+             classification, is_verified, is_active, is_blocked,
+             anti_bypass_accepted, anti_bypass_accepted_at, created_at
       FROM users
       ORDER BY created_at DESC
     `).all();
@@ -361,6 +362,12 @@ router.put('/users/:id', [
   body('last_name').optional().trim().notEmpty(),
   body('phone').optional().trim(),
   body('city').optional().trim(),
+  body('street').optional().trim(),
+  body('street_number').optional().trim(),
+  body('country').optional().trim(),
+  body('department').optional().trim(),
+  body('classification').optional().trim(),
+  body('anti_bypass_accepted').optional().isBoolean(),
   body('is_blocked').optional().isBoolean()
 ], (req, res) => {
   try {
@@ -378,8 +385,10 @@ router.put('/users/:id', [
       return res.status(403).json({ error: 'No se puede editar a otro administrador' });
     }
 
-    const { first_name, last_name, phone, city, is_blocked } = req.body;
-    const oldData = { first_name: user.first_name, last_name: user.last_name, phone: user.phone, city: user.city, is_blocked: user.is_blocked };
+    const { first_name, last_name, phone, city, street, street_number, country, department,
+            classification, anti_bypass_accepted, is_blocked } = req.body;
+    const oldData = { first_name: user.first_name, last_name: user.last_name, phone: user.phone, 
+                      city: user.city, classification: user.classification, anti_bypass_accepted: user.anti_bypass_accepted };
 
     const updates = [];
     const values = [];
@@ -388,6 +397,18 @@ router.put('/users/:id', [
     if (last_name !== undefined) { updates.push('last_name = ?'); values.push(last_name); }
     if (phone !== undefined) { updates.push('phone = ?'); values.push(phone); }
     if (city !== undefined) { updates.push('city = ?'); values.push(city); }
+    if (street !== undefined) { updates.push('street = ?'); values.push(street); }
+    if (street_number !== undefined) { updates.push('street_number = ?'); values.push(street_number); }
+    if (country !== undefined) { updates.push('country = ?'); values.push(country); }
+    if (department !== undefined) { updates.push('department = ?'); values.push(department); }
+    if (classification !== undefined) { updates.push('classification = ?'); values.push(classification); }
+    if (anti_bypass_accepted !== undefined) { 
+      updates.push('anti_bypass_accepted = ?'); 
+      values.push(anti_bypass_accepted ? 1 : 0);
+      if (anti_bypass_accepted && !user.anti_bypass_accepted) {
+        updates.push('anti_bypass_accepted_at = CURRENT_TIMESTAMP');
+      }
+    }
     if (is_blocked !== undefined) { updates.push('is_blocked = ?'); values.push(is_blocked ? 1 : 0); }
 
     if (updates.length === 0) {

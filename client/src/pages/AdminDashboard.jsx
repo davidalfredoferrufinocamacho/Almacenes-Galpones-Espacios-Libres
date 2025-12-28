@@ -1021,7 +1021,13 @@ function AdminUsers() {
       first_name: user.first_name || '',
       last_name: user.last_name || '',
       phone: user.phone || '',
-      city: user.city || ''
+      street: user.street || '',
+      street_number: user.street_number || '',
+      city: user.city || '',
+      department: user.department || '',
+      country: user.country || 'Bolivia',
+      classification: user.classification || '',
+      anti_bypass_accepted: user.anti_bypass_accepted ? true : false
     })
   }
 
@@ -1086,13 +1092,15 @@ function AdminUsers() {
           <option value="inactive">Inactivos</option>
         </select>
       </div>
-      <table className="admin-table">
+      <table className="admin-table" style={{fontSize: '0.85rem'}}>
         <thead>
           <tr>
             <th>Email</th>
             <th>Rol</th>
             <th>Nombre</th>
-            <th>Ciudad</th>
+            <th>Direccion</th>
+            <th>Clasificacion</th>
+            <th>Anti-Bypass</th>
             <th>Estado</th>
             <th>Acciones</th>
           </tr>
@@ -1105,14 +1113,40 @@ function AdminUsers() {
                 {user.is_blocked && <span className="blocked-badge">BLOQUEADO</span>}
               </td>
               <td>
-                <select value={user.role} onChange={e => changeRole(user.id, e.target.value)} style={{padding: '0.25rem'}}>
+                <select value={user.role} onChange={e => changeRole(user.id, e.target.value)} style={{padding: '0.25rem', fontSize: '0.8rem'}}>
                   <option value="GUEST">GUEST</option>
                   <option value="HOST">HOST</option>
                   <option value="ADMIN">ADMIN</option>
                 </select>
               </td>
               <td>{user.first_name} {user.last_name}</td>
-              <td>{user.city || '-'}</td>
+              <td style={{fontSize: '0.75rem'}}>
+                {user.street ? `${user.street} ${user.street_number || ''}, ` : ''}
+                {user.city || '-'}
+                {user.country && user.country !== 'Bolivia' ? `, ${user.country}` : ''}
+              </td>
+              <td>
+                {user.classification ? (
+                  <span style={{
+                    padding: '0.2rem 0.5rem', 
+                    borderRadius: '12px', 
+                    fontSize: '0.7rem',
+                    background: user.classification === 'premium' ? '#6f42c1' : user.classification === 'corporativo' ? '#0d6efd' : user.classification === 'frecuente' ? '#198754' : '#6c757d',
+                    color: 'white'
+                  }}>
+                    {user.classification.charAt(0).toUpperCase() + user.classification.slice(1)}
+                  </span>
+                ) : (
+                  <span style={{fontSize: '0.7rem', color: '#999'}}>-</span>
+                )}
+              </td>
+              <td>
+                {user.anti_bypass_accepted ? (
+                  <span style={{color: '#198754', fontSize: '0.75rem', fontWeight: '500'}}>Aceptada</span>
+                ) : (
+                  <span style={{color: '#dc3545', fontSize: '0.75rem'}}>Pendiente</span>
+                )}
+              </td>
               <td>
                 <span className={`status-badge status-${user.is_active ? 'active' : 'inactive'}`}>
                   {user.is_active ? 'Activo' : 'Inactivo'}
@@ -1124,17 +1158,17 @@ function AdminUsers() {
                     Editar
                   </button>
                   <button onClick={() => openPasswordModal(user)} className="btn btn-sm btn-info" title="Cambiar Contraseña">
-                    Contraseña
+                    Clave
                   </button>
                   <button onClick={() => toggleStatus(user.id, user.is_active)} className={`btn btn-sm ${user.is_active ? 'btn-warning' : 'btn-success'}`}>
-                    {user.is_active ? 'Desactivar' : 'Activar'}
+                    {user.is_active ? 'Desact.' : 'Activar'}
                   </button>
                   <button onClick={() => toggleBlock(user.id, user.is_blocked)} className={`btn btn-sm ${user.is_blocked ? 'btn-info' : 'btn-dark'}`}>
-                    {user.is_blocked ? 'Desbloquear' : 'Bloquear'}
+                    {user.is_blocked ? 'Desblq.' : 'Bloquear'}
                   </button>
                   {user.role !== 'ADMIN' && (
                     <button onClick={() => deleteUser(user.id, user.email)} className="btn btn-sm btn-danger" title="Eliminar">
-                      Eliminar
+                      Elim.
                     </button>
                   )}
                 </div>
@@ -1145,26 +1179,83 @@ function AdminUsers() {
       </table>
 
       {editingUser && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+        <div className="modal-overlay" onClick={() => setEditingUser(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto'}}>
             <h3>Editar Usuario</h3>
-            <p style={{color: '#666', marginBottom: '1rem'}}>{editingUser.email}</p>
-            <div style={{marginBottom: '1rem'}}>
-              <label>Nombre:</label>
-              <input type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            <p style={{color: '#666', marginBottom: '1rem'}}>{editingUser.email} ({editingUser.role})</p>
+            
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+              <div>
+                <label style={{fontWeight: 'bold'}}>Nombre:</label>
+                <input type="text" value={editForm.first_name || ''} onChange={e => setEditForm({...editForm, first_name: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div>
+                <label style={{fontWeight: 'bold'}}>Apellido:</label>
+                <input type="text" value={editForm.last_name || ''} onChange={e => setEditForm({...editForm, last_name: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
             </div>
-            <div style={{marginBottom: '1rem'}}>
-              <label>Apellido:</label>
-              <input type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+              <div>
+                <label style={{fontWeight: 'bold'}}>Telefono:</label>
+                <input type="text" value={editForm.phone || ''} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div>
+                <label style={{fontWeight: 'bold'}}>Clasificacion:</label>
+                <select value={editForm.classification || ''} onChange={e => setEditForm({...editForm, classification: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}}>
+                  <option value="">Sin clasificar</option>
+                  <option value="premium">Premium</option>
+                  <option value="standard">Standard</option>
+                  <option value="nuevo">Nuevo</option>
+                  <option value="frecuente">Frecuente</option>
+                  <option value="corporativo">Corporativo</option>
+                </select>
+              </div>
             </div>
-            <div style={{marginBottom: '1rem'}}>
-              <label>Telefono:</label>
-              <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+
+            <h4 style={{marginBottom: '0.75rem', borderBottom: '1px solid #ddd', paddingBottom: '0.5rem'}}>Direccion</h4>
+            
+            <div style={{display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+              <div>
+                <label style={{fontWeight: 'bold'}}>Calle:</label>
+                <input type="text" value={editForm.street || ''} onChange={e => setEditForm({...editForm, street: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} placeholder="Ej: Av. 6 de Agosto" />
+              </div>
+              <div>
+                <label style={{fontWeight: 'bold'}}>Numero:</label>
+                <input type="text" value={editForm.street_number || ''} onChange={e => setEditForm({...editForm, street_number: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} placeholder="Ej: 1234" />
+              </div>
             </div>
-            <div style={{marginBottom: '1rem'}}>
-              <label>Ciudad:</label>
-              <input type="text" value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+              <div>
+                <label style={{fontWeight: 'bold'}}>Ciudad:</label>
+                <input type="text" value={editForm.city || ''} onChange={e => setEditForm({...editForm, city: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
+              <div>
+                <label style={{fontWeight: 'bold'}}>Departamento:</label>
+                <select value={editForm.department || ''} onChange={e => setEditForm({...editForm, department: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}}>
+                  <option value="">Seleccionar...</option>
+                  {['La Paz', 'Cochabamba', 'Santa Cruz', 'Oruro', 'Potosi', 'Tarija', 'Chuquisaca', 'Beni', 'Pando'].map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontWeight: 'bold'}}>Pais:</label>
+                <input type="text" value={editForm.country || 'Bolivia'} onChange={e => setEditForm({...editForm, country: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+              </div>
             </div>
+
+            <div style={{marginBottom: '1rem', padding: '0.75rem', background: editForm.anti_bypass_accepted ? '#d4edda' : '#fff3cd', borderRadius: '4px'}}>
+              <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold'}}>
+                <input type="checkbox" checked={editForm.anti_bypass_accepted || false} onChange={e => setEditForm({...editForm, anti_bypass_accepted: e.target.checked})} />
+                Clausula Anti-Bypass Aceptada
+              </label>
+              <small style={{color: '#666', marginTop: '0.25rem', display: 'block'}}>
+                {editingUser.anti_bypass_accepted_at 
+                  ? `Aceptada el: ${new Date(editingUser.anti_bypass_accepted_at).toLocaleDateString('es-BO')}`
+                  : 'El usuario no ha aceptado la clausula anti-bypass'}
+              </small>
+            </div>
+            
             <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
               <button onClick={() => setEditingUser(null)} className="btn btn-secondary">Cancelar</button>
               <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
