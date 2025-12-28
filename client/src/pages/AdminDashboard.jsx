@@ -7,6 +7,7 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [activeSection, setActiveSection] = useState('dashboard')
   const [currentAdmin, setCurrentAdmin] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
     loadStats()
@@ -125,15 +126,30 @@ function AdminDashboard() {
     }
   }
 
+  const handleMenuClick = (key) => {
+    setActiveSection(key)
+    setSidebarOpen(false)
+  }
+
   return (
     <div className="admin-dashboard">
-      <div className="admin-sidebar">
+      <button 
+        className="admin-hamburger"
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-label="Toggle menu"
+      >
+        {sidebarOpen ? '✕' : '☰'}
+      </button>
+      
+      {sidebarOpen && <div className="admin-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+      
+      <div className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
         <h2>Panel Admin</h2>
         <nav>
           {menuItems.map(item => (
             <button 
               key={item.key}
-              onClick={() => setActiveSection(item.key)}
+              onClick={() => handleMenuClick(item.key)}
               className={activeSection === item.key ? 'active' : ''}
             >
               {item.label}
@@ -6395,20 +6411,12 @@ function AdminBackup() {
                       )}
                     </td>
                     <td>
-                      <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center'}}>
+                      <div className="backup-actions">
                         {backup.status === 'completed' && backup.exists && (
                           <button 
                             onClick={() => handleRestore(backup.id)}
                             disabled={restoring === backup.id}
-                            className="btn btn-small"
-                            style={{
-                              background: '#28a745',
-                              color: 'white',
-                              fontWeight: 'bold',
-                              padding: '0.5rem 1rem',
-                              border: 'none',
-                              borderRadius: '4px'
-                            }}
+                            className="btn btn-small btn-recovery"
                             title="Recuperar datos desde este backup"
                           >
                             {restoring === backup.id ? 'Recuperando...' : 'RECOVERY'}
