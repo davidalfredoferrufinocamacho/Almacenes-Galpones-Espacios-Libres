@@ -68,6 +68,7 @@ function AdminDashboard() {
     { label: 'Notificaciones', key: 'notifications' },
     { label: 'Auditoria', key: 'audit-log', superAdminOnly: true },
     { label: 'Contabilidad', key: 'accounting', superAdminOnly: true },
+    { label: 'Backup y Recovery', key: 'backup', superAdminOnly: true },
     { label: 'Exportar', key: 'export' },
     { label: 'Mensajes', key: 'messages' },
   ]
@@ -79,7 +80,7 @@ function AdminDashboard() {
 
   const renderContent = () => {
     // Verificar acceso a secciones restringidas
-    const restrictedSections = ['admin-roles', 'config', 'legal-texts', 'audit-log', 'accounting', 'payment-methods']
+    const restrictedSections = ['admin-roles', 'config', 'legal-texts', 'audit-log', 'accounting', 'payment-methods', 'backup']
     if (restrictedSections.includes(activeSection) && !isSuperAdmin) {
       return (
         <div style={{padding: '2rem', textAlign: 'center'}}>
@@ -117,6 +118,7 @@ function AdminDashboard() {
       case 'notifications': return <AdminNotificationTemplates />
       case 'audit-log': return <AdminAuditLog />
       case 'accounting': return <AdminAccounting />
+      case 'backup': return <AdminBackup />
       case 'export': return <AdminExport />
       case 'messages': return <AdminMessages />
       default: return <AdminOverview stats={stats} onNavigate={setActiveSection} />
@@ -6109,6 +6111,325 @@ function AdminAlerts() {
           </div>
         ))}
         {data.alerts.length === 0 && <p style={{textAlign: 'center', color: '#666', padding: '2rem'}}>No hay alertas</p>}
+      </div>
+    </div>
+  )
+}
+
+function AdminBackup() {
+  const [config, setConfig] = useState(null)
+  const [backups, setBackups] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [restoring, setRestoring] = useState(null)
+  const [message, setMessage] = useState(null)
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    try {
+      const [configRes, backupsRes] = await Promise.all([
+        api.get('/backup/config'),
+        api.get('/backup/list')
+      ])
+      setConfig(configRes.data)
+      setBackups(backupsRes.data)
+    } catch (error) {
+      console.error('Error loading backup data:', error)
+      setMessage({ type: 'error', text: 'Error al cargar datos de backup' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateBackup = async () => {
+    setCreating(true)
+    setMessage(null)
+    try {
+      const response = await api.post('/backup/create')
+      if (response.data.success) {
+        setMessage({ type: 'success', text: 'Backup creado exitosamente' })
+        loadData()
+      } else {
+        setMessage({ type: 'error', text: response.data.error || 'Error al crear backup' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Error al crear backup' })
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleUpdateConfig = async (newConfig) => {
+    try {
+      const response = await api.put('/backup/config', newConfig)
+      if (response.data.success) {
+        setConfig(response.data.config)
+        setMessage({ type: 'success', text: 'Configuracion actualizada' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al actualizar configuracion' })
+    }
+  }
+
+  const handleRestore = async (backupId) => {
+    if (!window.confirm('ADVERTENCIA: Restaurar este backup reemplazara TODOS los datos actuales. Esta seguro de continuar?')) {
+      return
+    }
+    if (!window.confirm('SEGUNDA CONFIRMACION: Esta accion es irreversible. Se creara un backup de seguridad antes de restaurar. Confirma?')) {
+      return
+    }
+
+    setRestoring(backupId)
+    setMessage(null)
+    try {
+      const response = await api.post(`/backup/restore/${backupId}`)
+      if (response.data.success) {
+        setMessage({ type: 'success', text: 'Backup restaurado. Recargando pagina...' })
+        setTimeout(() => window.location.reload(), 3000)
+      } else {
+        setMessage({ type: 'error', text: response.data.error || 'Error al restaurar' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Error al restaurar backup' })
+    } finally {
+      setRestoring(null)
+    }
+  }
+
+  const handleDelete = async (backupId) => {
+    if (!window.confirm('Eliminar este backup permanentemente?')) return
+    
+    try {
+      await api.delete(`/backup/${backupId}`)
+      setMessage({ type: 'success', text: 'Backup eliminado' })
+      loadData()
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al eliminar backup' })
+    }
+  }
+
+  const handleDownload = (backupId) => {
+    window.open(`/api/backup/download/${backupId}`, '_blank')
+  }
+
+  const frequencyLabels = {
+    daily: 'Diario',
+    weekly: 'Semanal',
+    monthly: 'Mensual',
+    quarterly: 'Trimestral',
+    semestral: 'Semestral',
+    yearly: 'Anual'
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Backup y Recuperacion</h1>
+      <p style={{color: '#666', marginBottom: '1.5rem'}}>
+        Sistema de respaldo y recuperacion de datos. Solo accesible para Super Administradores.
+      </p>
+
+      {message && (
+        <div className={`alert alert-${message.type}`} style={{
+          padding: '1rem',
+          marginBottom: '1rem',
+          borderRadius: '8px',
+          background: message.type === 'success' ? '#d4edda' : '#f8d7da',
+          color: message.type === 'success' ? '#155724' : '#721c24'
+        }}>
+          {message.text}
+        </div>
+      )}
+
+      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem'}}>
+        <div className="card" style={{padding: '1.5rem'}}>
+          <h3 style={{marginBottom: '1rem'}}>Backup Manual</h3>
+          <p style={{color: '#666', marginBottom: '1rem'}}>
+            Crea un respaldo inmediato de toda la base de datos.
+          </p>
+          <button 
+            onClick={handleCreateBackup} 
+            disabled={creating}
+            className="btn btn-primary"
+            style={{width: '100%'}}
+          >
+            {creating ? 'Creando backup...' : 'Crear Backup Ahora'}
+          </button>
+          {config?.last_backup_at && (
+            <p style={{marginTop: '1rem', fontSize: '0.9rem', color: '#666'}}>
+              Ultimo backup: {new Date(config.last_backup_at).toLocaleString()}
+            </p>
+          )}
+        </div>
+
+        <div className="card" style={{padding: '1.5rem'}}>
+          <h3 style={{marginBottom: '1rem'}}>Backup Automatico</h3>
+          <div style={{marginBottom: '1rem'}}>
+            <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer'}}>
+              <input 
+                type="checkbox" 
+                checked={config?.auto_backup_enabled || false}
+                onChange={(e) => handleUpdateConfig({...config, auto_backup_enabled: e.target.checked})}
+              />
+              <strong>Activar backups automaticos</strong>
+            </label>
+          </div>
+
+          {config?.auto_backup_enabled && (
+            <>
+              <div style={{marginBottom: '1rem'}}>
+                <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: 500}}>Frecuencia:</label>
+                <select 
+                  value={config?.frequency || 'daily'}
+                  onChange={(e) => handleUpdateConfig({...config, frequency: e.target.value})}
+                  className="form-control"
+                >
+                  {Object.entries(frequencyLabels).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{marginBottom: '1rem'}}>
+                <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: 500}}>
+                  Dias de retencion: {config?.retention_days || 30}
+                </label>
+                <input 
+                  type="range"
+                  min="7"
+                  max="365"
+                  value={config?.retention_days || 30}
+                  onChange={(e) => handleUpdateConfig({...config, retention_days: parseInt(e.target.value)})}
+                  style={{width: '100%'}}
+                />
+                <small style={{color: '#666'}}>Los backups mas antiguos se eliminaran automaticamente</small>
+              </div>
+
+              {config?.next_backup_at && (
+                <p style={{fontSize: '0.9rem', color: '#666'}}>
+                  Proximo backup: {new Date(config.next_backup_at).toLocaleString()}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="card" style={{padding: '1.5rem', marginBottom: '2rem'}}>
+        <h3 style={{marginBottom: '1rem'}}>Notificaciones</h3>
+        <div style={{display: 'flex', gap: '2rem'}}>
+          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer'}}>
+            <input 
+              type="checkbox" 
+              checked={config?.notify_on_success || false}
+              onChange={(e) => handleUpdateConfig({...config, notify_on_success: e.target.checked})}
+            />
+            Notificar backup exitoso
+          </label>
+          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer'}}>
+            <input 
+              type="checkbox" 
+              checked={config?.notify_on_failure || false}
+              onChange={(e) => handleUpdateConfig({...config, notify_on_failure: e.target.checked})}
+            />
+            Notificar error en backup
+          </label>
+        </div>
+      </div>
+
+      <div className="card" style={{padding: '1.5rem'}}>
+        <h3 style={{marginBottom: '1rem'}}>Historial de Backups</h3>
+        
+        {backups.length === 0 ? (
+          <p style={{textAlign: 'center', color: '#666', padding: '2rem'}}>
+            No hay backups registrados. Crea tu primer backup manual.
+          </p>
+        ) : (
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Archivo</th>
+                  <th>Tamano</th>
+                  <th>Estado</th>
+                  <th>Creado por</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backups.map(backup => (
+                  <tr key={backup.id}>
+                    <td>{new Date(backup.created_at).toLocaleString()}</td>
+                    <td>
+                      <span className={`badge ${backup.backup_type === 'automatic' ? 'badge-info' : 'badge-primary'}`}>
+                        {backup.backup_type === 'automatic' ? 'Automatico' : 'Manual'}
+                      </span>
+                    </td>
+                    <td style={{fontFamily: 'monospace', fontSize: '0.85rem'}}>{backup.filename}</td>
+                    <td>{backup.sizeFormatted || '-'}</td>
+                    <td>
+                      <span className={`badge ${
+                        backup.status === 'completed' ? 'badge-success' : 
+                        backup.status === 'failed' ? 'badge-danger' : 'badge-warning'
+                      }`}>
+                        {backup.status === 'completed' ? 'Completado' : 
+                         backup.status === 'failed' ? 'Fallido' : 'En progreso'}
+                      </span>
+                      {!backup.exists && backup.status === 'completed' && (
+                        <span className="badge badge-warning" style={{marginLeft: '0.25rem'}}>Archivo no encontrado</span>
+                      )}
+                    </td>
+                    <td>
+                      {backup.created_by_email ? (
+                        <span title={backup.created_by_email}>
+                          {backup.first_name} {backup.last_name}
+                        </span>
+                      ) : (
+                        <span style={{color: '#666'}}>Sistema</span>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                        {backup.status === 'completed' && backup.exists && (
+                          <>
+                            <button 
+                              onClick={() => handleRestore(backup.id)}
+                              disabled={restoring === backup.id}
+                              className="btn btn-small btn-warning"
+                              title="Restaurar este backup"
+                            >
+                              {restoring === backup.id ? '...' : 'Restaurar'}
+                            </button>
+                            <button 
+                              onClick={() => handleDownload(backup.id)}
+                              className="btn btn-small btn-secondary"
+                              title="Descargar backup"
+                            >
+                              Descargar
+                            </button>
+                          </>
+                        )}
+                        <button 
+                          onClick={() => handleDelete(backup.id)}
+                          className="btn btn-small btn-danger"
+                          title="Eliminar backup"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

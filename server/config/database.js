@@ -1027,6 +1027,39 @@ function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
     CREATE INDEX IF NOT EXISTS idx_favorites_space ON favorites(space_id);
+
+    -- Tablas para Sistema de Backup y Recuperacion
+    CREATE TABLE IF NOT EXISTS backup_config (
+      id TEXT PRIMARY KEY DEFAULT 'default',
+      auto_backup_enabled INTEGER DEFAULT 0,
+      frequency TEXT DEFAULT 'daily' CHECK(frequency IN ('daily', 'weekly', 'monthly', 'quarterly', 'semestral', 'yearly')),
+      retention_days INTEGER DEFAULT 30,
+      last_backup_at TEXT,
+      next_backup_at TEXT,
+      notify_on_success INTEGER DEFAULT 1,
+      notify_on_failure INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS backup_history (
+      id TEXT PRIMARY KEY,
+      filename TEXT NOT NULL,
+      filepath TEXT NOT NULL,
+      size_bytes INTEGER,
+      backup_type TEXT NOT NULL CHECK(backup_type IN ('manual', 'automatic')),
+      status TEXT NOT NULL CHECK(status IN ('completed', 'failed', 'in_progress')),
+      error_message TEXT,
+      created_by TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_backup_history_created ON backup_history(created_at);
+    CREATE INDEX IF NOT EXISTS idx_backup_history_status ON backup_history(status);
+
+    -- Insertar configuracion por defecto de backups
+    INSERT OR IGNORE INTO backup_config (id) VALUES ('default');
   `);
 
   // Migraciones para columnas faltantes en bases de datos existentes

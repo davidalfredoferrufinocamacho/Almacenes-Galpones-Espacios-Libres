@@ -32,6 +32,15 @@ The project utilizes a Node.js 20 backend with Express.js and SQLite for data pe
 *   **Owner Portal (Portal de Propietarios):** A dedicated dashboard for hosts to manage spaces (full CRUD with delete functionality), reservations, earnings, calendar, statements, and profile, also including account deletion with safety checks. Space management includes comprehensive pricing (day/week/month/quarter/semester/year per m2), conditions (roof, rain/dust protection, security), and rental day limits.
 *   **Editable Site Configuration:** Contact information and footer content are dynamically managed via the admin panel.
 *   **Bolivian Professional Accounting Module:** A comprehensive accounting system compliant with Bolivian tax regulations, including tax calculations (IVA, IT, IUE, RC-IVA), ledger management, and financial reporting.
+*   **Backup and Recovery System (NEW):** Comprehensive data protection system accessible only to Super Admins:
+    - Manual backup creation with one click
+    - Automatic scheduled backups with configurable frequency (daily/weekly/monthly/quarterly/semestral/yearly)
+    - Backup retention policy with automatic cleanup of old backups
+    - Full recovery/restore functionality with double confirmation and pre-restore backup
+    - Backup download capability for external storage
+    - Super Admin notifications on backup success/failure
+    - Audit logging of all backup operations
+    - Backups stored in `/backups/` directory (persisted outside temp folders)
 
 The UI/UX emphasizes a responsive and interactive user experience through React, with a clear separation of frontend and backend concerns.
 

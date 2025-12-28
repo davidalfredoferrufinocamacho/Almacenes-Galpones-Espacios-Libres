@@ -17,6 +17,9 @@ build/
 *.sqlite
 *.db
 
+# Backups
+backups/
+
 # Replit
 .replit
 replit.nix

@@ -17,9 +17,11 @@ const legalRoutes = require('./routes/legal');
 const contactRoutes = require('./routes/contact');
 const ownerRoutes = require('./routes/owner');
 const clientRoutes = require('./routes/client');
+const backupRoutes = require('./routes/backup');
 
 const { initDatabase } = require('./config/database');
 const { initFrozenDataTriggers } = require('./utils/frozenDataProtection');
+const { startBackupScheduler } = require('./services/backupService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -58,6 +60,7 @@ app.use('/api/legal', legalRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/owner', ownerRoutes);
 app.use('/api/client', clientRoutes);
+app.use('/api/backup', backupRoutes);
 
 app.use(express.static(path.join(__dirname, '../client/dist'), {
   etag: false,
@@ -84,4 +87,5 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor corriendo en http://0.0.0.0:${PORT}`);
+  startBackupScheduler();
 });
