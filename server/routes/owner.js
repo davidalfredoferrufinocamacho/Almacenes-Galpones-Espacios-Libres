@@ -212,7 +212,7 @@ router.post('/spaces', [
       max_rental_days ? parseInt(max_rental_days) : null
     );
 
-    logAudit(req, 'SPACE_CREATED', 'space', id, null, req.body);
+    logAudit(userId, 'SPACE_CREATED', 'space', id, null, null, req);
     res.status(201).json({ id, message: 'Espacio creado exitosamente' });
   } catch (error) {
     console.error('Error:', error);
@@ -229,48 +229,108 @@ router.put('/spaces/:id', (req, res) => {
       return res.status(404).json({ error: 'Espacio no encontrado' });
     }
 
-    const { title, description, space_type, price_per_month, price_per_day, area_m2,
-            city, department, address, street, street_number, latitude, longitude,
-            amenities, rules, min_rental_days, max_rental_days, status } = req.body;
-
-    const finalAddress = address || street || space.address || 'Sin dirección';
-    const finalDepartment = department || space.department || 'Bolivia';
-    const finalCity = city || space.city || 'Bolivia';
+    const { title, description, space_type,
+            price_per_sqm_day, price_per_sqm_week, price_per_sqm_month,
+            price_per_sqm_quarter, price_per_sqm_semester, price_per_sqm_year,
+            total_sqm, available_sqm,
+            is_open, has_roof, rain_protected, dust_protected,
+            access_type, has_security, security_description, schedule,
+            city, department, address, latitude, longitude,
+            min_rental_days, max_rental_days, status } = req.body;
 
     db.prepare(`
       UPDATE spaces SET 
         title = COALESCE(?, title),
         description = COALESCE(?, description),
         space_type = COALESCE(?, space_type),
-        price_per_month = COALESCE(?, price_per_month),
-        price_per_day = ?,
         total_sqm = COALESCE(?, total_sqm),
         available_sqm = COALESCE(?, available_sqm),
-        area_m2 = COALESCE(?, area_m2),
-        city = ?,
-        department = ?,
-        address = ?,
-        street = ?,
-        street_number = ?,
+        price_per_sqm_day = ?,
+        price_per_sqm_week = ?,
+        price_per_sqm_month = ?,
+        price_per_sqm_quarter = ?,
+        price_per_sqm_semester = ?,
+        price_per_sqm_year = ?,
+        is_open = ?,
+        has_roof = ?,
+        rain_protected = ?,
+        dust_protected = ?,
+        access_type = COALESCE(?, access_type),
+        has_security = ?,
+        security_description = ?,
+        schedule = ?,
+        city = COALESCE(?, city),
+        department = COALESCE(?, department),
+        address = COALESCE(?, address),
         latitude = ?,
         longitude = ?,
-        amenities = ?,
-        rules = ?,
         min_rental_days = COALESCE(?, min_rental_days),
         max_rental_days = ?,
         status = COALESCE(?, status),
         updated_at = datetime('now')
       WHERE id = ? AND host_id = ?
-    `).run(title, description, space_type, price_per_month, price_per_day,
-           area_m2, area_m2, area_m2, finalCity, finalDepartment, finalAddress, street, street_number, latitude, longitude,
-           amenities, rules, min_rental_days, max_rental_days, status,
-           req.params.id, userId);
+    `).run(
+      title, description, space_type,
+      total_sqm ? parseFloat(total_sqm) : null,
+      available_sqm ? parseFloat(available_sqm) : null,
+      price_per_sqm_day ? parseFloat(price_per_sqm_day) : null,
+      price_per_sqm_week ? parseFloat(price_per_sqm_week) : null,
+      price_per_sqm_month ? parseFloat(price_per_sqm_month) : null,
+      price_per_sqm_quarter ? parseFloat(price_per_sqm_quarter) : null,
+      price_per_sqm_semester ? parseFloat(price_per_sqm_semester) : null,
+      price_per_sqm_year ? parseFloat(price_per_sqm_year) : null,
+      is_open ? 1 : 0,
+      has_roof !== false && has_roof !== 0 ? 1 : 0,
+      rain_protected !== false && rain_protected !== 0 ? 1 : 0,
+      dust_protected !== false && dust_protected !== 0 ? 1 : 0,
+      access_type,
+      has_security ? 1 : 0,
+      security_description || null,
+      schedule || null,
+      city, department, address,
+      latitude ? parseFloat(latitude) : null,
+      longitude ? parseFloat(longitude) : null,
+      min_rental_days ? parseInt(min_rental_days) : null,
+      max_rental_days ? parseInt(max_rental_days) : null,
+      status,
+      req.params.id, userId
+    );
 
-    logAudit(req, 'SPACE_UPDATED', 'space', req.params.id, space, req.body);
+    logAudit(userId, 'SPACE_UPDATED', 'space', req.params.id, null, null, req);
     res.json({ message: 'Espacio actualizado' });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al actualizar espacio' });
+  }
+});
+
+router.delete('/spaces/:id', (req, res) => {
+  try {
+    const userId = req.user.id;
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, userId);
+    
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const activeReservations = db.prepare(`
+      SELECT COUNT(*) as count FROM reservations 
+      WHERE space_id = ? AND status NOT IN ('cancelled', 'completed', 'refunded')
+    `).get(req.params.id);
+
+    if (activeReservations.count > 0) {
+      return res.status(400).json({ error: 'No se puede eliminar un espacio con reservaciones activas' });
+    }
+
+    db.prepare('DELETE FROM space_photos WHERE space_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM host_availability WHERE space_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM spaces WHERE id = ?').run(req.params.id);
+
+    logAudit(userId, 'SPACE_DELETED', 'space', req.params.id, null, null, req);
+    res.json({ message: 'Espacio eliminado exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar espacio' });
   }
 });
 
@@ -289,7 +349,7 @@ router.put('/spaces/:id/publish', (req, res) => {
     }
 
     db.prepare(`UPDATE spaces SET status = 'published', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
-    logAudit(req, 'SPACE_PUBLISHED', 'space', req.params.id, space, { status: 'published' });
+    logAudit(userId, 'SPACE_PUBLISHED', 'space', req.params.id, null, null, req);
     
     res.json({ message: 'Espacio publicado exitosamente' });
   } catch (error) {
@@ -308,7 +368,7 @@ router.put('/spaces/:id/unpublish', (req, res) => {
     }
 
     db.prepare(`UPDATE spaces SET status = 'draft', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
-    logAudit(req, 'SPACE_UNPUBLISHED', 'space', req.params.id, space, { status: 'draft' });
+    logAudit(userId, 'SPACE_UNPUBLISHED', 'space', req.params.id, null, null, req);
     
     res.json({ message: 'Espacio despublicado' });
   } catch (error) {

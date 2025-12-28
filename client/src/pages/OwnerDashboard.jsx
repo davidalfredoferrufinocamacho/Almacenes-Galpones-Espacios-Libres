@@ -231,6 +231,7 @@ function OwnerSpaces() {
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(null)
 
   useEffect(() => { loadSpaces() }, [])
 
@@ -290,6 +291,19 @@ function OwnerSpaces() {
     }
   }
 
+  const handleDelete = async (id) => {
+    if (!confirm('¿Estas seguro de eliminar este espacio? Esta accion no se puede deshacer.')) return
+    setDeleting(id)
+    try {
+      await api.delete(`/spaces/${id}`)
+      alert('Espacio eliminado exitosamente')
+      loadSpaces()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setDeleting(null)
+  }
+
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
@@ -309,10 +323,18 @@ function OwnerSpaces() {
               </div>
               <div className="space-card-body">
                 <p><strong>Tipo:</strong> {s.space_type}</p>
-                <p><strong>Ciudad:</strong> {s.city}</p>
-                <p><strong>Area:</strong> {s.area_m2} m2</p>
-                <p><strong>Precio/mes:</strong> Bs. {s.price_per_month?.toLocaleString()}</p>
-                <p><strong>Reservaciones:</strong> {s.reservations_count} ({s.active_reservations} activas)</p>
+                <p><strong>Ciudad:</strong> {s.city}, {s.department}</p>
+                <p><strong>Direccion:</strong> {s.address}</p>
+                <p><strong>Area Total:</strong> {s.total_sqm} m2</p>
+                <p><strong>Area Disponible:</strong> {s.available_sqm} m2</p>
+                {s.price_per_sqm_day && <p><strong>Precio/dia:</strong> Bs. {s.price_per_sqm_day}/m2</p>}
+                {s.price_per_sqm_week && <p><strong>Precio/semana:</strong> Bs. {s.price_per_sqm_week}/m2</p>}
+                {s.price_per_sqm_month && <p><strong>Precio/mes:</strong> Bs. {s.price_per_sqm_month}/m2</p>}
+                {s.price_per_sqm_quarter && <p><strong>Precio/trimestre:</strong> Bs. {s.price_per_sqm_quarter}/m2</p>}
+                {s.price_per_sqm_semester && <p><strong>Precio/semestre:</strong> Bs. {s.price_per_sqm_semester}/m2</p>}
+                {s.price_per_sqm_year && <p><strong>Precio/año:</strong> Bs. {s.price_per_sqm_year}/m2</p>}
+                <p><strong>Dias min/max:</strong> {s.min_rental_days || 1} / {s.max_rental_days || 'Sin limite'}</p>
+                <p><strong>Condiciones:</strong> {s.has_roof ? 'Con techo' : 'Sin techo'}, {s.has_security ? 'Con seguridad' : 'Sin seguridad'}</p>
               </div>
               <div className="space-card-actions">
                 <button onClick={() => handleEdit(s.id)} className="btn btn-small">Editar</button>
@@ -321,6 +343,9 @@ function OwnerSpaces() {
                 ) : (
                   <button onClick={() => handleUnpublish(s.id)} className="btn btn-small btn-warning">Despublicar</button>
                 )}
+                <button onClick={() => handleDelete(s.id)} className="btn btn-small btn-danger" disabled={deleting === s.id}>
+                  {deleting === s.id ? 'Eliminando...' : 'Eliminar'}
+                </button>
               </div>
             </div>
           ))}
@@ -359,28 +384,58 @@ function OwnerSpaces() {
                 <label>Descripcion *</label>
                 <textarea value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} rows="3" required></textarea>
               </div>
+
+              <h4>Area</h4>
               <div className="form-row">
                 <div className="form-group">
-                  <label>Precio por Mes (Bs.) *</label>
-                  <input type="number" value={form.price_per_month || ''} onChange={e => setForm({...form, price_per_month: e.target.value})} required />
+                  <label>m2 Totales *</label>
+                  <input type="number" value={form.total_sqm || ''} onChange={e => setForm({...form, total_sqm: e.target.value})} required min="1" />
                 </div>
                 <div className="form-group">
-                  <label>Precio por Dia (Bs.)</label>
-                  <input type="number" value={form.price_per_day || ''} onChange={e => setForm({...form, price_per_day: e.target.value})} />
-                </div>
-                <div className="form-group">
-                  <label>Area (m2) *</label>
-                  <input type="number" value={form.area_m2 || ''} onChange={e => setForm({...form, area_m2: e.target.value})} required />
+                  <label>m2 Disponibles *</label>
+                  <input type="number" value={form.available_sqm || ''} onChange={e => setForm({...form, available_sqm: e.target.value})} required min="1" />
                 </div>
               </div>
+
+              <h4>Precios por m2 (Bs.)</h4>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Por Dia</label>
+                  <input type="number" step="0.01" value={form.price_per_sqm_day || ''} onChange={e => setForm({...form, price_per_sqm_day: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label>Por Semana</label>
+                  <input type="number" step="0.01" value={form.price_per_sqm_week || ''} onChange={e => setForm({...form, price_per_sqm_week: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label>Por Mes</label>
+                  <input type="number" step="0.01" value={form.price_per_sqm_month || ''} onChange={e => setForm({...form, price_per_sqm_month: e.target.value})} />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Por Trimestre</label>
+                  <input type="number" step="0.01" value={form.price_per_sqm_quarter || ''} onChange={e => setForm({...form, price_per_sqm_quarter: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label>Por Semestre</label>
+                  <input type="number" step="0.01" value={form.price_per_sqm_semester || ''} onChange={e => setForm({...form, price_per_sqm_semester: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label>Por Año</label>
+                  <input type="number" step="0.01" value={form.price_per_sqm_year || ''} onChange={e => setForm({...form, price_per_sqm_year: e.target.value})} />
+                </div>
+              </div>
+
+              <h4>Ubicacion</h4>
               <div className="form-row">
                 <div className="form-group">
                   <label>Ciudad *</label>
                   <input type="text" value={form.city || ''} onChange={e => setForm({...form, city: e.target.value})} required />
                 </div>
                 <div className="form-group">
-                  <label>Departamento</label>
-                  <select value={form.department || ''} onChange={e => setForm({...form, department: e.target.value})}>
+                  <label>Departamento *</label>
+                  <select value={form.department || ''} onChange={e => setForm({...form, department: e.target.value})} required>
                     <option value="">Seleccionar...</option>
                     <option value="La Paz">La Paz</option>
                     <option value="Cochabamba">Cochabamba</option>
@@ -394,15 +449,9 @@ function OwnerSpaces() {
                   </select>
                 </div>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Calle</label>
-                  <input type="text" value={form.street || ''} onChange={e => setForm({...form, street: e.target.value})} />
-                </div>
-                <div className="form-group">
-                  <label>Numero</label>
-                  <input type="text" value={form.street_number || ''} onChange={e => setForm({...form, street_number: e.target.value})} />
-                </div>
+              <div className="form-group">
+                <label>Direccion *</label>
+                <input type="text" value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} required />
               </div>
               <div className="form-row">
                 <div className="form-group">
@@ -414,24 +463,47 @@ function OwnerSpaces() {
                   <input type="text" value={form.longitude || ''} onChange={e => setForm({...form, longitude: e.target.value})} placeholder="-68.1500" />
                 </div>
               </div>
+
+              <h4>Condiciones del Espacio</h4>
+              <div className="form-row checkbox-row">
+                <label><input type="checkbox" checked={form.is_open || false} onChange={e => setForm({...form, is_open: e.target.checked})} /> Espacio abierto</label>
+                <label><input type="checkbox" checked={form.has_roof !== false && form.has_roof !== 0} onChange={e => setForm({...form, has_roof: e.target.checked})} /> Con techo</label>
+                <label><input type="checkbox" checked={form.rain_protected !== false && form.rain_protected !== 0} onChange={e => setForm({...form, rain_protected: e.target.checked})} /> Protegido lluvia</label>
+                <label><input type="checkbox" checked={form.dust_protected !== false && form.dust_protected !== 0} onChange={e => setForm({...form, dust_protected: e.target.checked})} /> Protegido polvo</label>
+                <label><input type="checkbox" checked={form.has_security || false} onChange={e => setForm({...form, has_security: e.target.checked})} /> Con seguridad</label>
+              </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label>Min. Dias Alquiler</label>
-                  <input type="number" value={form.min_rental_days || 30} onChange={e => setForm({...form, min_rental_days: e.target.value})} />
+                  <label>Tipo de Acceso</label>
+                  <select value={form.access_type || 'controlado'} onChange={e => setForm({...form, access_type: e.target.value})}>
+                    <option value="libre">Libre</option>
+                    <option value="controlado">Controlado</option>
+                  </select>
                 </div>
                 <div className="form-group">
-                  <label>Max. Dias Alquiler</label>
-                  <input type="number" value={form.max_rental_days || ''} onChange={e => setForm({...form, max_rental_days: e.target.value})} placeholder="Sin limite" />
+                  <label>Horarios</label>
+                  <input type="text" value={form.schedule || ''} onChange={e => setForm({...form, schedule: e.target.value})} placeholder="Lun-Vie 8:00-18:00" />
                 </div>
               </div>
-              <div className="form-group">
-                <label>Amenidades (separadas por coma)</label>
-                <input type="text" value={form.amenities || ''} onChange={e => setForm({...form, amenities: e.target.value})} placeholder="Vigilancia, Electricidad, Agua" />
+              {(form.has_security || form.has_security === 1) && (
+                <div className="form-group">
+                  <label>Descripcion de Seguridad</label>
+                  <input type="text" value={form.security_description || ''} onChange={e => setForm({...form, security_description: e.target.value})} placeholder="Vigilancia 24h, camaras, etc." />
+                </div>
+              )}
+
+              <h4>Dias de Alquiler</h4>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Minimo Dias</label>
+                  <input type="number" min="1" value={form.min_rental_days || ''} onChange={e => setForm({...form, min_rental_days: e.target.value})} placeholder="1" />
+                </div>
+                <div className="form-group">
+                  <label>Maximo Dias</label>
+                  <input type="number" min="1" value={form.max_rental_days || ''} onChange={e => setForm({...form, max_rental_days: e.target.value})} placeholder="Sin limite" />
+                </div>
               </div>
-              <div className="form-group">
-                <label>Reglas</label>
-                <textarea value={form.rules || ''} onChange={e => setForm({...form, rules: e.target.value})} rows="2" placeholder="Reglas del espacio..."></textarea>
-              </div>
+
               <div className="form-actions">
                 <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button>
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary">Cancelar</button>

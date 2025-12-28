@@ -66,12 +66,15 @@ function initDatabase() {
       longitude REAL,
       video_url TEXT,
       video_duration INTEGER,
+      min_rental_days INTEGER DEFAULT 1,
+      max_rental_days INTEGER,
       status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'paused', 'deleted')),
       is_calendar_active INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (host_id) REFERENCES users(id)
     );
+    
 
     -- Tabla de fotos de espacios
     CREATE TABLE IF NOT EXISTS space_photos (
