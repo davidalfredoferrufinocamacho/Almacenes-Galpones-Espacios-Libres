@@ -248,40 +248,38 @@ function SpaceDetail() {
               </div>
             </div>
 
+            <Calculator 
+              space={space} 
+              depositPercentage={space.deposit_percentage}
+              onCalculate={setCalculation}
+            />
+
             {isAuthenticated ? (
-              <>
-                <Calculator 
-                  space={space} 
-                  depositPercentage={space.deposit_percentage}
-                  onCalculate={setCalculation}
-                />
+              <div className="reserve-card card">
+                <h3>Pagar Anticipo y Reservar</h3>
+                <p className="reserve-info">
+                  El anticipo ({space.deposit_percentage}%) queda en escrow hasta confirmar el contrato.
+                  Reembolso 100% si no confirma.
+                </p>
 
-                <div className="reserve-card card">
-                  <h3>Pagar Anticipo y Reservar</h3>
-                  <p className="reserve-info">
-                    El anticipo ({space.deposit_percentage}%) queda en escrow hasta confirmar el contrato.
-                    Reembolso 100% si no confirma.
-                  </p>
-
-                  <div className="form-group">
-                    <label>Metodo de Pago</label>
-                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                      <option value="card">Tarjeta</option>
-                      <option value="qr">QR</option>
-                    </select>
-                  </div>
-
-                  {error && <div className="alert alert-error">{error}</div>}
-
-                  <button 
-                    className="btn btn-primary reserve-btn" 
-                    onClick={handleReserve}
-                    disabled={processing || !calculation}
-                  >
-                    {processing ? 'Procesando...' : `Pagar Anticipo Bs. ${calculation?.deposit?.toFixed(2) || '0.00'}`}
-                  </button>
+                <div className="form-group">
+                  <label>Metodo de Pago</label>
+                  <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                    <option value="card">Tarjeta</option>
+                    <option value="qr">QR</option>
+                  </select>
                 </div>
-              </>
+
+                {error && <div className="alert alert-error">{error}</div>}
+
+                <button 
+                  className="btn btn-primary reserve-btn" 
+                  onClick={handleReserve}
+                  disabled={processing || !calculation}
+                >
+                  {processing ? 'Procesando...' : `Pagar Anticipo Bs. ${calculation?.deposit?.toFixed(2) || '0.00'}`}
+                </button>
+              </div>
             ) : (
               <div className="login-prompt card">
                 <h3>Reservar este Espacio</h3>
