@@ -19,7 +19,16 @@ The project uses a Node.js 20 backend with Express.js and SQLite (better-sqlite3
 *   **Contract Extensions/Annexes:** Extensions do not modify the original contract but create separate annex documents. These annexes reference the original contract, specify the extension period, and freeze relevant legal texts at the time of creation.
 *   **Anti-Bypass Clause:** A unified anti-bypass clause is enforced for both guests and hosts to prevent direct dealings outside the platform, protecting commission structures. This clause is a core part of legal texts and reaffirmed in extensions.
     *   **HOST Anti-Bypass Endpoint:** `PUT /api/users/me/accept-anti-bypass` (JWT required). Stores: `anti_bypass_accepted`, `anti_bypass_accepted_at`, `anti_bypass_legal_text_id`, `anti_bypass_legal_version`, `anti_bypass_ip`, `anti_bypass_user_agent`. Audit event: `ANTI_BYPASS_HOST_ACCEPTED` (or `ANTI_BYPASS_GUEST_ACCEPTED` for GUEST). HOST must accept before publishing spaces.
-*   **Admin Panel:** A comprehensive admin interface with 15 sections: Dashboard, **Clientes** (GUEST user management), **Hosts** (HOST user management), Users (CRUD with activate/deactivate, role changes), Spaces, Reservations, Contracts (PDF download, extensions), Payments, Invoices (PDF download, SIAT disclaimer), Config, Legal Texts (CRUD with versioning), Notifications (templates, log), Audit Log (filterable by date/user/event_type), Accounting (balance summary by period), Export (JSON with audit), and Messages. All admin actions are audit-logged.
+*   **Admin Panel:** A comprehensive admin interface with 16 sections: Dashboard, **Clientes** (GUEST user management), **Hosts** (HOST user management), Users (CRUD with activate/deactivate, role changes), Spaces, Reservations, Contracts (PDF download, extensions), Payments, Invoices (PDF download, SIAT disclaimer), **Metodos de Pago** (CRUD for payment methods), Config, Legal Texts (CRUD with versioning), Notifications (templates, log), Audit Log (filterable by date/user/event_type), Accounting (balance summary by period), Export (JSON with audit), and Messages. All admin actions are audit-logged.
+*   **Dynamic Payment Methods:** Payment methods (card, QR, bank transfer, etc.) are dynamically managed through the admin panel. The admin can:
+    *   Add new payment methods with code, name, description, instructions, and icon
+    *   Edit existing payment methods
+    *   Activate/deactivate methods without deleting them
+    *   Delete methods only if no historical payments use them
+    *   Set display order for payment options
+    *   **Database Table:** `payment_methods` with fields: id, code, name, description, instructions, icon, is_active, order_index
+    *   **API Endpoints:** GET/POST/PUT/DELETE `/admin/payment-methods` (admin), GET `/payments/methods` (public - returns active methods)
+    *   Default methods: card (Tarjeta de Credito/Debito), qr (Codigo QR)
     *   **Client/Host Separation:** Independent management panels for Clients (GUEST) and Hosts (HOST) with role-specific statistics, filters, and detail views.
     *   **useUserPanel Hook:** Shared hook providing common functionality (load, edit, filter, export) for both client and host sections.
     *   **UserPanelContent Component:** Reusable component for displaying user lists and details with role-aware tabs (Hosts see "Espacios" tab, Clients do not).
