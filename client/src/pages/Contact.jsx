@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../services/api'
 import './Contact.css'
 
@@ -12,6 +12,18 @@ function Contact() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [siteConfig, setSiteConfig] = useState({
+    contact_description: 'Almacenes, Galpones, Espacios Libres es una plataforma de intermediacion tecnologica para el alquiler temporal de espacios en Bolivia.',
+    contact_notice: 'Este formulario es el unico canal oficial de contacto con la plataforma. No se permite contacto directo entre HOST y GUEST.',
+    contact_hours: 'Lunes a Viernes, 9:00 - 18:00',
+    contact_response_time: '24-48 horas habiles'
+  })
+
+  useEffect(() => {
+    api.get('/contact/site-config')
+      .then(r => setSiteConfig(prev => ({ ...prev, ...r.data })))
+      .catch(() => {})
+  }, [])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -48,21 +60,19 @@ function Contact() {
           <div className="contact-info card">
             <h2>Informacion</h2>
             <p>
-              <strong>Almacenes, Galpones, Espacios Libres</strong> es una plataforma de intermediacion tecnologica
-              para el alquiler temporal de espacios en Bolivia.
+              <strong>Almacenes, Galpones, Espacios Libres</strong> {siteConfig.contact_description.replace('Almacenes, Galpones, Espacios Libres ', '')}
             </p>
             <p>
-              Este formulario es el unico canal oficial de contacto con la plataforma.
-              No se permite contacto directo entre HOST y GUEST.
+              {siteConfig.contact_notice}
             </p>
             <div className="info-items">
               <div className="info-item">
                 <strong>Horario de atencion:</strong>
-                <span>Lunes a Viernes, 9:00 - 18:00</span>
+                <span>{siteConfig.contact_hours}</span>
               </div>
               <div className="info-item">
                 <strong>Tiempo de respuesta:</strong>
-                <span>24-48 horas habiles</span>
+                <span>{siteConfig.contact_response_time}</span>
               </div>
             </div>
           </div>

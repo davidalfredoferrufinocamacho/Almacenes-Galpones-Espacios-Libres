@@ -1,14 +1,27 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import api from '../services/api'
 import './Footer.css'
 
 function Footer() {
+  const [siteConfig, setSiteConfig] = useState({
+    footer_title: 'Almacenes, Galpones, Espacios Libres',
+    footer_text: 'Plataforma de intermediacion tecnologica para alquiler de espacios en Bolivia'
+  })
+
+  useEffect(() => {
+    api.get('/contact/site-config')
+      .then(r => setSiteConfig(prev => ({ ...prev, ...r.data })))
+      .catch(() => {})
+  }, [])
+
   return (
     <footer className="footer">
       <div className="container">
         <div className="footer-content">
           <div className="footer-section">
-            <h3>Almacenes, Galpones, Espacios Libres</h3>
-            <p>Plataforma de intermediacion tecnologica para alquiler de espacios en Bolivia</p>
+            <h3>{siteConfig.footer_title}</h3>
+            <p>{siteConfig.footer_text}</p>
           </div>
           
           <div className="footer-section">
@@ -32,7 +45,7 @@ function Footer() {
         </div>
         
         <div className="footer-bottom">
-          <p>2025 Almacenes, Galpones, Espacios Libres - Intermediario Tecnologico - Bolivia</p>
+          <p>2025 {siteConfig.footer_title} - Intermediario Tecnologico - Bolivia</p>
           <p className="disclaimer">
             Esta plataforma NO es propietaria de los espacios y NO es parte del contrato de alquiler.
           </p>

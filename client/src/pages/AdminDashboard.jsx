@@ -2466,14 +2466,33 @@ function AdminPaymentMethods() {
 function AdminConfig() {
   const [config, setConfig] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editValues, setEditValues] = useState({})
+
+  const siteContactKeys = ['footer_title', 'footer_text', 'contact_description', 'contact_notice', 'contact_hours', 'contact_response_time']
+  const siteContactLabels = {
+    footer_title: 'Titulo del Footer',
+    footer_text: 'Descripcion del Footer',
+    contact_description: 'Descripcion en Pagina de Contacto',
+    contact_notice: 'Aviso de Canal de Contacto',
+    contact_hours: 'Horario de Atencion',
+    contact_response_time: 'Tiempo de Respuesta'
+  }
 
   useEffect(() => {
-    api.get('/admin/config').then(r => setConfig(r.data)).finally(() => setLoading(false))
+    api.get('/admin/config').then(r => {
+      setConfig(r.data)
+      const values = {}
+      r.data.forEach(c => { values[c.key] = c.value })
+      setEditValues(values)
+    }).finally(() => setLoading(false))
   }, [])
 
-  const handleUpdate = async (key, value) => {
+  const handleUpdate = async (key) => {
+    const original = config.find(c => c.key === key)
+    if (editValues[key] === original?.value) return
     try {
-      await api.put(`/admin/config/${key}`, { value })
+      await api.put(`/admin/config/${key}`, { value: editValues[key] })
+      setConfig(prev => prev.map(c => c.key === key ? { ...c, value: editValues[key] } : c))
       alert('Configuracion actualizada')
     } catch (error) {
       alert(error.response?.data?.error || 'Error')
@@ -2482,25 +2501,73 @@ function AdminConfig() {
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
+  const siteConfigs = config.filter(c => siteContactKeys.includes(c.key))
+  const systemConfigs = config.filter(c => !siteContactKeys.includes(c.key))
+
   return (
     <div>
       <h1>Configuracion del Sistema</h1>
-      <div className="config-list card">
-        {config.map(c => (
-          <div key={c.id} className="config-item">
-            <div>
-              <strong>{c.key}</strong>
-              <p>{c.description}</p>
+      
+      <div className="card" style={{marginBottom: '2rem'}}>
+        <h2 style={{marginBottom: '1rem', color: 'var(--primary)'}}>Informacion del Sitio y Contacto</h2>
+        <p style={{color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem'}}>
+          Esta informacion se muestra en el footer y en la pagina de contacto. Los cambios son visibles inmediatamente.
+        </p>
+        <div className="config-list">
+          {siteContactKeys.map(key => {
+            const c = siteConfigs.find(cfg => cfg.key === key)
+            if (!c) return null
+            const isLongText = ['contact_description', 'contact_notice'].includes(key)
+            return (
+              <div key={c.id} className="config-item" style={{flexDirection: 'column', alignItems: 'stretch'}}>
+                <div style={{marginBottom: '0.5rem'}}>
+                  <strong>{siteContactLabels[key] || c.key}</strong>
+                  <span style={{color: 'var(--text-muted)', fontSize: '0.8rem', marginLeft: '0.5rem'}}>({c.key})</span>
+                </div>
+                <div className="config-value" style={{flex: 1}}>
+                  {isLongText ? (
+                    <textarea 
+                      value={editValues[key] || ''} 
+                      onChange={(e) => setEditValues(prev => ({...prev, [key]: e.target.value}))}
+                      onBlur={() => handleUpdate(key)}
+                      style={{width: '100%', minHeight: '80px', padding: '0.5rem'}}
+                    />
+                  ) : (
+                    <input 
+                      type="text" 
+                      value={editValues[key] || ''} 
+                      onChange={(e) => setEditValues(prev => ({...prev, [key]: e.target.value}))}
+                      onBlur={() => handleUpdate(key)}
+                      style={{width: '100%'}}
+                    />
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="card">
+        <h2 style={{marginBottom: '1rem', color: 'var(--primary)'}}>Parametros del Sistema</h2>
+        <div className="config-list">
+          {systemConfigs.map(c => (
+            <div key={c.id} className="config-item">
+              <div>
+                <strong>{c.key}</strong>
+                <p>{c.description}</p>
+              </div>
+              <div className="config-value">
+                <input 
+                  type="text" 
+                  value={editValues[c.key] || ''} 
+                  onChange={(e) => setEditValues(prev => ({...prev, [c.key]: e.target.value}))}
+                  onBlur={() => handleUpdate(c.key)}
+                />
+              </div>
             </div>
-            <div className="config-value">
-              <input 
-                type="text" 
-                defaultValue={c.value} 
-                onBlur={(e) => e.target.value !== c.value && handleUpdate(c.key, e.target.value)}
-              />
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   )
