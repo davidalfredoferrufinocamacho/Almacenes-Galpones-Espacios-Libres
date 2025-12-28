@@ -1058,6 +1058,142 @@ router.put('/config/:key', [
   }
 });
 
+// ==================== GESTION DE METODOS DE PAGO ====================
+
+router.get('/payment-methods', (req, res) => {
+  try {
+    const methods = db.prepare('SELECT * FROM payment_methods ORDER BY order_index ASC, created_at ASC').all();
+    res.json(methods);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener metodos de pago' });
+  }
+});
+
+router.post('/payment-methods', [
+  body('code').trim().notEmpty().withMessage('El codigo es requerido'),
+  body('name').trim().notEmpty().withMessage('El nombre es requerido'),
+  body('description').optional().trim(),
+  body('instructions').optional().trim(),
+  body('icon').optional().trim(),
+  body('is_active').optional().isBoolean(),
+  body('order_index').optional().isInt()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { code, name, description, instructions, icon, is_active, order_index } = req.body;
+
+    const existing = db.prepare('SELECT id FROM payment_methods WHERE code = ?').get(code);
+    if (existing) {
+      return res.status(400).json({ error: 'Ya existe un metodo de pago con ese codigo' });
+    }
+
+    const id = generateId('pm');
+    const maxOrder = db.prepare('SELECT MAX(order_index) as max FROM payment_methods').get().max || 0;
+
+    db.prepare(`
+      INSERT INTO payment_methods (id, code, name, description, instructions, icon, is_active, order_index)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, code, name, description || null, instructions || null, icon || null, 
+           is_active !== undefined ? (is_active ? 1 : 0) : 1, order_index || maxOrder + 1);
+
+    logAudit(req.user.id, 'PAYMENT_METHOD_CREATED', 'payment_methods', id, null, { code, name }, req);
+
+    res.status(201).json({ id, message: 'Metodo de pago creado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear metodo de pago' });
+  }
+});
+
+router.put('/payment-methods/:id', [
+  body('code').optional().trim().notEmpty(),
+  body('name').optional().trim().notEmpty(),
+  body('description').optional().trim(),
+  body('instructions').optional().trim(),
+  body('icon').optional().trim(),
+  body('is_active').optional().isBoolean(),
+  body('order_index').optional().isInt()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const method = db.prepare('SELECT * FROM payment_methods WHERE id = ?').get(req.params.id);
+    if (!method) {
+      return res.status(404).json({ error: 'Metodo de pago no encontrado' });
+    }
+
+    const { code, name, description, instructions, icon, is_active, order_index } = req.body;
+    const oldData = { ...method };
+
+    if (code && code !== method.code) {
+      const existing = db.prepare('SELECT id FROM payment_methods WHERE code = ? AND id != ?').get(code, req.params.id);
+      if (existing) {
+        return res.status(400).json({ error: 'Ya existe otro metodo de pago con ese codigo' });
+      }
+    }
+
+    const updates = [];
+    const values = [];
+
+    if (code !== undefined) { updates.push('code = ?'); values.push(code); }
+    if (name !== undefined) { updates.push('name = ?'); values.push(name); }
+    if (description !== undefined) { updates.push('description = ?'); values.push(description); }
+    if (instructions !== undefined) { updates.push('instructions = ?'); values.push(instructions); }
+    if (icon !== undefined) { updates.push('icon = ?'); values.push(icon); }
+    if (is_active !== undefined) { updates.push('is_active = ?'); values.push(is_active ? 1 : 0); }
+    if (order_index !== undefined) { updates.push('order_index = ?'); values.push(order_index); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay datos para actualizar' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(req.params.id);
+
+    db.prepare(`UPDATE payment_methods SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    logAudit(req.user.id, 'PAYMENT_METHOD_UPDATED', 'payment_methods', req.params.id, oldData, req.body, req);
+
+    res.json({ message: 'Metodo de pago actualizado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar metodo de pago' });
+  }
+});
+
+router.delete('/payment-methods/:id', (req, res) => {
+  try {
+    const method = db.prepare('SELECT * FROM payment_methods WHERE id = ?').get(req.params.id);
+    if (!method) {
+      return res.status(404).json({ error: 'Metodo de pago no encontrado' });
+    }
+
+    const paymentsUsing = db.prepare('SELECT COUNT(*) as count FROM payments WHERE payment_method = ?').get(method.code);
+    if (paymentsUsing.count > 0) {
+      return res.status(400).json({ 
+        error: `No se puede eliminar. Hay ${paymentsUsing.count} pago(s) usando este metodo. Desactivelo en su lugar.` 
+      });
+    }
+
+    db.prepare('DELETE FROM payment_methods WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'PAYMENT_METHOD_DELETED', 'payment_methods', req.params.id, method, null, req);
+
+    res.json({ message: 'Metodo de pago eliminado correctamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar metodo de pago' });
+  }
+});
+
 router.get('/audit-log', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;

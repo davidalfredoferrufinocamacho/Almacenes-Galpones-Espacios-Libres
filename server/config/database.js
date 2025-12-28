@@ -643,6 +643,25 @@ function initDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Tabla de Métodos de Pago Dinámicos
+    CREATE TABLE IF NOT EXISTS payment_methods (
+      id TEXT PRIMARY KEY,
+      code TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      instructions TEXT,
+      icon TEXT,
+      is_active INTEGER DEFAULT 1,
+      order_index INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Insertar métodos de pago por defecto
+    INSERT OR IGNORE INTO payment_methods (id, code, name, description, icon, is_active, order_index) VALUES
+      ('pm_card', 'card', 'Tarjeta de Credito/Debito', 'Pago con tarjeta de credito o debito a traves de pasarela segura', 'credit-card', 1, 1),
+      ('pm_qr', 'qr', 'Codigo QR', 'Pago mediante escaneo de codigo QR desde su aplicacion bancaria', 'qr-code', 1, 2);
+
     -- Insertar plan de cuentas básico boliviano
     INSERT OR IGNORE INTO chart_of_accounts (id, code, name, account_type) VALUES
       ('acc_1000', '1000', 'ACTIVO', 'asset'),
