@@ -1010,6 +1010,20 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_host_verifications_status ON host_verifications(status, host_id);
     CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status, scheduled_at);
     CREATE INDEX IF NOT EXISTS idx_security_deposits_status ON security_deposits(status, reservation_id);
+
+    -- G: Favoritos de espacios para clientes
+    CREATE TABLE IF NOT EXISTS favorites (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (space_id) REFERENCES spaces(id),
+      UNIQUE(user_id, space_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
+    CREATE INDEX IF NOT EXISTS idx_favorites_space ON favorites(space_id);
   `);
 
   // Migraciones para columnas faltantes en bases de datos existentes
@@ -1032,7 +1046,10 @@ function initDatabase() {
     { table: 'invoices', column: 'it_amount', type: 'REAL DEFAULT 0' },
     { table: 'contact_messages', column: 'category', type: 'TEXT DEFAULT "general"' },
     { table: 'contact_messages', column: 'priority', type: 'TEXT DEFAULT "normal"' },
-    { table: 'contact_messages', column: 'admin_notes', type: 'TEXT' }
+    { table: 'contact_messages', column: 'admin_notes', type: 'TEXT' },
+    { table: 'users', column: 'profile_photo', type: 'TEXT' },
+    { table: 'users', column: 'email_notifications', type: 'INTEGER DEFAULT 1' },
+    { table: 'users', column: 'newsletter', type: 'INTEGER DEFAULT 0' }
   ];
 
   // Backfill null categories to 'legal'
