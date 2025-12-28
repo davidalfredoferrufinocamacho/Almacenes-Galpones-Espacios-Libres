@@ -537,7 +537,10 @@ function initDatabase() {
       ('cfg_trust_f3_title', 'trust_feature3_title', '100% Reembolsable', 'Titulo feature 3'),
       ('cfg_trust_f3_desc', 'trust_feature3_description', 'Si no confirmas, recuperas el 100% de tu anticipo', 'Descripcion feature 3'),
       ('cfg_trust_f4_title', 'trust_feature4_title', 'Auditoria Completa', 'Titulo feature 4'),
-      ('cfg_trust_f4_desc', 'trust_feature4_description', 'Todas las transacciones quedan registradas y exportables', 'Descripcion feature 4');
+      ('cfg_trust_f4_desc', 'trust_feature4_description', 'Todas las transacciones quedan registradas y exportables', 'Descripcion feature 4'),
+      -- Footer Section
+      ('cfg_footer_copyright', 'footer_copyright_text', '2025 Almacenes, Galpones, Espacios Libres - Intermediario Tecnologico - Bolivia', 'Texto de copyright del footer'),
+      ('cfg_footer_disclaimer', 'footer_disclaimer_text', 'Esta plataforma NO es propietaria de los espacios y NO es parte del contrato de alquiler.', 'Texto de disclaimer del footer');
   `);
 
   // Tablas de Contabilidad Profesional Boliviana

@@ -6508,6 +6508,10 @@ function AdminHomepageContent() {
       { key: 'trust_feature4_title', label: 'Feature 4 - Titulo' },
       { key: 'trust_feature4_description', label: 'Feature 4 - Descripcion' },
     ]},
+    { section: 'Footer (Pie de Pagina)', fields: [
+      { key: 'footer_copyright_text', label: 'Texto de Copyright' },
+      { key: 'footer_disclaimer_text', label: 'Texto de Disclaimer' },
+    ]},
   ]
 
   useEffect(() => {

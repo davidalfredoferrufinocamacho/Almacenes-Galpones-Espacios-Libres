@@ -743,7 +743,8 @@ router.get('/config/homepage', (req, res) => {
       'featured_section_title', 'featured_see_all_text',
       'trust_section_title', 'trust_feature1_title', 'trust_feature1_description',
       'trust_feature2_title', 'trust_feature2_description', 'trust_feature3_title', 'trust_feature3_description',
-      'trust_feature4_title', 'trust_feature4_description'
+      'trust_feature4_title', 'trust_feature4_description',
+      'footer_copyright_text', 'footer_disclaimer_text'
     ];
     
     const placeholders = keys.map(() => '?').join(', ');

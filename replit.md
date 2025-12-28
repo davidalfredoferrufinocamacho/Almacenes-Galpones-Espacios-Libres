@@ -41,6 +41,7 @@ The project utilizes a Node.js 20 backend with Express.js and SQLite for data pe
     - "Como Funciona" section (title, 3 steps with titles and descriptions)
     - "Espacios Destacados" section (title, "Ver todos" link text)
     - "Intermediacion Segura" section (title, 4 features with titles and descriptions)
+    - Footer section (copyright text, disclaimer text)
 *   **Bolivian Professional Accounting Module:** A comprehensive accounting system compliant with Bolivian tax regulations, including tax calculations (IVA, IT, IUE, RC-IVA), ledger management, and financial reporting.
 *   **Backup and Recovery System (NEW):** Comprehensive data protection system accessible only to Super Admins:
     - Manual backup creation with one click
