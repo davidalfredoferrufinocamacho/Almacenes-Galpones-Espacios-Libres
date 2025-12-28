@@ -27,7 +27,7 @@ function Header() {
                 <Link to="/propietario">Portal Propietario</Link>
               )}
               {user?.role === 'GUEST' && (
-                <Link to="/mis-reservaciones">Reservaciones</Link>
+                <Link to="/cliente">Mi Portal</Link>
               )}
               {user?.role === 'ADMIN' && (
                 <Link to="/admin">Admin</Link>
