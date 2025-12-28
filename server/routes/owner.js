@@ -159,31 +159,58 @@ router.post('/spaces', [
     const userId = req.user.id;
     const id = generateId();
     const { title, description, space_type, 
-            price_per_sqm_month, price_per_sqm_day, price_per_month, price_per_day,
+            price_per_sqm_day, price_per_sqm_week, price_per_sqm_month, 
+            price_per_sqm_quarter, price_per_sqm_semester, price_per_sqm_year,
+            price_per_month, price_per_day,
             total_sqm, available_sqm, area_m2,
+            is_open, has_roof, rain_protected, dust_protected, 
+            access_type, has_security, security_description, schedule,
             city, department, address, street, street_number, latitude, longitude,
-            amenities, rules, min_rental_days, max_rental_days } = req.body;
+            min_rental_days, max_rental_days } = req.body;
 
-    // Log para depuración
     console.log('Creando espacio:', req.body);
 
-    const finalArea = parseFloat(total_sqm || available_sqm || area_m2 || 0);
-    const finalPriceMonth = parseFloat(price_per_sqm_month || price_per_month || 0);
-    const finalPriceDay = parseFloat(price_per_sqm_day || price_per_day || 0);
-
+    const finalTotalSqm = parseFloat(total_sqm || area_m2 || 0);
+    const finalAvailableSqm = parseFloat(available_sqm || finalTotalSqm);
     const finalAddress = address || street || 'Sin dirección';
     const finalDepartment = department || 'Bolivia';
     const finalCity = city || 'Bolivia';
 
     db.prepare(`
-      INSERT INTO spaces (id, host_id, title, description, space_type, price_per_sqm_month, price_per_sqm_day,
-                          total_sqm, available_sqm, address, city, department, street, street_number, latitude, longitude,
-                          amenities, rules, min_rental_days, max_rental_days, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
-    `).run(id, userId, title, description, space_type || 'almacen', finalPriceMonth, finalPriceDay || null,
-           finalArea, parseFloat(available_sqm || finalArea), finalAddress, finalCity, finalDepartment, street || null, street_number || null,
-           latitude || null, longitude || null, amenities || null, rules || null,
-           min_rental_days || 30, max_rental_days || null);
+      INSERT INTO spaces (
+        id, host_id, title, description, space_type,
+        total_sqm, available_sqm,
+        price_per_sqm_day, price_per_sqm_week, price_per_sqm_month,
+        price_per_sqm_quarter, price_per_sqm_semester, price_per_sqm_year,
+        is_open, has_roof, rain_protected, dust_protected,
+        access_type, has_security, security_description, schedule,
+        address, city, department, street, street_number, latitude, longitude,
+        min_rental_days, max_rental_days, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
+    `).run(
+      id, userId, title, description, space_type || 'almacen',
+      finalTotalSqm, finalAvailableSqm,
+      parseFloat(price_per_sqm_day || price_per_day) || null,
+      parseFloat(price_per_sqm_week) || null,
+      parseFloat(price_per_sqm_month || price_per_month) || null,
+      parseFloat(price_per_sqm_quarter) || null,
+      parseFloat(price_per_sqm_semester) || null,
+      parseFloat(price_per_sqm_year) || null,
+      is_open ? 1 : 0,
+      has_roof !== false ? 1 : 0,
+      rain_protected !== false ? 1 : 0,
+      dust_protected !== false ? 1 : 0,
+      access_type || 'controlado',
+      has_security ? 1 : 0,
+      security_description || null,
+      schedule || null,
+      finalAddress, finalCity, finalDepartment,
+      street || null, street_number || null,
+      latitude ? parseFloat(latitude) : null,
+      longitude ? parseFloat(longitude) : null,
+      min_rental_days ? parseInt(min_rental_days) : 1,
+      max_rental_days ? parseInt(max_rental_days) : null
+    );
 
     logAudit(req, 'SPACE_CREATED', 'space', id, null, req.body);
     res.status(201).json({ id, message: 'Espacio creado exitosamente' });

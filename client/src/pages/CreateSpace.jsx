@@ -33,7 +33,9 @@ function CreateSpace() {
     city: '',
     department: '',
     latitude: '',
-    longitude: ''
+    longitude: '',
+    min_rental_days: '',
+    max_rental_days: ''
   })
 
   const departments = [
@@ -284,6 +286,25 @@ function CreateSpace() {
               <div className="form-group">
                 <label>Horarios</label>
                 <input type="text" name="schedule" value={formData.schedule} onChange={handleChange} placeholder="Ej: Lun-Vie 8:00-18:00" />
+              </div>
+            </div>
+
+            {formData.has_security && (
+              <div className="form-group">
+                <label>Descripcion de Seguridad</label>
+                <input type="text" name="security_description" value={formData.security_description} onChange={handleChange} placeholder="Ej: Vigilancia 24 horas, camaras, etc." />
+              </div>
+            )}
+
+            <h3>Dias de Alquiler</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Minimo Dias</label>
+                <input type="number" name="min_rental_days" value={formData.min_rental_days} onChange={handleChange} min="1" placeholder="1" />
+              </div>
+              <div className="form-group">
+                <label>Maximo Dias (opcional)</label>
+                <input type="number" name="max_rental_days" value={formData.max_rental_days} onChange={handleChange} min="1" placeholder="Sin limite" />
               </div>
             </div>
 
