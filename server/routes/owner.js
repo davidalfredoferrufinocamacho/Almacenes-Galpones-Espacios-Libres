@@ -184,9 +184,9 @@ router.post('/spaces', [
         price_per_sqm_quarter, price_per_sqm_semester, price_per_sqm_year,
         is_open, has_roof, rain_protected, dust_protected,
         access_type, has_security, security_description, schedule,
-        address, city, department, street, street_number, latitude, longitude,
+        address, city, department, latitude, longitude,
         min_rental_days, max_rental_days, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
     `).run(
       id, userId, title, description, space_type || 'almacen',
       finalTotalSqm, finalAvailableSqm,
@@ -205,7 +205,6 @@ router.post('/spaces', [
       security_description || null,
       schedule || null,
       finalAddress, finalCity, finalDepartment,
-      street || null, street_number || null,
       latitude ? parseFloat(latitude) : null,
       longitude ? parseFloat(longitude) : null,
       min_rental_days ? parseInt(min_rental_days) : 1,
