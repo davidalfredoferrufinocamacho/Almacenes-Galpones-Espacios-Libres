@@ -164,13 +164,15 @@ router.post('/spaces', [
             city, department, address, street, street_number, latitude, longitude,
             amenities, rules, min_rental_days, max_rental_days } = req.body;
 
+    const finalAddress = address || street || 'Sin dirección';
+
     db.prepare(`
       INSERT INTO spaces (id, host_id, title, description, space_type, price_per_month, price_per_day,
                           total_sqm, available_sqm, area_m2, city, department, address, street, street_number, latitude, longitude,
                           amenities, rules, min_rental_days, max_rental_days, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
     `).run(id, userId, title, description, space_type || 'almacen', price_per_month, price_per_day || null,
-           area_m2, area_m2, area_m2, city, department || null, address || null, street || null, street_number || null,
+           area_m2, area_m2, area_m2, city, department || null, finalAddress, street || null, street_number || null,
            latitude || null, longitude || null, amenities || null, rules || null,
            min_rental_days || 30, max_rental_days || null);
 
@@ -195,6 +197,8 @@ router.put('/spaces/:id', (req, res) => {
             city, department, address, street, street_number, latitude, longitude,
             amenities, rules, min_rental_days, max_rental_days, status } = req.body;
 
+    const finalAddress = address || street || space.address || 'Sin dirección';
+
     db.prepare(`
       UPDATE spaces SET 
         title = COALESCE(?, title),
@@ -207,7 +211,7 @@ router.put('/spaces/:id', (req, res) => {
         area_m2 = COALESCE(?, area_m2),
         city = COALESCE(?, city),
         department = ?,
-        address = COALESCE(?, address),
+        address = ?,
         street = ?,
         street_number = ?,
         latitude = ?,
@@ -220,7 +224,7 @@ router.put('/spaces/:id', (req, res) => {
         updated_at = datetime('now')
       WHERE id = ? AND host_id = ?
     `).run(title, description, space_type, price_per_month, price_per_day,
-           area_m2, area_m2, area_m2, city, department, address, street, street_number, latitude, longitude,
+           area_m2, area_m2, area_m2, city, department, finalAddress, street, street_number, latitude, longitude,
            amenities, rules, min_rental_days, max_rental_days, status,
            req.params.id, userId);
 
