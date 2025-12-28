@@ -463,9 +463,9 @@ function initDatabase() {
       FOREIGN KEY (template_id) REFERENCES notification_templates(id)
     );
 
-    -- Crear usuario admin por defecto
-    INSERT OR IGNORE INTO users (id, email, password, role, first_name, last_name, is_verified, is_active)
-    VALUES ('admin_default', 'admin@almacenes-galpones-espacios-libres.com', '$2a$10$XQxBtN6BKxT9D5uYLKPMXeOQIlDj2f9mZpKqVvH5nF8rE9tG0sMqi', 'ADMIN', 'Administrador', 'Sistema', 1, 1);
+    -- Crear usuario admin por defecto (password: Admin123!)
+    INSERT OR IGNORE INTO users (id, email, password, role, first_name, last_name, is_verified, is_active, is_super_admin)
+    VALUES ('admin_default', 'admin@almacenes-galpones-espacios-libres.com', '$2a$10$c.P0iMto6HighxEuykK2cOelSX1GKo1XG8TKGi.xUx6bBni.5sT5u', 'ADMIN', 'Administrador', 'Sistema', 1, 1, 1);
 
     -- Insertar plantillas de notificacion por defecto
     INSERT OR IGNORE INTO notification_templates (id, event_type, channel, subject, body, is_active) VALUES
