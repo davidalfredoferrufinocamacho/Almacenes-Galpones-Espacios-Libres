@@ -711,6 +711,31 @@ router.delete('/spaces/:id', (req, res) => {
   }
 });
 
+router.put('/spaces/:id/featured', (req, res) => {
+  try {
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(req.params.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const newFeatured = space.is_featured ? 0 : 1;
+    
+    db.prepare('UPDATE spaces SET is_featured = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(newFeatured, req.params.id);
+
+    logAudit(req.user.id, 'SPACE_FEATURED_CHANGED', 'spaces', req.params.id, 
+      { is_featured: space.is_featured }, { is_featured: newFeatured }, req);
+
+    res.json({ 
+      message: newFeatured ? 'Espacio marcado como destacado' : 'Espacio removido de destacados',
+      is_featured: newFeatured
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al cambiar estado destacado' });
+  }
+});
+
 router.get('/reservations', (req, res) => {
   try {
     const reservations = db.prepare(`

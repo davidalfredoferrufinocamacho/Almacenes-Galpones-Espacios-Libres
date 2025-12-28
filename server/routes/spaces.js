@@ -74,8 +74,9 @@ router.get('/', optionalAuth, [
   query('space_type').optional().isIn(['almacen', 'galpon', 'deposito', 'cuarto', 'contenedor', 'patio', 'terreno']),
   query('min_sqm').optional().isFloat({ min: 0 }),
   query('max_sqm').optional().isFloat({ min: 0 }),
-  query('has_roof').optional().isBoolean(),
-  query('has_security').optional().isBoolean()
+  query('has_roof').optional(),
+  query('has_security').optional(),
+  query('featured').optional()
 ], (req, res) => {
   try {
     let sql = `
@@ -87,6 +88,10 @@ router.get('/', optionalAuth, [
     `;
 
     const params = [];
+
+    if (req.query.featured === 'true') {
+      sql += ' AND s.is_featured = 1';
+    }
 
     if (req.query.city) {
       sql += ' AND s.city LIKE ?';

@@ -28,6 +28,11 @@ The project utilizes a Node.js 20 backend with Express.js and SQLite for data pe
 *   **Hierarchical Admin System:** Two-tier admin structure with Super Admin (full access to all 27 sections including config, legal texts, accounting, roles, payment methods) and Admin (limited to operational sections like users, spaces, reservations). Backend protection via `requireSuperAdmin` middleware on all sensitive endpoints.
 *   **Dynamic Payment Methods:** Payment options are configurable and manageable via the admin panel.
 *   **Map Search:** Interactive map functionality using Leaflet allows geographic space discovery.
+*   **Featured Spaces System:** Admin-controlled promotional system for the homepage:
+    - Admins can mark/unmark spaces as "Featured" from the Spaces section using a star button (★/☆)
+    - Only featured spaces appear in the "Espacios Destacados" section on the public homepage
+    - Independent from the general search functionality
+    - Toggle endpoint: PUT /admin/spaces/:id/featured
 *   **Client Portal (Portal del Cliente):** A dedicated dashboard for guests to manage reservations, contracts, payments, invoices, favorites, and profile, including account deletion with safety checks.
 *   **Owner Portal (Portal de Propietarios):** A dedicated dashboard for hosts to manage spaces (full CRUD with delete functionality), reservations, earnings, calendar, statements, and profile, also including account deletion with safety checks. Space management includes comprehensive pricing (day/week/month/quarter/semester/year per m2), conditions (roof, rain/dust protection, security), and rental day limits.
 *   **Editable Site Configuration:** Contact information and footer content are dynamically managed via the admin panel.

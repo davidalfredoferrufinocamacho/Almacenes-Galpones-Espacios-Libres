@@ -9,7 +9,7 @@ function Home() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/spaces?limit=6')
+    api.get('/spaces?featured=true')
       .then(response => setSpaces(response.data.slice(0, 6)))
       .catch(console.error)
       .finally(() => setLoading(false))

@@ -1496,6 +1496,16 @@ function AdminSpaces() {
     }
   }
 
+  const toggleFeatured = async (spaceId) => {
+    try {
+      const res = await api.put(`/admin/spaces/${spaceId}/featured`)
+      loadSpaces()
+      alert(res.data.message)
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al cambiar estado destacado')
+    }
+  }
+
   const openEditModal = (space) => {
     setEditingSpace(space)
     setEditForm({
@@ -1690,6 +1700,14 @@ function AdminSpaces() {
                     <option value="published">Publicar</option>
                     <option value="paused">Pausar</option>
                   </select>
+                  <button 
+                    onClick={() => toggleFeatured(space.id)} 
+                    className={`btn btn-sm ${space.is_featured ? 'btn-warning' : 'btn-outline'}`}
+                    title={space.is_featured ? 'Quitar de destacados' : 'Marcar como destacado'}
+                    style={{background: space.is_featured ? '#ffc107' : 'transparent', border: '1px solid #ffc107', color: space.is_featured ? '#000' : '#ffc107'}}
+                  >
+                    {space.is_featured ? '★' : '☆'}
+                  </button>
                   <button onClick={() => deleteSpace(space.id, space.title)} className="btn btn-sm btn-danger">Eliminar</button>
                 </div>
               </td>

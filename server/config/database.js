@@ -70,6 +70,7 @@ function initDatabase() {
       max_rental_days INTEGER,
       status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'paused', 'deleted')),
       is_calendar_active INTEGER DEFAULT 0,
+      is_featured INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (host_id) REFERENCES users(id)
