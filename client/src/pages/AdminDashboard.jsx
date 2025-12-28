@@ -36,6 +36,7 @@ function AdminDashboard() {
     { label: 'Contratos', key: 'contracts' },
     { label: 'Pagos', key: 'payments' },
     { label: 'Facturas', key: 'invoices' },
+    { label: 'Metodos de Pago', key: 'payment-methods' },
     { label: 'Configuracion', key: 'config' },
     { label: 'Textos Legales', key: 'legal-texts' },
     { label: 'Notificaciones', key: 'notifications' },
@@ -55,6 +56,7 @@ function AdminDashboard() {
       case 'contracts': return <AdminContracts />
       case 'payments': return <AdminPayments />
       case 'invoices': return <AdminInvoices />
+      case 'payment-methods': return <AdminPaymentMethods />
       case 'config': return <AdminConfig />
       case 'legal-texts': return <AdminLegalTexts />
       case 'notifications': return <AdminNotificationTemplates />
@@ -2206,6 +2208,233 @@ function AdminPayments() {
             <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
               <button onClick={() => setEditingPayment(null)} className="btn btn-secondary">Cancelar</button>
               <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AdminPaymentMethods() {
+  const [methods, setMethods] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editingMethod, setEditingMethod] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [addForm, setAddForm] = useState({ code: '', name: '', description: '', instructions: '', icon: '', is_active: true })
+
+  const loadMethods = () => {
+    api.get('/admin/payment-methods').then(r => setMethods(r.data)).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { loadMethods() }, [])
+
+  const openEditModal = (method) => {
+    setEditingMethod(method)
+    setEditForm({
+      code: method.code,
+      name: method.name,
+      description: method.description || '',
+      instructions: method.instructions || '',
+      icon: method.icon || '',
+      is_active: method.is_active === 1,
+      order_index: method.order_index
+    })
+  }
+
+  const saveEdit = async () => {
+    try {
+      const dataToSend = {}
+      if (editForm.code !== editingMethod.code) dataToSend.code = editForm.code
+      if (editForm.name !== editingMethod.name) dataToSend.name = editForm.name
+      if (editForm.description !== (editingMethod.description || '')) dataToSend.description = editForm.description
+      if (editForm.instructions !== (editingMethod.instructions || '')) dataToSend.instructions = editForm.instructions
+      if (editForm.icon !== (editingMethod.icon || '')) dataToSend.icon = editForm.icon
+      if (editForm.is_active !== (editingMethod.is_active === 1)) dataToSend.is_active = editForm.is_active
+      if (editForm.order_index !== editingMethod.order_index) dataToSend.order_index = editForm.order_index
+
+      if (Object.keys(dataToSend).length === 0) {
+        alert('No hay cambios para guardar')
+        return
+      }
+
+      await api.put(`/admin/payment-methods/${editingMethod.id}`, dataToSend)
+      setEditingMethod(null)
+      loadMethods()
+      alert('Metodo de pago actualizado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al editar metodo de pago')
+    }
+  }
+
+  const deleteMethod = async (id, name) => {
+    if (!confirm(`¿Eliminar el metodo de pago "${name}"? Esta accion no se puede deshacer.`)) return
+    try {
+      await api.delete(`/admin/payment-methods/${id}`)
+      loadMethods()
+      alert('Metodo de pago eliminado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar metodo de pago')
+    }
+  }
+
+  const toggleActive = async (method) => {
+    try {
+      await api.put(`/admin/payment-methods/${method.id}`, { is_active: method.is_active !== 1 })
+      loadMethods()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al cambiar estado')
+    }
+  }
+
+  const handleAdd = async () => {
+    try {
+      if (!addForm.code || !addForm.name) {
+        alert('El codigo y nombre son requeridos')
+        return
+      }
+      await api.post('/admin/payment-methods', addForm)
+      setShowAddModal(false)
+      setAddForm({ code: '', name: '', description: '', instructions: '', icon: '', is_active: true })
+      loadMethods()
+      alert('Metodo de pago creado')
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al crear metodo de pago')
+    }
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
+        <h1>Metodos de Pago</h1>
+        <button onClick={() => setShowAddModal(true)} className="btn btn-primary">+ Agregar Metodo</button>
+      </div>
+      <p style={{color: '#666', marginBottom: '1rem'}}>
+        Configure los metodos de pago disponibles para clientes y hosts. Los metodos activos apareceran como opciones al realizar pagos.
+      </p>
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>Orden</th>
+            <th>Codigo</th>
+            <th>Nombre</th>
+            <th>Descripcion</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {methods.map(m => (
+            <tr key={m.id} style={{opacity: m.is_active ? 1 : 0.6}}>
+              <td>{m.order_index}</td>
+              <td><code style={{background: '#f0f0f0', padding: '0.2rem 0.4rem', borderRadius: '3px'}}>{m.code}</code></td>
+              <td style={{fontWeight: '500'}}>{m.name}</td>
+              <td style={{fontSize: '0.85rem', color: '#666', maxWidth: '300px'}}>{m.description || '-'}</td>
+              <td>
+                <span 
+                  style={{
+                    background: m.is_active ? '#28a745' : '#dc3545', 
+                    color: 'white', 
+                    padding: '0.2rem 0.5rem', 
+                    borderRadius: '3px', 
+                    fontSize: '0.75rem',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => toggleActive(m)}
+                  title="Clic para cambiar estado"
+                >
+                  {m.is_active ? 'Activo' : 'Inactivo'}
+                </span>
+              </td>
+              <td>
+                <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                  <button onClick={() => openEditModal(m)} className="btn btn-sm btn-secondary">Editar</button>
+                  <button onClick={() => deleteMethod(m.id, m.name)} className="btn btn-sm btn-danger">Eliminar</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {editingMethod && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth: '500px'}}>
+            <h3>Editar Metodo de Pago</h3>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Codigo (identificador unico):</label>
+              <input type="text" value={editForm.code} onChange={e => setEditForm({...editForm, code: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Nombre:</label>
+              <input type="text" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Descripcion:</label>
+              <textarea value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem', minHeight: '60px'}} />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Instrucciones de pago:</label>
+              <textarea value={editForm.instructions} onChange={e => setEditForm({...editForm, instructions: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem', minHeight: '60px'}} placeholder="Instrucciones que vera el usuario al seleccionar este metodo" />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Icono (nombre):</label>
+              <input type="text" value={editForm.icon} onChange={e => setEditForm({...editForm, icon: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} placeholder="ej: credit-card, qr-code, bank" />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Orden de aparicion:</label>
+              <input type="number" value={editForm.order_index} onChange={e => setEditForm({...editForm, order_index: parseInt(e.target.value) || 0})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer'}}>
+                <input type="checkbox" checked={editForm.is_active} onChange={e => setEditForm({...editForm, is_active: e.target.checked})} />
+                Metodo activo (visible para usuarios)
+              </label>
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => setEditingMethod(null)} className="btn btn-secondary">Cancelar</button>
+              <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth: '500px'}}>
+            <h3>Agregar Metodo de Pago</h3>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Codigo (identificador unico):</label>
+              <input type="text" value={addForm.code} onChange={e => setAddForm({...addForm, code: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} placeholder="ej: bank_transfer, tigo_money" />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Nombre:</label>
+              <input type="text" value={addForm.name} onChange={e => setAddForm({...addForm, name: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} placeholder="ej: Transferencia Bancaria" />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Descripcion:</label>
+              <textarea value={addForm.description} onChange={e => setAddForm({...addForm, description: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem', minHeight: '60px'}} placeholder="Breve descripcion del metodo de pago" />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Instrucciones de pago:</label>
+              <textarea value={addForm.instructions} onChange={e => setAddForm({...addForm, instructions: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem', minHeight: '60px'}} placeholder="Instrucciones que vera el usuario al seleccionar este metodo" />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label>Icono (nombre):</label>
+              <input type="text" value={addForm.icon} onChange={e => setAddForm({...addForm, icon: e.target.value})} style={{width: '100%', padding: '0.5rem', marginTop: '0.25rem'}} placeholder="ej: credit-card, qr-code, bank" />
+            </div>
+            <div style={{marginBottom: '1rem'}}>
+              <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer'}}>
+                <input type="checkbox" checked={addForm.is_active} onChange={e => setAddForm({...addForm, is_active: e.target.checked})} />
+                Metodo activo (visible para usuarios)
+              </label>
+            </div>
+            <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
+              <button onClick={() => { setShowAddModal(false); setAddForm({ code: '', name: '', description: '', instructions: '', icon: '', is_active: true }) }} className="btn btn-secondary">Cancelar</button>
+              <button onClick={handleAdd} className="btn btn-primary">Crear</button>
             </div>
           </div>
         </div>

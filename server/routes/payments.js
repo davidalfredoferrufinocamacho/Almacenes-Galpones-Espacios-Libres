@@ -8,12 +8,22 @@ const { notifyDepositPaid, notifyRemainingPaid, notifyRefundProcessed } = requir
 
 const router = express.Router();
 
+router.get('/methods', (req, res) => {
+  try {
+    const methods = db.prepare('SELECT code, name, description, instructions, icon FROM payment_methods WHERE is_active = 1 ORDER BY order_index ASC').all();
+    res.json(methods);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener metodos de pago' });
+  }
+});
+
 router.post('/deposit', authenticateToken, requireRole('GUEST'), [
   body('space_id').notEmpty(),
   body('sqm_requested').isFloat({ min: 1 }),
   body('period_type').isIn(['dia', 'semana', 'mes', 'trimestre', 'semestre', 'ano']),
   body('period_quantity').isInt({ min: 1 }),
-  body('payment_method').isIn(['card', 'qr'])
+  body('payment_method').notEmpty()
 ], (req, res) => {
   try {
     const errors = validationResult(req);
@@ -22,6 +32,11 @@ router.post('/deposit', authenticateToken, requireRole('GUEST'), [
     }
 
     const { space_id, sqm_requested, period_type, period_quantity, payment_method } = req.body;
+
+    const validMethod = db.prepare('SELECT code FROM payment_methods WHERE code = ? AND is_active = 1').get(payment_method);
+    if (!validMethod) {
+      return res.status(400).json({ error: 'Metodo de pago no valido o no disponible' });
+    }
 
     const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND status = ?').get(space_id, 'published');
     if (!space) {
