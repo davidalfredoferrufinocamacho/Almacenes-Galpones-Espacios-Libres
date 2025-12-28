@@ -6395,25 +6395,33 @@ function AdminBackup() {
                       )}
                     </td>
                     <td>
-                      <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                      <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center'}}>
                         {backup.status === 'completed' && backup.exists && (
-                          <>
-                            <button 
-                              onClick={() => handleRestore(backup.id)}
-                              disabled={restoring === backup.id}
-                              className="btn btn-small btn-warning"
-                              title="Restaurar este backup"
-                            >
-                              {restoring === backup.id ? '...' : 'Restaurar'}
-                            </button>
-                            <button 
-                              onClick={() => handleDownload(backup.id)}
-                              className="btn btn-small btn-secondary"
-                              title="Descargar backup"
-                            >
-                              Descargar
-                            </button>
-                          </>
+                          <button 
+                            onClick={() => handleRestore(backup.id)}
+                            disabled={restoring === backup.id}
+                            className="btn btn-small"
+                            style={{
+                              background: '#28a745',
+                              color: 'white',
+                              fontWeight: 'bold',
+                              padding: '0.5rem 1rem',
+                              border: 'none',
+                              borderRadius: '4px'
+                            }}
+                            title="Recuperar datos desde este backup"
+                          >
+                            {restoring === backup.id ? 'Recuperando...' : 'RECOVERY'}
+                          </button>
+                        )}
+                        {backup.status === 'completed' && backup.exists && (
+                          <button 
+                            onClick={() => handleDownload(backup.id)}
+                            className="btn btn-small btn-secondary"
+                            title="Descargar backup"
+                          >
+                            Descargar
+                          </button>
                         )}
                         <button 
                           onClick={() => handleDelete(backup.id)}
