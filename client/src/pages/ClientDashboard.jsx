@@ -987,12 +987,20 @@ function ClientProfile() {
         <div className="form-section">
           <h3>Direccion</h3>
           <div className="form-grid">
-            <div className="form-group full">
+            <div className="form-group">
               <label>Direccion</label>
               {editing ? (
-                <input value={form.address || ''} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Calle, numero, zona, etc." />
+                <input value={form.address || ''} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Calle, zona, etc." />
               ) : (
                 <p>{profile.address || '-'}</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Numero</label>
+              {editing ? (
+                <input value={form.street_number || ''} onChange={e => setForm({ ...form, street_number: e.target.value })} placeholder="Ej: 123" />
+              ) : (
+                <p>{profile.street_number || '-'}</p>
               )}
             </div>
             <div className="form-group">

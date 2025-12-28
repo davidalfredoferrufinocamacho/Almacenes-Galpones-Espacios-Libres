@@ -523,6 +523,7 @@ router.put('/profile', [
   body('last_name').optional().trim().isLength({ min: 2, max: 50 }),
   body('phone').optional().trim(),
   body('address').optional().trim().isLength({ max: 200 }),
+  body('street_number').optional().trim().isLength({ max: 20 }),
   body('city').optional().trim().isLength({ max: 50 }),
   body('department').optional().trim(),
   body('country').optional().trim(),
@@ -534,7 +535,7 @@ router.put('/profile', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const allowedFields = ['first_name', 'last_name', 'phone', 'address', 'city', 
+    const allowedFields = ['first_name', 'last_name', 'phone', 'address', 'street_number', 'city', 
       'department', 'country', 'nit', 'email_notifications', 'newsletter'];
     
     const updates = [];
