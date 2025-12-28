@@ -928,16 +928,19 @@ function OwnerProfile() {
   }
 
   const handleDeleteAccount = async () => {
-    if (!confirm('Esta seguro que desea eliminar su cuenta? Esta accion es IRREVERSIBLE.')) return
+    const confirmText = prompt('Para eliminar su cuenta permanentemente, escriba "ELIMINAR MI CUENTA":')
+    if (confirmText !== 'ELIMINAR MI CUENTA') {
+      alert('La confirmacion no coincide. La cuenta no fue eliminada.')
+      return
+    }
 
     setDeletingAccount(true)
     try {
       await api.delete('/account')
+      alert('Su cuenta ha sido eliminada permanentemente.')
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      alert('Cuenta eliminada exitosamente')
-      navigate('/')
-      window.location.reload()
+      window.location.href = '/'
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
     }

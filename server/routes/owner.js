@@ -45,7 +45,7 @@ router.get('/dashboard', (req, res) => {
       SELECT COUNT(*) as total,
              SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) as published,
              SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) as draft
-      FROM spaces WHERE user_id = ?
+      FROM spaces WHERE host_id = ?
     `).get(userId);
 
     const reservations = db.prepare(`
@@ -55,7 +55,7 @@ router.get('/dashboard', (req, res) => {
              SUM(CASE WHEN r.status = 'pending' THEN 1 ELSE 0 END) as pending
       FROM reservations r
       JOIN spaces s ON r.space_id = s.id
-      WHERE s.user_id = ?
+      WHERE s.host_id = ?
     `).get(userId);
 
     const earnings = db.prepare(`
@@ -66,7 +66,7 @@ router.get('/dashboard', (req, res) => {
       FROM payments p
       JOIN reservations r ON p.reservation_id = r.id
       JOIN spaces s ON r.space_id = s.id
-      WHERE s.user_id = ?
+      WHERE s.host_id = ?
     `).get(userId);
 
     const recentReservations = db.prepare(`
@@ -76,7 +76,7 @@ router.get('/dashboard', (req, res) => {
       FROM reservations r
       JOIN spaces s ON r.space_id = s.id
       JOIN users u ON r.user_id = u.id
-      WHERE s.user_id = ?
+      WHERE s.host_id = ?
       ORDER BY r.created_at DESC
       LIMIT 5
     `).all(userId);
@@ -88,7 +88,7 @@ router.get('/dashboard', (req, res) => {
       FROM payments p
       JOIN reservations r ON p.reservation_id = r.id
       JOIN spaces s ON r.space_id = s.id
-      WHERE s.user_id = ? AND p.status = 'completed'
+      WHERE s.host_id = ? AND p.status = 'completed'
       GROUP BY strftime('%Y-%m', p.created_at)
       ORDER BY month DESC
       LIMIT 12
@@ -115,7 +115,7 @@ router.get('/spaces', (req, res) => {
              (SELECT COUNT(*) FROM reservations WHERE space_id = s.id) as reservations_count,
              (SELECT COUNT(*) FROM reservations WHERE space_id = s.id AND status = 'confirmed') as active_reservations
       FROM spaces s
-      WHERE s.user_id = ?
+      WHERE s.host_id = ?
       ORDER BY s.created_at DESC
     `).all(userId);
 
@@ -283,7 +283,7 @@ router.get('/reservations', (req, res) => {
       FROM reservations r
       JOIN spaces s ON r.space_id = s.id
       JOIN users u ON r.user_id = u.id
-      WHERE s.user_id = ?
+      WHERE s.host_id = ?
     `;
     const params = [userId];
     
@@ -346,7 +346,7 @@ router.get('/payments', (req, res) => {
       JOIN reservations r ON p.reservation_id = r.id
       JOIN spaces s ON r.space_id = s.id
       JOIN users u ON r.user_id = u.id
-      WHERE s.user_id = ?
+      WHERE s.host_id = ?
     `;
     const params = [userId];
     
@@ -376,7 +376,7 @@ router.get('/payments', (req, res) => {
       FROM payments p
       JOIN reservations r ON p.reservation_id = r.id
       JOIN spaces s ON r.space_id = s.id
-      WHERE s.user_id = ? AND p.status = 'completed'
+      WHERE s.host_id = ? AND p.status = 'completed'
     `).get(userId);
 
     res.json({ payments, summary });
@@ -401,7 +401,7 @@ router.get('/calendar', (req, res) => {
       FROM reservations r
       JOIN spaces s ON r.space_id = s.id
       JOIN users u ON r.user_id = u.id
-      WHERE s.user_id = ?
+      WHERE s.host_id = ?
         AND ((r.start_date BETWEEN ? AND ?) OR (r.end_date BETWEEN ? AND ?)
              OR (r.start_date <= ? AND r.end_date >= ?))
         AND r.status NOT IN ('cancelled', 'refunded')
@@ -409,7 +409,7 @@ router.get('/calendar', (req, res) => {
     `).all(userId, startDate, endDate, startDate, endDate, startDate, endDate);
 
     const spaces = db.prepare(`
-      SELECT id, title FROM spaces WHERE user_id = ? AND status = 'published'
+      SELECT id, title FROM spaces WHERE host_id = ? AND status = 'published'
     `).all(userId);
 
     res.json({ events, spaces });
@@ -639,7 +639,7 @@ router.delete('/account', async (req, res) => {
 
     const hasActiveSpaces = db.prepare(`
       SELECT COUNT(*) as count FROM spaces s
-      WHERE s.owner_id = ? AND s.status IN ('published', 'paused')
+      WHERE s.host_id = ? AND s.status IN ('published', 'paused')
       AND EXISTS (
         SELECT 1 FROM reservations r 
         WHERE r.space_id = s.id AND r.status NOT IN ('cancelled', 'refunded', 'completed', 'expired')
@@ -655,7 +655,7 @@ router.delete('/account', async (req, res) => {
     const hasActiveContracts = db.prepare(`
       SELECT COUNT(*) as count FROM contracts c
       JOIN spaces s ON c.space_id = s.id
-      WHERE s.owner_id = ? AND c.status NOT IN ('cancelled', 'completed', 'expired')
+      WHERE s.host_id = ? AND c.status NOT IN ('cancelled', 'completed', 'expired')
     `).get(userId);
 
     if (hasActiveContracts.count > 0) {
@@ -668,7 +668,7 @@ router.delete('/account', async (req, res) => {
       SELECT COUNT(*) as count FROM payments p
       JOIN reservations r ON p.reservation_id = r.id
       JOIN spaces s ON r.space_id = s.id
-      WHERE s.owner_id = ? AND p.escrow_status = 'held'
+      WHERE s.host_id = ? AND p.escrow_status = 'held'
     `).get(userId);
 
     if (hasPendingPayments.count > 0) {
@@ -681,7 +681,7 @@ router.delete('/account', async (req, res) => {
       fs.unlinkSync(user.profile_photo);
     }
 
-    db.prepare('UPDATE spaces SET status = "deleted" WHERE owner_id = ?').run(userId);
+    db.prepare('UPDATE spaces SET status = "deleted" WHERE host_id = ?').run(userId);
     db.prepare('DELETE FROM notification_log WHERE recipient_id = ?').run(userId);
     db.prepare('UPDATE audit_log SET user_id = NULL WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM campaign_recipients WHERE user_id = ?').run(userId);
