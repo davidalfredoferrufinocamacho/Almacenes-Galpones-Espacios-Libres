@@ -53,7 +53,7 @@ The project uses a Node.js 20 backend with Express.js and SQLite (better-sqlite3
     *   **Mi Perfil:** Enhanced profile management including:
         - Profile photo upload (max 2MB, JPG/PNG)
         - Personal info editing with optional NIT field (tax identification)
-        - Simplified address management (address, street number, city, department, country)
+        - Simplified address management (address, street number, floor/interior, city, department, country)
         - Notification preferences (email notifications toggle, newsletter subscription)
         - Password change functionality
         - **Account Deletion:** Allows complete account deletion with safety checks blocking deletion if user has: active reservations (not cancelled/refunded/completed/expired), active contracts, or pending payments
