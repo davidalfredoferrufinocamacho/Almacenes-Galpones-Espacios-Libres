@@ -68,6 +68,8 @@ function initDatabase() {
       video_duration INTEGER,
       min_rental_days INTEGER DEFAULT 1,
       max_rental_days INTEGER,
+      available_from TEXT,
+      available_until TEXT,
       status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'paused', 'deleted')),
       is_calendar_active INTEGER DEFAULT 0,
       is_featured INTEGER DEFAULT 0,
@@ -1124,7 +1126,9 @@ function initDatabase() {
     { table: 'users', column: 'email_verification_expires', type: 'TEXT' },
     { table: 'users', column: 'email_verified_at', type: 'TEXT' },
     { table: 'users', column: 'floor', type: 'TEXT' },
-    { table: 'users', column: 'is_super_admin', type: 'INTEGER DEFAULT 0' }
+    { table: 'users', column: 'is_super_admin', type: 'INTEGER DEFAULT 0' },
+    { table: 'spaces', column: 'available_from', type: 'TEXT' },
+    { table: 'spaces', column: 'available_until', type: 'TEXT' }
   ];
 
   // Backfill null categories to 'legal'
