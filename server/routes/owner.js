@@ -131,7 +131,7 @@ router.get('/spaces/:id', (req, res) => {
   try {
     const userId = req.user.id;
     const space = db.prepare(`
-      SELECT * FROM spaces WHERE id = ? AND user_id = ?
+      SELECT * FROM spaces WHERE id = ? AND host_id = ?
     `).get(req.params.id, userId);
 
     if (!space) {
@@ -165,7 +165,7 @@ router.post('/spaces', [
             amenities, rules, min_rental_days, max_rental_days } = req.body;
 
     db.prepare(`
-      INSERT INTO spaces (id, user_id, title, description, space_type, price_per_month, price_per_day,
+      INSERT INTO spaces (id, host_id, title, description, space_type, price_per_month, price_per_day,
                           area_m2, city, department, street, street_number, latitude, longitude,
                           amenities, rules, min_rental_days, max_rental_days, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
@@ -185,7 +185,7 @@ router.post('/spaces', [
 router.put('/spaces/:id', (req, res) => {
   try {
     const userId = req.user.id;
-    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND user_id = ?').get(req.params.id, userId);
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, userId);
     
     if (!space) {
       return res.status(404).json({ error: 'Espacio no encontrado' });
@@ -215,7 +215,7 @@ router.put('/spaces/:id', (req, res) => {
         max_rental_days = ?,
         status = COALESCE(?, status),
         updated_at = datetime('now')
-      WHERE id = ? AND user_id = ?
+      WHERE id = ? AND host_id = ?
     `).run(title, description, space_type, price_per_month, price_per_day,
            area_m2, city, department, street, street_number, latitude, longitude,
            amenities, rules, min_rental_days, max_rental_days, status,
@@ -232,7 +232,7 @@ router.put('/spaces/:id', (req, res) => {
 router.put('/spaces/:id/publish', (req, res) => {
   try {
     const userId = req.user.id;
-    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND user_id = ?').get(req.params.id, userId);
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, userId);
     
     if (!space) {
       return res.status(404).json({ error: 'Espacio no encontrado' });
@@ -256,7 +256,7 @@ router.put('/spaces/:id/publish', (req, res) => {
 router.put('/spaces/:id/unpublish', (req, res) => {
   try {
     const userId = req.user.id;
-    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND user_id = ?').get(req.params.id, userId);
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, userId);
     
     if (!space) {
       return res.status(404).json({ error: 'Espacio no encontrado' });
@@ -317,7 +317,7 @@ router.get('/reservations/:id', (req, res) => {
       FROM reservations r
       JOIN spaces s ON r.space_id = s.id
       JOIN users u ON r.user_id = u.id
-      WHERE r.id = ? AND s.user_id = ?
+      WHERE r.id = ? AND s.host_id = ?
     `).get(req.params.id, userId);
 
     if (!reservation) {
