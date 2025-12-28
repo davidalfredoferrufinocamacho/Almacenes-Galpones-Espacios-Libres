@@ -29,7 +29,7 @@ The project utilizes a Node.js 20 backend with Express.js and SQLite for data pe
 *   **Dynamic Payment Methods:** Payment options are configurable and manageable via the admin panel.
 *   **Map Search:** Interactive map functionality using Leaflet allows geographic space discovery.
 *   **Client Portal (Portal del Cliente):** A dedicated dashboard for guests to manage reservations, contracts, payments, invoices, favorites, and profile, including account deletion with safety checks.
-*   **Owner Portal (Portal de Propietarios):** A dedicated dashboard for hosts to manage spaces (CRUD), reservations, earnings, calendar, statements, and profile, also including account deletion with safety checks.
+*   **Owner Portal (Portal de Propietarios):** A dedicated dashboard for hosts to manage spaces (full CRUD with delete functionality), reservations, earnings, calendar, statements, and profile, also including account deletion with safety checks. Space management includes comprehensive pricing (day/week/month/quarter/semester/year per m2), conditions (roof, rain/dust protection, security), and rental day limits.
 *   **Editable Site Configuration:** Contact information and footer content are dynamically managed via the admin panel.
 *   **Bolivian Professional Accounting Module:** A comprehensive accounting system compliant with Bolivian tax regulations, including tax calculations (IVA, IT, IUE, RC-IVA), ledger management, and financial reporting.
 
