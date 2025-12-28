@@ -450,15 +450,20 @@ router.delete('/users/:id', (req, res) => {
       return res.status(400).json({ error: 'No se puede eliminar usuario con contratos activos. Desactivelo en su lugar.' });
     }
 
-    const hasReservations = db.prepare('SELECT COUNT(*) as count FROM reservations WHERE guest_id = ? OR host_id = ?').get(req.params.id, req.params.id);
-    if (hasReservations.count > 0) {
-      db.prepare('DELETE FROM reservations WHERE guest_id = ? OR host_id = ?').run(req.params.id, req.params.id);
+    // Limpiar todas las tablas relacionadas antes de eliminar el usuario
+    db.prepare('DELETE FROM notification_log WHERE recipient_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM campaign_recipients WHERE user_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM favorites WHERE user_id = ?').run(req.params.id);
+    db.prepare('UPDATE audit_log SET user_id = NULL WHERE user_id = ?').run(req.params.id);
+    
+    // Eliminar pagos relacionados con reservaciones del usuario
+    const userReservations = db.prepare('SELECT id FROM reservations WHERE guest_id = ? OR host_id = ?').all(req.params.id, req.params.id);
+    for (const reservation of userReservations) {
+      db.prepare('DELETE FROM payments WHERE reservation_id = ?').run(reservation.id);
     }
-
-    const hasSpaces = db.prepare('SELECT COUNT(*) as count FROM spaces WHERE host_id = ?').get(req.params.id);
-    if (hasSpaces.count > 0) {
-      db.prepare('DELETE FROM spaces WHERE host_id = ?').run(req.params.id);
-    }
+    
+    db.prepare('DELETE FROM reservations WHERE guest_id = ? OR host_id = ?').run(req.params.id, req.params.id);
+    db.prepare('DELETE FROM spaces WHERE host_id = ?').run(req.params.id);
 
     db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
 
