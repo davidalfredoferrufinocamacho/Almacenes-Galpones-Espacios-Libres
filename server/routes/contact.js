@@ -6,6 +6,31 @@ const { generateId } = require('../utils/helpers');
 
 const router = express.Router();
 
+router.get('/site-config', (req, res) => {
+  try {
+    const publicKeys = [
+      'footer_title', 'footer_text', 
+      'contact_description', 'contact_notice', 
+      'contact_hours', 'contact_response_time'
+    ];
+    
+    const configs = db.prepare(`
+      SELECT key, value FROM system_config 
+      WHERE key IN (${publicKeys.map(() => '?').join(',')})
+    `).all(...publicKeys);
+    
+    const result = {};
+    configs.forEach(c => {
+      result[c.key] = c.value;
+    });
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener configuracion' });
+  }
+});
+
 router.post('/', optionalAuth, [
   body('name').notEmpty().trim(),
   body('email').isEmail().normalizeEmail(),

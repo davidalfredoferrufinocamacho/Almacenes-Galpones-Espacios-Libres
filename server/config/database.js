@@ -492,11 +492,15 @@ function initDatabase() {
       ('cat_informacion', 'informacion', 'Informacion', 1);
   `);
 
-  // Agregar config de footer
+  // Agregar config de footer y contacto
   db.exec(`
     INSERT OR IGNORE INTO system_config (id, key, value, description) VALUES
       ('cfg_footer_title', 'footer_title', 'Almacenes, Galpones, Espacios Libres', 'Titulo del footer'),
-      ('cfg_footer_text', 'footer_text', 'Plataforma de intermediacion tecnologica para alquiler de espacios en Bolivia', 'Texto del footer');
+      ('cfg_footer_text', 'footer_text', 'Plataforma de intermediacion tecnologica para alquiler de espacios en Bolivia', 'Texto del footer'),
+      ('cfg_contact_description', 'contact_description', 'Almacenes, Galpones, Espacios Libres es una plataforma de intermediacion tecnologica para el alquiler temporal de espacios en Bolivia.', 'Descripcion de la plataforma en pagina de contacto'),
+      ('cfg_contact_notice', 'contact_notice', 'Este formulario es el unico canal oficial de contacto con la plataforma. No se permite contacto directo entre HOST y GUEST.', 'Aviso sobre canal de contacto'),
+      ('cfg_contact_hours', 'contact_hours', 'Lunes a Viernes, 9:00 - 18:00', 'Horario de atencion'),
+      ('cfg_contact_response_time', 'contact_response_time', '24-48 horas habiles', 'Tiempo de respuesta');
   `);
 
   // Tablas de Contabilidad Profesional Boliviana
