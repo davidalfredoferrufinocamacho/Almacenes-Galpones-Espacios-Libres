@@ -693,6 +693,318 @@ function initDatabase() {
       ('acc_5400', '5400', 'Impuestos y Tasas', 'expense');
   `);
 
+  // NUEVAS FUNCIONALIDADES PROFESIONALES
+  db.exec(`
+    -- #7: Roles y Permisos de Administrador
+    CREATE TABLE IF NOT EXISTS admin_roles (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      description TEXT,
+      is_system INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_permissions (
+      id TEXT PRIMARY KEY,
+      role_id TEXT NOT NULL,
+      section TEXT NOT NULL,
+      can_view INTEGER DEFAULT 0,
+      can_create INTEGER DEFAULT 0,
+      can_edit INTEGER DEFAULT 0,
+      can_delete INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (role_id) REFERENCES admin_roles(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_users (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE,
+      role_id TEXT NOT NULL,
+      mfa_enabled INTEGER DEFAULT 0,
+      mfa_secret TEXT,
+      last_login TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (role_id) REFERENCES admin_roles(id)
+    );
+
+    -- Insertar roles por defecto
+    INSERT OR IGNORE INTO admin_roles (id, name, description, is_system) VALUES
+      ('role_super_admin', 'Super Admin', 'Acceso total a todas las secciones', 1),
+      ('role_admin', 'Admin', 'Administrador con acceso a la mayoria de secciones', 1),
+      ('role_moderator', 'Moderador', 'Modera contenido, disputas y verificaciones', 1),
+      ('role_accountant', 'Contable', 'Acceso a pagos, facturas y contabilidad', 1),
+      ('role_support', 'Soporte', 'Atencion al cliente y mensajes', 1);
+
+    -- #8: Verificacion de Hosts
+    CREATE TABLE IF NOT EXISTS host_verifications (
+      id TEXT PRIMARY KEY,
+      host_id TEXT NOT NULL,
+      document_type TEXT NOT NULL CHECK(document_type IN ('ci', 'pasaporte', 'nit', 'comprobante_domicilio', 'licencia_actividad')),
+      document_url TEXT NOT NULL,
+      document_number TEXT,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'in_review', 'approved', 'rejected')),
+      reviewed_by TEXT,
+      reviewed_at TEXT,
+      review_notes TEXT,
+      rejection_reason TEXT,
+      expires_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (host_id) REFERENCES users(id),
+      FOREIGN KEY (reviewed_by) REFERENCES users(id)
+    );
+
+    -- #3: Gestion de Disputas/Reclamos
+    CREATE TABLE IF NOT EXISTS disputes (
+      id TEXT PRIMARY KEY,
+      dispute_number TEXT UNIQUE NOT NULL,
+      reservation_id TEXT,
+      contract_id TEXT,
+      payment_id TEXT,
+      complainant_id TEXT NOT NULL,
+      complainant_type TEXT NOT NULL CHECK(complainant_type IN ('guest', 'host')),
+      respondent_id TEXT NOT NULL,
+      category TEXT NOT NULL CHECK(category IN ('payment', 'property_condition', 'cancellation', 'damage', 'service', 'other')),
+      subject TEXT NOT NULL,
+      description TEXT NOT NULL,
+      evidence_urls TEXT,
+      status TEXT DEFAULT 'open' CHECK(status IN ('open', 'in_review', 'awaiting_response', 'resolved_favor_guest', 'resolved_favor_host', 'resolved_mutual', 'closed', 'escalated')),
+      priority TEXT DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
+      assigned_to TEXT,
+      resolution_notes TEXT,
+      resolution_amount REAL,
+      resolved_at TEXT,
+      resolved_by TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (reservation_id) REFERENCES reservations(id),
+      FOREIGN KEY (contract_id) REFERENCES contracts(id),
+      FOREIGN KEY (payment_id) REFERENCES payments(id),
+      FOREIGN KEY (complainant_id) REFERENCES users(id),
+      FOREIGN KEY (respondent_id) REFERENCES users(id),
+      FOREIGN KEY (assigned_to) REFERENCES users(id),
+      FOREIGN KEY (resolved_by) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS dispute_comments (
+      id TEXT PRIMARY KEY,
+      dispute_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      user_type TEXT NOT NULL CHECK(user_type IN ('admin', 'guest', 'host')),
+      comment TEXT NOT NULL,
+      is_internal INTEGER DEFAULT 0,
+      attachment_url TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (dispute_id) REFERENCES disputes(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    -- #9: Campanas de Email/SMS
+    CREATE TABLE IF NOT EXISTS campaigns (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      campaign_type TEXT NOT NULL CHECK(campaign_type IN ('email', 'sms', 'both')),
+      subject TEXT,
+      content TEXT NOT NULL,
+      template_variables TEXT,
+      target_audience TEXT NOT NULL CHECK(target_audience IN ('all', 'guests', 'hosts', 'inactive', 'new_users', 'custom')),
+      custom_filter TEXT,
+      status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'scheduled', 'sending', 'sent', 'cancelled')),
+      scheduled_at TEXT,
+      sent_at TEXT,
+      total_recipients INTEGER DEFAULT 0,
+      sent_count INTEGER DEFAULT 0,
+      failed_count INTEGER DEFAULT 0,
+      created_by TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS campaign_recipients (
+      id TEXT PRIMARY KEY,
+      campaign_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'sent', 'failed', 'opened', 'clicked')),
+      sent_at TEXT,
+      error_message TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    -- A: Panel de Propietarios (campos adicionales en users)
+    -- B: Estados de Cuenta Automaticos
+    CREATE TABLE IF NOT EXISTS host_statements (
+      id TEXT PRIMARY KEY,
+      host_id TEXT NOT NULL,
+      statement_number TEXT UNIQUE NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      total_bookings INTEGER DEFAULT 0,
+      gross_income REAL DEFAULT 0,
+      commission_deducted REAL DEFAULT 0,
+      taxes_deducted REAL DEFAULT 0,
+      net_payout REAL DEFAULT 0,
+      payout_status TEXT DEFAULT 'pending' CHECK(payout_status IN ('pending', 'processing', 'paid', 'failed')),
+      payout_date TEXT,
+      payout_reference TEXT,
+      pdf_url TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (host_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS host_statement_details (
+      id TEXT PRIMARY KEY,
+      statement_id TEXT NOT NULL,
+      contract_id TEXT,
+      reservation_id TEXT,
+      description TEXT NOT NULL,
+      amount REAL NOT NULL,
+      commission REAL DEFAULT 0,
+      net_amount REAL NOT NULL,
+      transaction_date TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (statement_id) REFERENCES host_statements(id),
+      FOREIGN KEY (contract_id) REFERENCES contracts(id),
+      FOREIGN KEY (reservation_id) REFERENCES reservations(id)
+    );
+
+    -- C: Gestion de Depositos de Seguridad
+    CREATE TABLE IF NOT EXISTS security_deposits (
+      id TEXT PRIMARY KEY,
+      reservation_id TEXT NOT NULL,
+      contract_id TEXT,
+      guest_id TEXT NOT NULL,
+      host_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'held', 'partially_released', 'released', 'claimed', 'refunded')),
+      held_at TEXT,
+      release_amount REAL,
+      released_at TEXT,
+      claim_amount REAL,
+      claim_reason TEXT,
+      claim_evidence_urls TEXT,
+      claimed_at TEXT,
+      processed_by TEXT,
+      processed_at TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (reservation_id) REFERENCES reservations(id),
+      FOREIGN KEY (contract_id) REFERENCES contracts(id),
+      FOREIGN KEY (guest_id) REFERENCES users(id),
+      FOREIGN KEY (host_id) REFERENCES users(id),
+      FOREIGN KEY (processed_by) REFERENCES users(id)
+    );
+
+    -- D: Badges/Insignias de Usuario
+    CREATE TABLE IF NOT EXISTS badge_definitions (
+      id TEXT PRIMARY KEY,
+      code TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      icon TEXT,
+      color TEXT DEFAULT '#4F46E5',
+      badge_type TEXT NOT NULL CHECK(badge_type IN ('host', 'guest', 'both')),
+      criteria TEXT,
+      is_automatic INTEGER DEFAULT 1,
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS user_badges (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      badge_id TEXT NOT NULL,
+      awarded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      awarded_by TEXT,
+      expires_at TEXT,
+      is_active INTEGER DEFAULT 1,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (badge_id) REFERENCES badge_definitions(id),
+      FOREIGN KEY (awarded_by) REFERENCES users(id)
+    );
+
+    -- Insertar badges por defecto
+    INSERT OR IGNORE INTO badge_definitions (id, code, name, description, icon, color, badge_type, criteria, is_automatic) VALUES
+      ('badge_verified_host', 'verified_host', 'Host Verificado', 'Documentos verificados por la plataforma', 'shield-check', '#10B981', 'host', 'all_documents_approved', 1),
+      ('badge_super_host', 'super_host', 'Super Host', '10+ contratos completados con 4.5+ rating', 'star', '#F59E0B', 'host', 'contracts>=10 AND avg_rating>=4.5', 1),
+      ('badge_new_host', 'new_host', 'Nuevo Host', 'Recien unido a la plataforma', 'sparkles', '#6366F1', 'host', 'joined_within_30_days', 1),
+      ('badge_frequent_guest', 'frequent_guest', 'Cliente Frecuente', '5+ reservas completadas', 'heart', '#EC4899', 'guest', 'completed_reservations>=5', 1),
+      ('badge_verified_guest', 'verified_guest', 'Cliente Verificado', 'Identidad verificada', 'badge-check', '#10B981', 'guest', 'identity_verified', 1),
+      ('badge_top_rated', 'top_rated', 'Mejor Calificado', 'Rating promedio 4.8+', 'trophy', '#F59E0B', 'both', 'avg_rating>=4.8', 1);
+
+    -- E: Centro de Ayuda/FAQ Admin
+    CREATE TABLE IF NOT EXISTS faq_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      description TEXT,
+      icon TEXT,
+      order_index INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      target_audience TEXT DEFAULT 'all' CHECK(target_audience IN ('all', 'guests', 'hosts')),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS faqs (
+      id TEXT PRIMARY KEY,
+      category_id TEXT NOT NULL,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      order_index INTEGER DEFAULT 0,
+      is_featured INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      views INTEGER DEFAULT 0,
+      helpful_yes INTEGER DEFAULT 0,
+      helpful_no INTEGER DEFAULT 0,
+      created_by TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (category_id) REFERENCES faq_categories(id),
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    );
+
+    -- Insertar categorias FAQ por defecto
+    INSERT OR IGNORE INTO faq_categories (id, name, slug, description, icon, order_index, target_audience) VALUES
+      ('faq_cat_general', 'General', 'general', 'Preguntas generales sobre la plataforma', 'info-circle', 1, 'all'),
+      ('faq_cat_reservas', 'Reservas', 'reservas', 'Como hacer y gestionar reservas', 'calendar', 2, 'guests'),
+      ('faq_cat_pagos', 'Pagos', 'pagos', 'Metodos de pago y facturacion', 'credit-card', 3, 'all'),
+      ('faq_cat_hosts', 'Para Hosts', 'hosts', 'Informacion para propietarios', 'home', 4, 'hosts'),
+      ('faq_cat_contratos', 'Contratos', 'contratos', 'Firma y gestion de contratos', 'document', 5, 'all');
+
+    -- F: Alertas y Notificaciones Admin
+    CREATE TABLE IF NOT EXISTS admin_alerts (
+      id TEXT PRIMARY KEY,
+      alert_type TEXT NOT NULL CHECK(alert_type IN ('payment_pending', 'dispute_new', 'host_verification', 'contract_expiring', 'low_activity', 'system', 'custom')),
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      severity TEXT DEFAULT 'info' CHECK(severity IN ('info', 'warning', 'error', 'success')),
+      entity_type TEXT,
+      entity_id TEXT,
+      is_read INTEGER DEFAULT 0,
+      is_dismissed INTEGER DEFAULT 0,
+      action_url TEXT,
+      action_label TEXT,
+      expires_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_admin_alerts_unread ON admin_alerts(is_read, is_dismissed, created_at);
+    CREATE INDEX IF NOT EXISTS idx_disputes_status ON disputes(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_host_verifications_status ON host_verifications(status, host_id);
+    CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status, scheduled_at);
+    CREATE INDEX IF NOT EXISTS idx_security_deposits_status ON security_deposits(status, reservation_id);
+  `);
+
   // Migraciones para columnas faltantes en bases de datos existentes
   const migrations = [
     { table: 'users', column: 'anti_bypass_legal_text_id', type: 'TEXT' },
