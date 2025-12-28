@@ -244,27 +244,37 @@ function AdminDashboardPanel() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ borderBottom: '2px solid #eee' }}>
+                          <th style={{ textAlign: 'left', padding: '0.5rem' }}>Cliente</th>
+                          <th style={{ textAlign: 'left', padding: '0.5rem' }}>Host</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>ID</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Espacio</th>
-                          <th style={{ textAlign: 'left', padding: '0.5rem' }}>Cliente</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Fecha Inicio</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Estado</th>
                           <th style={{ textAlign: 'right', padding: '0.5rem' }}>Total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {clientData.reservations.map(r => (
-                          <tr key={r.id} style={{ borderBottom: '1px solid #eee' }}>
-                            <td style={{ padding: '0.5rem' }}>
-                              <Link to="/admin" style={{ color: '#3498db' }}>#{r.id}</Link>
-                            </td>
-                            <td style={{ padding: '0.5rem' }}>{r.space_title || r.space_id}</td>
-                            <td style={{ padding: '0.5rem' }}>{r.guest_name || r.guest_email || r.guest_id}</td>
-                            <td style={{ padding: '0.5rem' }}>{formatDate(r.start_date)}</td>
-                            <td style={{ padding: '0.5rem' }}>{getStatusBadge(r.status)}</td>
-                            <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(r.total_price)}</td>
-                          </tr>
-                        ))}
+                        {clientData.reservations.map(r => {
+                          const clientName = r.guest_first_name || r.guest_email || `Cliente #${r.guest_id}`
+                          const hostName = r.host_first_name || r.host_email || `Host #${r.host_id}`
+                          return (
+                            <tr key={r.id} style={{ borderBottom: '1px solid #eee' }}>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to="/admin" style={{ color: '#3498db' }}>{clientName}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to="/admin" style={{ color: '#27ae60' }}>{hostName}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to="/admin" style={{ color: '#3498db' }}>#{r.id}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>{r.space_title || r.space_id}</td>
+                              <td style={{ padding: '0.5rem' }}>{formatDate(r.start_date)}</td>
+                              <td style={{ padding: '0.5rem' }}>{getStatusBadge(r.status)}</td>
+                              <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(r.total_price)}</td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -283,25 +293,35 @@ function AdminDashboardPanel() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ borderBottom: '2px solid #eee' }}>
+                          <th style={{ textAlign: 'left', padding: '0.5rem' }}>Arrendatario</th>
+                          <th style={{ textAlign: 'left', padding: '0.5rem' }}>Host</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>ID</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Espacio</th>
-                          <th style={{ textAlign: 'left', padding: '0.5rem' }}>Arrendatario</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Vigencia</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Estado</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {clientData.contracts.map(c => (
-                          <tr key={c.id} style={{ borderBottom: '1px solid #eee' }}>
-                            <td style={{ padding: '0.5rem' }}>
-                              <Link to="/admin" style={{ color: '#3498db' }}>#{c.id}</Link>
-                            </td>
-                            <td style={{ padding: '0.5rem' }}>{c.space_title || c.space_id}</td>
-                            <td style={{ padding: '0.5rem' }}>{c.guest_name || c.guest_email || c.guest_id}</td>
-                            <td style={{ padding: '0.5rem' }}>{formatDate(c.start_date)} - {formatDate(c.end_date)}</td>
-                            <td style={{ padding: '0.5rem' }}>{getStatusBadge(c.status)}</td>
-                          </tr>
-                        ))}
+                        {clientData.contracts.map(c => {
+                          const clientName = c.guest_first_name || c.guest_email || `Cliente #${c.guest_id}`
+                          const hostName = c.host_first_name || c.host_email || `Host #${c.host_id}`
+                          return (
+                            <tr key={c.id} style={{ borderBottom: '1px solid #eee' }}>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to="/admin" style={{ color: '#3498db' }}>{clientName}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to="/admin" style={{ color: '#27ae60' }}>{hostName}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to="/admin" style={{ color: '#3498db' }}>#{c.id}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>{c.space_title || c.space_id}</td>
+                              <td style={{ padding: '0.5rem' }}>{formatDate(c.start_date)} - {formatDate(c.end_date)}</td>
+                              <td style={{ padding: '0.5rem' }}>{getStatusBadge(c.status)}</td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -320,25 +340,34 @@ function AdminDashboardPanel() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ borderBottom: '2px solid #eee' }}>
+                          <th style={{ textAlign: 'left', padding: '0.5rem' }}>Pagador</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>ID</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Concepto</th>
+                          <th style={{ textAlign: 'left', padding: '0.5rem' }}>Espacio</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Fecha</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Estado</th>
                           <th style={{ textAlign: 'right', padding: '0.5rem' }}>Monto</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {clientData.payments.map(p => (
-                          <tr key={p.id} style={{ borderBottom: '1px solid #eee' }}>
-                            <td style={{ padding: '0.5rem' }}>
-                              <Link to="/admin" style={{ color: '#3498db' }}>#{p.id}</Link>
-                            </td>
-                            <td style={{ padding: '0.5rem' }}>{p.concept || p.type || 'Pago'}</td>
-                            <td style={{ padding: '0.5rem' }}>{formatDate(p.created_at)}</td>
-                            <td style={{ padding: '0.5rem' }}>{getStatusBadge(p.status)}</td>
-                            <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(p.amount)}</td>
-                          </tr>
-                        ))}
+                        {clientData.payments.map(p => {
+                          const payerName = p.user_first_name || p.user_email || `Usuario #${p.user_id}`
+                          return (
+                            <tr key={p.id} style={{ borderBottom: '1px solid #eee' }}>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to="/admin" style={{ color: '#3498db' }}>{payerName}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to="/admin" style={{ color: '#3498db' }}>#{p.id}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>{p.concept || p.type || 'Pago'}</td>
+                              <td style={{ padding: '0.5rem' }}>{p.space_title || '-'}</td>
+                              <td style={{ padding: '0.5rem' }}>{formatDate(p.created_at)}</td>
+                              <td style={{ padding: '0.5rem' }}>{getStatusBadge(p.status)}</td>
+                              <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(p.amount)}</td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
