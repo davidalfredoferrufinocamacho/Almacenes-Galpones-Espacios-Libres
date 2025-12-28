@@ -8,8 +8,18 @@ const { authenticateToken, requireRole, optionalAuth } = require('../middleware/
 const { logAudit } = require('../middleware/audit');
 const { generateId } = require('../utils/helpers');
 
-const VIDEO_MIN_DURATION = 30;
-const VIDEO_MAX_DURATION = 60;
+function getVideoMaxDuration() {
+  const DEFAULT_MAX = 15;
+  try {
+    const config = db.prepare("SELECT value FROM system_config WHERE key = 'video_max_duration'").get();
+    if (!config) return DEFAULT_MAX;
+    const value = parseInt(config.value);
+    if (isNaN(value) || value < 1 || value > 300) return DEFAULT_MAX;
+    return value;
+  } catch {
+    return DEFAULT_MAX;
+  }
+}
 
 async function getVideoDuration(filePath) {
   return new Promise((resolve, reject) => {
@@ -402,24 +412,14 @@ router.post('/:id/video', authenticateToken, requireRole('HOST'), upload.single(
     }
 
     const durationInSeconds = Math.round(realDuration);
+    const maxDuration = getVideoMaxDuration();
 
-    if (durationInSeconds < VIDEO_MIN_DURATION) {
+    if (durationInSeconds > maxDuration) {
       fs.unlinkSync(filePath);
       return res.status(400).json({ 
-        error: `El video debe durar al menos ${VIDEO_MIN_DURATION} segundos. Duracion detectada: ${durationInSeconds} segundos.`,
+        error: `El video no puede durar mas de ${maxDuration} segundos. Duracion detectada: ${durationInSeconds} segundos.`,
         detected_duration: durationInSeconds,
-        min_required: VIDEO_MIN_DURATION,
-        max_allowed: VIDEO_MAX_DURATION
-      });
-    }
-
-    if (durationInSeconds > VIDEO_MAX_DURATION) {
-      fs.unlinkSync(filePath);
-      return res.status(400).json({ 
-        error: `El video no puede durar mas de ${VIDEO_MAX_DURATION} segundos. Duracion detectada: ${durationInSeconds} segundos.`,
-        detected_duration: durationInSeconds,
-        min_required: VIDEO_MIN_DURATION,
-        max_allowed: VIDEO_MAX_DURATION
+        max_allowed: maxDuration
       });
     }
 
@@ -438,7 +438,7 @@ router.post('/:id/video', authenticateToken, requireRole('HOST'), upload.single(
     res.json({ 
       video_url: videoUrl,
       duration: durationInSeconds,
-      validation: 'OK - Duracion dentro del rango permitido (30-60 segundos)'
+      validation: `OK - Duracion valida (maximo ${maxDuration} segundos)`
     });
   } catch (error) {
     if (req.file && fs.existsSync(req.file.path)) {

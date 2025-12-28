@@ -1104,6 +1104,13 @@ router.put('/config/:key', requireSuperAdmin, [
       }
     }
 
+    if (req.params.key === 'video_max_duration') {
+      const value = parseInt(req.body.value);
+      if (isNaN(value) || value < 1 || value > 300) {
+        return res.status(400).json({ error: 'La duracion maxima del video debe estar entre 1 y 300 segundos' });
+      }
+    }
+
     db.prepare('UPDATE system_config SET value = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE key = ?')
       .run(req.body.value, req.user.id, req.params.key);
 

@@ -412,8 +412,7 @@ function initDatabase() {
     INSERT OR IGNORE INTO system_config (id, key, value, description) VALUES
       ('cfg_deposit', 'deposit_percentage', '10', 'Porcentaje de anticipo (0-100)'),
       ('cfg_commission', 'commission_percentage', '10', 'Porcentaje de comision de la plataforma (0-100)'),
-      ('cfg_video_max', 'video_max_duration', '60', 'Duracion maxima del video en segundos'),
-      ('cfg_video_min', 'video_min_duration', '30', 'Duracion minima recomendada del video en segundos');
+      ('cfg_video_max', 'video_max_duration', '15', 'Duracion maxima del video en segundos (0-15)');
 
     -- Insertar textos legales iniciales (version 1.0, activos)
     INSERT OR IGNORE INTO legal_texts (id, type, title, content, version, is_active, effective_date) VALUES
