@@ -193,15 +193,19 @@ function SpaceDetail() {
                 <p>{space.description}</p>
               </div>
 
-              <h3>Informacion del HOST</h3>
-              <div className="host-info">
-                <p>
-                  <strong>{space.host_person_type === 'juridica' ? 'Razon Social' : 'Nombre'}:</strong>{' '}
-                  {space.host_company || `${space.host_first_name} ${space.host_last_name}`}
-                </p>
-                <p><strong>Ubicacion:</strong> {space.host_city}, {space.host_department}</p>
-                <p className="no-contact">No se permite contacto directo - Use la plataforma</p>
-              </div>
+              {isAuthenticated && (
+                <>
+                  <h3>Informacion del HOST</h3>
+                  <div className="host-info">
+                    <p>
+                      <strong>{space.host_person_type === 'juridica' ? 'Razon Social' : 'Nombre'}:</strong>{' '}
+                      {space.host_company || `${space.host_first_name} ${space.host_last_name}`}
+                    </p>
+                    <p><strong>Ubicacion:</strong> {space.host_city}, {space.host_department}</p>
+                    <p className="no-contact">No se permite contacto directo - Use la plataforma</p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
