@@ -78,8 +78,9 @@ router.get('/panel/users', (req, res) => {
 
     const users = db.prepare(`
       SELECT u.id, u.email, u.role, u.person_type, u.first_name, u.last_name, u.company_name,
-             u.ci, u.nit, u.phone, u.city, u.department, u.is_verified, u.is_active, u.is_blocked,
-             u.anti_bypass_accepted, u.created_at,
+             u.ci, u.nit, u.phone, u.city, u.department, u.street, u.street_number, u.country,
+             u.classification, u.is_verified, u.is_active, u.is_blocked,
+             u.anti_bypass_accepted, u.anti_bypass_accepted_at, u.created_at,
              (SELECT COUNT(*) FROM spaces WHERE host_id = u.id) as spaces_count,
              (SELECT COUNT(*) FROM reservations WHERE guest_id = u.id OR host_id = u.id) as reservations_count,
              (SELECT COUNT(*) FROM contracts WHERE guest_id = u.id OR host_id = u.id) as contracts_count,
@@ -114,7 +115,8 @@ router.get('/panel/users/:id/details', (req, res) => {
   try {
     const user = db.prepare(`
       SELECT id, email, role, person_type, first_name, last_name, company_name,
-             ci, nit, phone, city, department, address, is_verified, is_active, is_blocked,
+             ci, nit, phone, city, department, street, street_number, country, address,
+             classification, is_verified, is_active, is_blocked,
              anti_bypass_accepted, anti_bypass_accepted_at, created_at
       FROM users WHERE id = ?
     `).get(req.params.id);
@@ -200,7 +202,8 @@ router.put('/panel/users/:id', (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    const { first_name, last_name, company_name, phone, city, department, address, 
+    const { first_name, last_name, company_name, phone, city, department, address,
+            street, street_number, country, classification, anti_bypass_accepted,
             is_active, is_blocked, is_verified, admin_notes } = req.body;
     
     const updates = [];
@@ -213,6 +216,17 @@ router.put('/panel/users/:id', (req, res) => {
     if (city !== undefined) { updates.push('city = ?'); values.push(city); }
     if (department !== undefined) { updates.push('department = ?'); values.push(department); }
     if (address !== undefined) { updates.push('address = ?'); values.push(address); }
+    if (street !== undefined) { updates.push('street = ?'); values.push(street); }
+    if (street_number !== undefined) { updates.push('street_number = ?'); values.push(street_number); }
+    if (country !== undefined) { updates.push('country = ?'); values.push(country); }
+    if (classification !== undefined) { updates.push('classification = ?'); values.push(classification); }
+    if (anti_bypass_accepted !== undefined) { 
+      updates.push('anti_bypass_accepted = ?'); 
+      values.push(anti_bypass_accepted ? 1 : 0);
+      if (anti_bypass_accepted) {
+        updates.push('anti_bypass_accepted_at = CURRENT_TIMESTAMP');
+      }
+    }
     if (is_active !== undefined) { updates.push('is_active = ?'); values.push(is_active ? 1 : 0); }
     if (is_blocked !== undefined) { updates.push('is_blocked = ?'); values.push(is_blocked ? 1 : 0); }
     if (is_verified !== undefined) { updates.push('is_verified = ?'); values.push(is_verified ? 1 : 0); }

@@ -178,8 +178,13 @@ function useUserPanel(role) {
       last_name: user.last_name || '',
       company_name: user.company_name || '',
       phone: user.phone || '',
+      street: user.street || '',
+      street_number: user.street_number || '',
       city: user.city || '',
+      country: user.country || 'Bolivia',
       department: user.department || '',
+      classification: user.classification || '',
+      anti_bypass_accepted: user.anti_bypass_accepted ? true : false,
       is_active: user.is_active,
       is_blocked: user.is_blocked,
       is_verified: user.is_verified
@@ -469,6 +474,8 @@ function UserPanelContent({ filteredUsers, selectedUser, userDetails, detailsLoa
           <thead>
             <tr>
               <th>Usuario</th>
+              <th>Clasificacion</th>
+              <th>Anti-Bypass</th>
               <th>Estado</th>
               <th>Actividad</th>
               <th>Acciones</th>
@@ -480,7 +487,29 @@ function UserPanelContent({ filteredUsers, selectedUser, userDetails, detailsLoa
                 <td>
                   <div style={{fontWeight: '500'}}>{u.first_name || u.company_name || 'Sin nombre'} {u.last_name || ''}</div>
                   <div style={{fontSize: '0.75rem', color: '#666'}}>{u.email}</div>
-                  <div style={{fontSize: '0.7rem', color: '#999'}}>{u.city || 'Sin ciudad'}</div>
+                  <div style={{fontSize: '0.7rem', color: '#999'}}>{u.street ? `${u.street} ${u.street_number || ''}, ` : ''}{u.city || 'Sin ciudad'}{u.country && u.country !== 'Bolivia' ? `, ${u.country}` : ''}</div>
+                </td>
+                <td>
+                  {u.classification ? (
+                    <span style={{
+                      padding: '0.2rem 0.5rem', 
+                      borderRadius: '12px', 
+                      fontSize: '0.7rem',
+                      background: u.classification === 'premium' ? '#6f42c1' : u.classification === 'corporativo' ? '#0d6efd' : u.classification === 'frecuente' ? '#198754' : '#6c757d',
+                      color: 'white'
+                    }}>
+                      {u.classification.charAt(0).toUpperCase() + u.classification.slice(1)}
+                    </span>
+                  ) : (
+                    <span style={{fontSize: '0.7rem', color: '#999'}}>Sin clasificar</span>
+                  )}
+                </td>
+                <td>
+                  {u.anti_bypass_accepted ? (
+                    <span style={{color: '#198754', fontSize: '0.75rem', fontWeight: '500'}}>Aceptada</span>
+                  ) : (
+                    <span style={{color: '#dc3545', fontSize: '0.75rem'}}>Pendiente</span>
+                  )}
                 </td>
                 <td>{getStatusBadge(u)}</td>
                 <td style={{fontSize: '0.75rem'}}>
@@ -508,7 +537,37 @@ function UserPanelContent({ filteredUsers, selectedUser, userDetails, detailsLoa
                 <div>
                   <h2 style={{margin: 0}}>{userDetails.user.first_name || userDetails.user.company_name || 'Usuario'} {userDetails.user.last_name || ''}</h2>
                   <p style={{margin: '0.25rem 0', color: '#666'}}>{userDetails.user.email}</p>
+                  {userDetails.user.classification && (
+                    <span style={{
+                      padding: '0.2rem 0.5rem', 
+                      borderRadius: '12px', 
+                      fontSize: '0.75rem',
+                      marginRight: '0.5rem',
+                      background: userDetails.user.classification === 'premium' ? '#6f42c1' : userDetails.user.classification === 'corporativo' ? '#0d6efd' : userDetails.user.classification === 'frecuente' ? '#198754' : '#6c757d',
+                      color: 'white'
+                    }}>
+                      {userDetails.user.classification.charAt(0).toUpperCase() + userDetails.user.classification.slice(1)}
+                    </span>
+                  )}
                   <div style={{display: 'flex', gap: '0.5rem', marginTop: '0.5rem'}}>{getStatusBadge(userDetails.user)}</div>
+                  {(userDetails.user.street || userDetails.user.city) && (
+                    <p style={{margin: '0.5rem 0 0', fontSize: '0.85rem', color: '#555'}}>
+                      {userDetails.user.street ? `${userDetails.user.street} ${userDetails.user.street_number || ''}, ` : ''}
+                      {userDetails.user.city || ''}{userDetails.user.department ? `, ${userDetails.user.department}` : ''}
+                      {userDetails.user.country && userDetails.user.country !== 'Bolivia' ? `, ${userDetails.user.country}` : ''}
+                    </p>
+                  )}
+                  <div style={{marginTop: '0.5rem'}}>
+                    {userDetails.user.anti_bypass_accepted ? (
+                      <span style={{fontSize: '0.75rem', padding: '0.2rem 0.5rem', background: '#d4edda', color: '#155724', borderRadius: '4px'}}>
+                        Anti-Bypass: Aceptada {userDetails.user.anti_bypass_accepted_at ? `(${new Date(userDetails.user.anti_bypass_accepted_at).toLocaleDateString('es-BO')})` : ''}
+                      </span>
+                    ) : (
+                      <span style={{fontSize: '0.75rem', padding: '0.2rem 0.5rem', background: '#fff3cd', color: '#856404', borderRadius: '4px'}}>
+                        Anti-Bypass: Pendiente
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div style={{display: 'flex', gap: '0.5rem'}}>
                   <button onClick={() => exportUserData(userDetails.user.id, userDetails.user.email)} className="btn btn-sm btn-secondary">Exportar</button>
@@ -697,45 +756,95 @@ function UserEditModal({ editingUser, setEditingUser, editForm, setEditForm, sav
   if (!editingUser) return null
   return (
     <div className="modal-overlay" onClick={() => setEditingUser(null)}>
-      <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto'}}>
         <h2>Editar Usuario</h2>
         <p style={{color: '#666', marginBottom: '1rem'}}>{editingUser.email}</p>
+        
         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
           <div>
             <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Nombre:</label>
-            <input type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+            <input type="text" value={editForm.first_name || ''} onChange={e => setEditForm({...editForm, first_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
           </div>
           <div>
             <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Apellido:</label>
-            <input type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+            <input type="text" value={editForm.last_name || ''} onChange={e => setEditForm({...editForm, last_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
           </div>
         </div>
+        
         <div style={{marginBottom: '1rem'}}>
           <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Empresa:</label>
-          <input type="text" value={editForm.company_name} onChange={e => setEditForm({...editForm, company_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+          <input type="text" value={editForm.company_name || ''} onChange={e => setEditForm({...editForm, company_name: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
         </div>
+        
         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
           <div>
             <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Telefono:</label>
-            <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+            <input type="text" value={editForm.phone || ''} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
           </div>
           <div>
-            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Ciudad:</label>
-            <input type="text" value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Clasificacion:</label>
+            <select value={editForm.classification || ''} onChange={e => setEditForm({...editForm, classification: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+              <option value="">Sin clasificar</option>
+              <option value="premium">Premium</option>
+              <option value="standard">Standard</option>
+              <option value="nuevo">Nuevo</option>
+              <option value="frecuente">Frecuente</option>
+              <option value="corporativo">Corporativo</option>
+            </select>
           </div>
         </div>
-        <div style={{marginBottom: '1rem'}}>
-          <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Departamento:</label>
-          <select value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
-            <option value="">Seleccionar...</option>
-            {['La Paz', 'Cochabamba', 'Santa Cruz', 'Oruro', 'Potosi', 'Tarija', 'Chuquisaca', 'Beni', 'Pando'].map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
+
+        <h4 style={{marginBottom: '0.75rem', borderBottom: '1px solid #ddd', paddingBottom: '0.5rem'}}>Direccion</h4>
+        
+        <div style={{display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+          <div>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Calle:</label>
+            <input type="text" value={editForm.street || ''} onChange={e => setEditForm({...editForm, street: e.target.value})} style={{width: '100%', padding: '0.5rem'}} placeholder="Ej: Av. 6 de Agosto" />
+          </div>
+          <div>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Numero:</label>
+            <input type="text" value={editForm.street_number || ''} onChange={e => setEditForm({...editForm, street_number: e.target.value})} style={{width: '100%', padding: '0.5rem'}} placeholder="Ej: 1234" />
+          </div>
         </div>
-        <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem'}}>
-          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}><input type="checkbox" checked={editForm.is_active} onChange={e => setEditForm({...editForm, is_active: e.target.checked})} /> Activo</label>
-          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}><input type="checkbox" checked={editForm.is_verified} onChange={e => setEditForm({...editForm, is_verified: e.target.checked})} /> Verificado</label>
-          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#dc3545'}}><input type="checkbox" checked={editForm.is_blocked} onChange={e => setEditForm({...editForm, is_blocked: e.target.checked})} /> Bloqueado</label>
+        
+        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem'}}>
+          <div>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Ciudad:</label>
+            <input type="text" value={editForm.city || ''} onChange={e => setEditForm({...editForm, city: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+          </div>
+          <div>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Departamento:</label>
+            <select value={editForm.department || ''} onChange={e => setEditForm({...editForm, department: e.target.value})} style={{width: '100%', padding: '0.5rem'}}>
+              <option value="">Seleccionar...</option>
+              {['La Paz', 'Cochabamba', 'Santa Cruz', 'Oruro', 'Potosi', 'Tarija', 'Chuquisaca', 'Beni', 'Pando'].map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{display: 'block', marginBottom: '0.25rem', fontWeight: 'bold'}}>Pais:</label>
+            <input type="text" value={editForm.country || 'Bolivia'} onChange={e => setEditForm({...editForm, country: e.target.value})} style={{width: '100%', padding: '0.5rem'}} />
+          </div>
         </div>
+
+        <h4 style={{marginBottom: '0.75rem', borderBottom: '1px solid #ddd', paddingBottom: '0.5rem'}}>Estados y Permisos</h4>
+        
+        <div style={{display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem'}}>
+          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}><input type="checkbox" checked={editForm.is_active || false} onChange={e => setEditForm({...editForm, is_active: e.target.checked})} /> Activo</label>
+          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}><input type="checkbox" checked={editForm.is_verified || false} onChange={e => setEditForm({...editForm, is_verified: e.target.checked})} /> Verificado</label>
+          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#dc3545'}}><input type="checkbox" checked={editForm.is_blocked || false} onChange={e => setEditForm({...editForm, is_blocked: e.target.checked})} /> Bloqueado</label>
+        </div>
+        
+        <div style={{marginBottom: '1rem', padding: '0.75rem', background: editForm.anti_bypass_accepted ? '#d4edda' : '#fff3cd', borderRadius: '4px'}}>
+          <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold'}}>
+            <input type="checkbox" checked={editForm.anti_bypass_accepted || false} onChange={e => setEditForm({...editForm, anti_bypass_accepted: e.target.checked})} />
+            Clausula Anti-Bypass Aceptada
+          </label>
+          <small style={{color: '#666', marginTop: '0.25rem', display: 'block'}}>
+            {editingUser.anti_bypass_accepted_at 
+              ? `Aceptada el: ${new Date(editingUser.anti_bypass_accepted_at).toLocaleDateString('es-BO')}`
+              : 'El usuario no ha aceptado la clausula anti-bypass'}
+          </small>
+        </div>
+        
         <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
           <button onClick={() => setEditingUser(null)} className="btn btn-secondary">Cancelar</button>
           <button onClick={saveEdit} className="btn btn-primary">Guardar</button>
