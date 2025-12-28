@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import './Auth.css'
 
 function Login() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -18,7 +19,11 @@ function Login() {
 
     try {
       const user = await login(email, password)
-      if (user.role === 'ADMIN') {
+      const returnTo = searchParams.get('returnTo')
+      
+      if (returnTo) {
+        navigate(returnTo)
+      } else if (user.role === 'ADMIN') {
         navigate('/admin')
       } else {
         navigate('/dashboard')

@@ -289,10 +289,10 @@ function SpaceDetail() {
                 <h3>Reservar este Espacio</h3>
                 <p>Para ver la direccion completa y realizar una reserva, inicia sesion o registrate.</p>
                 <div className="login-buttons">
-                  <button className="btn btn-primary" onClick={() => navigate('/login')}>
+                  <button className="btn btn-primary" onClick={() => navigate(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`)}>
                     Iniciar Sesion
                   </button>
-                  <button className="btn btn-secondary" onClick={() => navigate('/registro')}>
+                  <button className="btn btn-secondary" onClick={() => navigate(`/registro?returnTo=${encodeURIComponent(window.location.pathname)}`)}>
                     Registrarse
                   </button>
                 </div>

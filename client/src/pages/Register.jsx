@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import './Auth.css'
 
 function Register() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { register } = useAuth()
   const [formData, setFormData] = useState({
     email: '',
@@ -65,7 +66,12 @@ function Register() {
 
     try {
       await register(formData)
-      navigate('/dashboard')
+      const returnTo = searchParams.get('returnTo')
+      if (returnTo) {
+        navigate(returnTo)
+      } else {
+        navigate('/dashboard')
+      }
     } catch (err) {
       setError(err.response?.data?.error || 'Error al registrar')
     } finally {
