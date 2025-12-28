@@ -697,11 +697,15 @@ router.delete('/account', async (req, res) => {
     }
 
     db.prepare('DELETE FROM favorites WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM notification_log WHERE recipient_id = ?').run(userId);
+    db.prepare('UPDATE audit_log SET user_id = NULL WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM campaign_recipients WHERE user_id = ?').run(userId);
 
-    logAudit(userId, 'ACCOUNT_DELETED', 'users', userId, 
-      { email: user.email, name: `${user.first_name} ${user.last_name}` }, 
-      null, req);
+    const auditData = { email: user.email, name: `${user.first_name} ${user.last_name}`, deleted_at: new Date().toISOString() };
+    db.prepare(`
+      INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, old_data, new_data, ip_address, user_agent, created_at)
+      VALUES (?, NULL, 'ACCOUNT_DELETED', 'users', ?, ?, NULL, ?, ?, CURRENT_TIMESTAMP)
+    `).run(`audit_${Date.now()}`, userId, JSON.stringify(auditData), req.ip, req.get('User-Agent'));
 
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
 
