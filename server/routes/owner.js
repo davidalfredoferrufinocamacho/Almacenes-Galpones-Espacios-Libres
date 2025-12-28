@@ -161,16 +161,16 @@ router.post('/spaces', [
     const userId = req.user.id;
     const id = generateId();
     const { title, description, space_type, price_per_month, price_per_day, area_m2,
-            city, department, street, street_number, latitude, longitude,
+            city, department, address, street, street_number, latitude, longitude,
             amenities, rules, min_rental_days, max_rental_days } = req.body;
 
     db.prepare(`
       INSERT INTO spaces (id, host_id, title, description, space_type, price_per_month, price_per_day,
-                          area_m2, city, department, street, street_number, latitude, longitude,
+                          total_sqm, available_sqm, area_m2, city, department, address, street, street_number, latitude, longitude,
                           amenities, rules, min_rental_days, max_rental_days, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
     `).run(id, userId, title, description, space_type || 'almacen', price_per_month, price_per_day || null,
-           area_m2, city, department || null, street || null, street_number || null,
+           area_m2, area_m2, area_m2, city, department || null, address || null, street || null, street_number || null,
            latitude || null, longitude || null, amenities || null, rules || null,
            min_rental_days || 30, max_rental_days || null);
 
@@ -192,7 +192,7 @@ router.put('/spaces/:id', (req, res) => {
     }
 
     const { title, description, space_type, price_per_month, price_per_day, area_m2,
-            city, department, street, street_number, latitude, longitude,
+            city, department, address, street, street_number, latitude, longitude,
             amenities, rules, min_rental_days, max_rental_days, status } = req.body;
 
     db.prepare(`
@@ -202,9 +202,12 @@ router.put('/spaces/:id', (req, res) => {
         space_type = COALESCE(?, space_type),
         price_per_month = COALESCE(?, price_per_month),
         price_per_day = ?,
+        total_sqm = COALESCE(?, total_sqm),
+        available_sqm = COALESCE(?, available_sqm),
         area_m2 = COALESCE(?, area_m2),
         city = COALESCE(?, city),
         department = ?,
+        address = COALESCE(?, address),
         street = ?,
         street_number = ?,
         latitude = ?,
@@ -217,7 +220,7 @@ router.put('/spaces/:id', (req, res) => {
         updated_at = datetime('now')
       WHERE id = ? AND host_id = ?
     `).run(title, description, space_type, price_per_month, price_per_day,
-           area_m2, city, department, street, street_number, latitude, longitude,
+           area_m2, area_m2, area_m2, city, department, address, street, street_number, latitude, longitude,
            amenities, rules, min_rental_days, max_rental_days, status,
            req.params.id, userId);
 
