@@ -14,12 +14,17 @@
   background: var(--primary);
   color: white;
   border: none;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 8px;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+  transition: background 0.2s;
+}
+
+.admin-hamburger:hover {
+  background: #2c3e50;
 }
 
 .admin-sidebar-overlay {
@@ -213,11 +218,11 @@
   }
   
   .admin-hamburger {
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
   }
-
+  
   .admin-sidebar {
     position: fixed;
     top: 60px;
@@ -235,7 +240,7 @@
   }
   
   .admin-sidebar-overlay {
-    display: block;
+    display: block !important;
     position: fixed;
     top: 60px;
     left: 0;
@@ -550,5 +555,18 @@
     width: 100%;
     font-size: 0.75rem;
     padding: 0.4rem 0.6rem;
+  }
+}
+
+/* CRITICAL: Mobile admin menu - must be at end for specificity */
+@media screen and (max-width: 768px) {
+  .admin-hamburger {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .admin-sidebar-overlay {
+    display: block !important;
   }
 }
