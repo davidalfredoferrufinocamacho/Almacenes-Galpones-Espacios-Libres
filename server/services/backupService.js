@@ -148,9 +148,9 @@ async function restoreBackup(backupId) {
     `).run(preRestoreId, preRestoreFilename, preRestorePath, fs.statSync(preRestorePath).size);
 
     db.prepare(`
-      INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
-      VALUES (?, NULL, 'backup_restored', 'backup_history', ?, ?)
-    `).run(uuidv4(), backupId, JSON.stringify({
+      INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, old_data, new_data)
+      VALUES (?, NULL, 'backup_restored', 'backup_history', ?, ?, ?)
+    `).run(uuidv4(), backupId, JSON.stringify({ backup_id: backupId }), JSON.stringify({
       restored_from: backup.filename,
       pre_restore_backup: preRestoreFilename
     }));
