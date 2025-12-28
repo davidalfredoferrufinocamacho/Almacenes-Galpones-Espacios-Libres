@@ -212,7 +212,9 @@ router.post('/spaces', [
       max_rental_days ? parseInt(max_rental_days) : null
     );
 
-    logAudit(userId, 'SPACE_CREATED', 'space', id, null, null, req);
+    const sanitizedBody = { ...req.body };
+    delete sanitizedBody.password;
+    logAudit(userId, 'SPACE_CREATED', 'space', id, null, sanitizedBody, req);
     res.status(201).json({ id, message: 'Espacio creado exitosamente' });
   } catch (error) {
     console.error('Error:', error);
@@ -236,6 +238,7 @@ router.put('/spaces/:id', (req, res) => {
             is_open, has_roof, rain_protected, dust_protected,
             access_type, has_security, security_description, schedule,
             city, department, address, latitude, longitude,
+            amenities, rules,
             min_rental_days, max_rental_days, status } = req.body;
 
     db.prepare(`
@@ -264,6 +267,8 @@ router.put('/spaces/:id', (req, res) => {
         address = COALESCE(?, address),
         latitude = ?,
         longitude = ?,
+        amenities = ?,
+        rules = ?,
         min_rental_days = COALESCE(?, min_rental_days),
         max_rental_days = ?,
         status = COALESCE(?, status),
@@ -290,13 +295,17 @@ router.put('/spaces/:id', (req, res) => {
       city, department, address,
       latitude ? parseFloat(latitude) : null,
       longitude ? parseFloat(longitude) : null,
+      amenities || null,
+      rules || null,
       min_rental_days ? parseInt(min_rental_days) : null,
       max_rental_days ? parseInt(max_rental_days) : null,
       status,
       req.params.id, userId
     );
 
-    logAudit(userId, 'SPACE_UPDATED', 'space', req.params.id, null, null, req);
+    const sanitizedBody = { ...req.body };
+    delete sanitizedBody.password;
+    logAudit(userId, 'SPACE_UPDATED', 'space', req.params.id, space, sanitizedBody, req);
     res.json({ message: 'Espacio actualizado' });
   } catch (error) {
     console.error('Error:', error);
@@ -326,7 +335,7 @@ router.delete('/spaces/:id', (req, res) => {
     db.prepare('DELETE FROM host_availability WHERE space_id = ?').run(req.params.id);
     db.prepare('DELETE FROM spaces WHERE id = ?').run(req.params.id);
 
-    logAudit(userId, 'SPACE_DELETED', 'space', req.params.id, null, null, req);
+    logAudit(userId, 'SPACE_DELETED', 'space', req.params.id, space, null, req);
     res.json({ message: 'Espacio eliminado exitosamente' });
   } catch (error) {
     console.error('Error:', error);
@@ -349,7 +358,7 @@ router.put('/spaces/:id/publish', (req, res) => {
     }
 
     db.prepare(`UPDATE spaces SET status = 'published', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
-    logAudit(userId, 'SPACE_PUBLISHED', 'space', req.params.id, null, null, req);
+    logAudit(userId, 'SPACE_PUBLISHED', 'space', req.params.id, { status: space.status }, { status: 'published' }, req);
     
     res.json({ message: 'Espacio publicado exitosamente' });
   } catch (error) {
@@ -368,7 +377,7 @@ router.put('/spaces/:id/unpublish', (req, res) => {
     }
 
     db.prepare(`UPDATE spaces SET status = 'draft', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
-    logAudit(userId, 'SPACE_UNPUBLISHED', 'space', req.params.id, null, null, req);
+    logAudit(userId, 'SPACE_UNPUBLISHED', 'space', req.params.id, { status: space.status }, { status: 'draft' }, req);
     
     res.json({ message: 'Espacio despublicado' });
   } catch (error) {
