@@ -425,22 +425,27 @@ function AdminDashboardPanel() {
                         </tr>
                       </thead>
                       <tbody>
-                        {hostData.spaces.map(s => (
-                          <tr key={s.id} style={{ borderBottom: '1px solid #eee' }}>
-                            <td style={{ padding: '0.5rem' }}>
-                              <Link to="/admin" style={{ color: '#3498db' }}>{s.owner_name || s.owner_email || s.owner_id}</Link>
-                            </td>
-                            <td style={{ padding: '0.5rem' }}>
-                              <Link to={`/espacios/${s.id}`} style={{ color: '#3498db' }}>#{s.id}</Link>
-                            </td>
-                            <td style={{ padding: '0.5rem' }}>
-                              <Link to={`/espacios/${s.id}`} style={{ color: '#3498db' }}>{s.title}</Link>
-                            </td>
-                            <td style={{ padding: '0.5rem' }}>{s.city || '-'}</td>
-                            <td style={{ padding: '0.5rem' }}>{getStatusBadge(s.status)}</td>
-                            <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(s.price_per_month)}</td>
-                          </tr>
-                        ))}
+                        {hostData.spaces.map(s => {
+                          const hostName = s.host_first_name && s.host_last_name 
+                            ? `${s.host_first_name} ${s.host_last_name}` 
+                            : s.host_email || `Host #${s.host_id}`
+                          return (
+                            <tr key={s.id} style={{ borderBottom: '1px solid #eee' }}>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to="/admin" style={{ color: '#3498db' }}>{hostName}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to={`/espacios/${s.id}`} style={{ color: '#3498db' }}>#{s.id}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>
+                                <Link to={`/espacios/${s.id}`} style={{ color: '#3498db' }}>{s.title}</Link>
+                              </td>
+                              <td style={{ padding: '0.5rem' }}>{s.city || '-'}</td>
+                              <td style={{ padding: '0.5rem' }}>{getStatusBadge(s.status)}</td>
+                              <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(s.price_per_month)}</td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
