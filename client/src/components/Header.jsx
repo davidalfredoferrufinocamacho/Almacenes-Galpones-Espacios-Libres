@@ -24,7 +24,7 @@ function Header() {
             <>
               <Link to="/dashboard">Mi Panel</Link>
               {user?.role === 'HOST' && (
-                <Link to="/mis-espacios">Mis Espacios</Link>
+                <Link to="/propietario">Portal Propietario</Link>
               )}
               {user?.role === 'GUEST' && (
                 <Link to="/mis-reservaciones">Reservaciones</Link>

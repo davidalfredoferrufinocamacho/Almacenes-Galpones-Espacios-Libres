@@ -14,6 +14,7 @@ import MyReservations from './pages/MyReservations'
 import MyContracts from './pages/MyContracts'
 import Appointments from './pages/Appointments'
 import AdminDashboard from './pages/AdminDashboard'
+import OwnerDashboard from './pages/OwnerDashboard'
 import Legal from './pages/Legal'
 import Contact from './pages/Contact'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -72,6 +73,12 @@ function App() {
           <Route path="/admin/*" element={
             <ProtectedRoute roles={['ADMIN']}>
               <AdminDashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/propietario/*" element={
+            <ProtectedRoute roles={['HOST']}>
+              <OwnerDashboard />
             </ProtectedRoute>
           } />
         </Routes>

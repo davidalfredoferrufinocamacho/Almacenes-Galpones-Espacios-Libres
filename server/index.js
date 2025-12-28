@@ -15,6 +15,7 @@ const invoiceRoutes = require('./routes/invoices');
 const adminRoutes = require('./routes/admin');
 const legalRoutes = require('./routes/legal');
 const contactRoutes = require('./routes/contact');
+const ownerRoutes = require('./routes/owner');
 
 const { initDatabase } = require('./config/database');
 const { initFrozenDataTriggers } = require('./utils/frozenDataProtection');
@@ -54,6 +55,7 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/legal', legalRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/owner', ownerRoutes);
 
 app.use(express.static(path.join(__dirname, '../client/dist'), {
   etag: false,
