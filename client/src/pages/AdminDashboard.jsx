@@ -33,7 +33,7 @@ function AdminDashboard() {
     }
   }
 
-  const isSuperAdmin = currentAdmin?.is_super_admin === 1
+  const isSuperAdmin = Boolean(currentAdmin?.is_super_admin)
 
   if (loading) {
     return <div className="loading"><div className="spinner"></div></div>
