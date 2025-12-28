@@ -42,6 +42,14 @@ The project utilizes a Node.js 20 backend with Express.js and SQLite for data pe
     - Audit logging of all backup operations
     - Backups stored in `/backups/` directory (persisted outside temp folders)
 
+*   **Fully Responsive Design:** The entire application is optimized for all devices and screen sizes:
+    - Desktop-first approach with consistent breakpoints: 768px (tablet) and 480px (mobile)
+    - Hamburger menu for mobile navigation in Header
+    - Responsive tables with horizontal scroll containers for data-heavy sections
+    - Touch-friendly accessibility with minimum 44px touch targets
+    - CSS organized with global responsive utilities in `index.css` and page-specific responsive styles scoped to their components (e.g., `.admin-content .data-table`)
+    - Tested across iOS, Android, macOS, and Windows viewports
+
 The UI/UX emphasizes a responsive and interactive user experience through React, with a clear separation of frontend and backend concerns.
 
 ## External Dependencies
