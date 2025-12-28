@@ -344,12 +344,14 @@ function OwnerSpaces() {
                 </div>
                 <div className="form-group">
                   <label>Tipo de Espacio</label>
-                  <select value={form.space_type || 'warehouse'} onChange={e => setForm({...form, space_type: e.target.value})}>
-                    <option value="warehouse">Almacen</option>
-                    <option value="shed">Galpon</option>
-                    <option value="open_space">Espacio Libre</option>
-                    <option value="office">Oficina</option>
-                    <option value="parking">Estacionamiento</option>
+                  <select value={form.space_type || 'almacen'} onChange={e => setForm({...form, space_type: e.target.value})}>
+                    <option value="almacen">Almacen</option>
+                    <option value="galpon">Galpon</option>
+                    <option value="deposito">Deposito</option>
+                    <option value="cuarto">Cuarto</option>
+                    <option value="contenedor">Contenedor</option>
+                    <option value="patio">Patio</option>
+                    <option value="terreno">Terreno</option>
                   </select>
                 </div>
               </div>

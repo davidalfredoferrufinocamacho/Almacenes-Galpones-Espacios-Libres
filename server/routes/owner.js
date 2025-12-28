@@ -169,7 +169,7 @@ router.post('/spaces', [
                           area_m2, city, department, street, street_number, latitude, longitude,
                           amenities, rules, min_rental_days, max_rental_days, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
-    `).run(id, userId, title, description, space_type || 'warehouse', price_per_month, price_per_day || null,
+    `).run(id, userId, title, description, space_type || 'almacen', price_per_month, price_per_day || null,
            area_m2, city, department || null, street || null, street_number || null,
            latitude || null, longitude || null, amenities || null, rules || null,
            min_rental_days || 30, max_rental_days || null);
