@@ -416,9 +416,9 @@ function AdminDashboardPanel() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ borderBottom: '2px solid #eee' }}>
+                          <th style={{ textAlign: 'left', padding: '0.5rem' }}>Propietario</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>ID</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Titulo</th>
-                          <th style={{ textAlign: 'left', padding: '0.5rem' }}>Propietario</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Ciudad</th>
                           <th style={{ textAlign: 'left', padding: '0.5rem' }}>Estado</th>
                           <th style={{ textAlign: 'right', padding: '0.5rem' }}>Precio/Mes</th>
@@ -428,12 +428,14 @@ function AdminDashboardPanel() {
                         {hostData.spaces.map(s => (
                           <tr key={s.id} style={{ borderBottom: '1px solid #eee' }}>
                             <td style={{ padding: '0.5rem' }}>
+                              <Link to="/admin" style={{ color: '#3498db' }}>{s.owner_name || s.owner_email || s.owner_id}</Link>
+                            </td>
+                            <td style={{ padding: '0.5rem' }}>
                               <Link to={`/espacios/${s.id}`} style={{ color: '#3498db' }}>#{s.id}</Link>
                             </td>
                             <td style={{ padding: '0.5rem' }}>
                               <Link to={`/espacios/${s.id}`} style={{ color: '#3498db' }}>{s.title}</Link>
                             </td>
-                            <td style={{ padding: '0.5rem' }}>{s.owner_name || s.owner_email || s.owner_id}</td>
                             <td style={{ padding: '0.5rem' }}>{s.city || '-'}</td>
                             <td style={{ padding: '0.5rem' }}>{getStatusBadge(s.status)}</td>
                             <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(s.price_per_month)}</td>
