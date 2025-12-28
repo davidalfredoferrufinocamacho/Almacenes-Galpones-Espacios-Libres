@@ -68,7 +68,8 @@ function CreateSpace() {
       const submitData = { ...formData }
       if (submitData.latitude === '') delete submitData.latitude
       if (submitData.longitude === '') delete submitData.longitude
-      const response = await api.post('/spaces', submitData)
+      // Importante: El endpoint es /owner/spaces y los campos m2 deben estar presentes
+      const response = await api.post('/owner/spaces', submitData)
       setSpaceId(response.data.id)
       setStep(2)
     } catch (err) {
@@ -91,7 +92,7 @@ function CreateSpace() {
     }
 
     try {
-      await api.post(`/spaces/${spaceId}/photos`, formDataUpload, {
+      await api.post(`/owner/spaces/${spaceId}/photos`, formDataUpload, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       setStep(3)
@@ -114,7 +115,7 @@ function CreateSpace() {
     formDataUpload.append('duration', '45')
 
     try {
-      await api.post(`/spaces/${spaceId}/video`, formDataUpload, {
+      await api.post(`/owner/spaces/${spaceId}/video`, formDataUpload, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       setStep(4)
@@ -130,8 +131,8 @@ function CreateSpace() {
     setError('')
 
     try {
-      await api.post(`/spaces/${spaceId}/publish`)
-      navigate('/mis-espacios')
+      await api.put(`/owner/spaces/${spaceId}/publish`)
+      navigate('/owner/dashboard')
     } catch (err) {
       setError(err.response?.data?.error || 'Error al publicar')
     } finally {

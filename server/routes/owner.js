@@ -160,19 +160,28 @@ router.post('/spaces', [
   try {
     const userId = req.user.id;
     const id = generateId();
-    const { title, description, space_type, price_per_month, price_per_day, area_m2,
+    const { title, description, space_type, price_per_sqm_month, price_per_sqm_day, total_sqm, available_sqm,
             city, department, address, street, street_number, latitude, longitude,
             amenities, rules, min_rental_days, max_rental_days } = req.body;
 
+    // Log para depuración
+    console.log('Creando espacio:', req.body);
+
+    const finalArea = parseFloat(total_sqm || available_sqm || area_m2 || 0);
+    const finalPriceMonth = parseFloat(price_per_sqm_month || price_per_month || 0);
+    const finalPriceDay = parseFloat(price_per_sqm_day || price_per_day || 0);
+
     const finalAddress = address || street || 'Sin dirección';
+    const finalDepartment = department || 'Bolivia';
+    const finalCity = city || 'Bolivia';
 
     db.prepare(`
-      INSERT INTO spaces (id, host_id, title, description, space_type, price_per_month, price_per_day,
-                          total_sqm, available_sqm, area_m2, city, department, address, street, street_number, latitude, longitude,
+      INSERT INTO spaces (id, host_id, title, description, space_type, price_per_sqm_month, price_per_sqm_day,
+                          total_sqm, available_sqm, address, city, department, street, street_number, latitude, longitude,
                           amenities, rules, min_rental_days, max_rental_days, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
-    `).run(id, userId, title, description, space_type || 'almacen', price_per_month, price_per_day || null,
-           area_m2, area_m2, area_m2, city, department || null, finalAddress, street || null, street_number || null,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
+    `).run(id, userId, title, description, space_type || 'almacen', finalPriceMonth, finalPriceDay || null,
+           finalArea, parseFloat(available_sqm || finalArea), finalAddress, finalCity, finalDepartment, street || null, street_number || null,
            latitude || null, longitude || null, amenities || null, rules || null,
            min_rental_days || 30, max_rental_days || null);
 
@@ -198,6 +207,8 @@ router.put('/spaces/:id', (req, res) => {
             amenities, rules, min_rental_days, max_rental_days, status } = req.body;
 
     const finalAddress = address || street || space.address || 'Sin dirección';
+    const finalDepartment = department || space.department || 'Bolivia';
+    const finalCity = city || space.city || 'Bolivia';
 
     db.prepare(`
       UPDATE spaces SET 
@@ -209,7 +220,7 @@ router.put('/spaces/:id', (req, res) => {
         total_sqm = COALESCE(?, total_sqm),
         available_sqm = COALESCE(?, available_sqm),
         area_m2 = COALESCE(?, area_m2),
-        city = COALESCE(?, city),
+        city = ?,
         department = ?,
         address = ?,
         street = ?,
@@ -224,7 +235,7 @@ router.put('/spaces/:id', (req, res) => {
         updated_at = datetime('now')
       WHERE id = ? AND host_id = ?
     `).run(title, description, space_type, price_per_month, price_per_day,
-           area_m2, area_m2, area_m2, city, department, finalAddress, street, street_number, latitude, longitude,
+           area_m2, area_m2, area_m2, finalCity, finalDepartment, finalAddress, street, street_number, latitude, longitude,
            amenities, rules, min_rental_days, max_rental_days, status,
            req.params.id, userId);
 
