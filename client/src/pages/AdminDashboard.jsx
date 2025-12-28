@@ -4989,7 +4989,7 @@ function AdminRoles() {
                   <td>
                     <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
                       <button 
-                        onClick={() => toggleSuperAdmin(a.id, a.is_super_admin)} 
+                        onClick={() => toggleSuperAdmin(a.user_id, a.is_super_admin)} 
                         className={`btn btn-small ${a.is_super_admin ? 'btn-warning' : 'btn-success'}`}
                         title={a.is_super_admin ? 'Degradar a Admin normal' : 'Promover a Super Admin'}
                       >
