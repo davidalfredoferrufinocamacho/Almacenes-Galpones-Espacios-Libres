@@ -14,8 +14,54 @@ api.interceptors.request.use(config => {
   return config
 })
 
+const authApi = axios.create({
+  baseURL: '/api',
+  headers: { 'Content-Type': 'application/json' }
+})
+
+authApi.interceptors.request.use(config => {
+  const token = localStorage.getItem('token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
 function OwnerDashboard() {
   const [activeSection, setActiveSection] = useState('dashboard')
+  const [showAntiBypass, setShowAntiBypass] = useState(false)
+  const [antiBypassData, setAntiBypassData] = useState(null)
+  const [antiBypassAccepting, setAntiBypassAccepting] = useState(false)
+
+  useEffect(() => {
+    checkAntiBypass()
+  }, [])
+
+  const checkAntiBypass = async () => {
+    try {
+      const res = await api.get('/profile')
+      if (!res.data.anti_bypass_accepted) {
+        const legalRes = await authApi.get('/legal/texts?category=anti_bypass')
+        const antiBypassText = legalRes.data.find(t => t.type === 'anti_bypass' && t.is_active)
+        if (antiBypassText) {
+          setAntiBypassData(antiBypassText)
+          setShowAntiBypass(true)
+        }
+      }
+    } catch (error) {
+      console.error('Error checking anti-bypass:', error)
+    }
+  }
+
+  const handleAcceptAntiBypass = async () => {
+    setAntiBypassAccepting(true)
+    try {
+      await authApi.put('/users/me/accept-anti-bypass')
+      setShowAntiBypass(false)
+      window.location.reload()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setAntiBypassAccepting(false)
+  }
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -42,6 +88,31 @@ function OwnerDashboard() {
 
   return (
     <div className="owner-dashboard">
+      {showAntiBypass && (
+        <div className="modal-overlay">
+          <div className="modal anti-bypass-modal">
+            <div className="modal-header">
+              <h2>Clausula Anti-Bypass</h2>
+            </div>
+            <div className="modal-body">
+              <p className="anti-bypass-intro">
+                Para continuar utilizando la plataforma como propietario, debe aceptar los terminos de nuestra clausula anti-bypass que protege las transacciones realizadas a traves de nuestra plataforma.
+              </p>
+              <div className="legal-text-container">
+                <h3>{antiBypassData?.title}</h3>
+                <div className="legal-content" dangerouslySetInnerHTML={{ __html: antiBypassData?.content?.replace(/\n/g, '<br>') || '' }} />
+                <p className="version-info">Version {antiBypassData?.version} - Vigente desde: {antiBypassData?.effective_date}</p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={handleAcceptAntiBypass} className="btn btn-primary" disabled={antiBypassAccepting}>
+                {antiBypassAccepting ? 'Procesando...' : 'Acepto los Terminos'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <aside className="owner-sidebar">
         <div className="owner-sidebar-header">
           <h2>Portal de Propietario</h2>
@@ -756,7 +827,7 @@ function OwnerProfile() {
   useEffect(() => { loadProfile() }, [])
 
   const loadProfile = () => {
-    api.get('/owner/profile').then(res => {
+    api.get('/profile').then(res => {
       setProfile(res.data)
       setForm(res.data)
       setLoading(false)
@@ -766,7 +837,7 @@ function OwnerProfile() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.put('/owner/profile', {
+      await api.put('/profile', {
         first_name: form.first_name,
         last_name: form.last_name,
         phone: form.phone,
@@ -803,7 +874,7 @@ function OwnerProfile() {
     formData.append('photo', file)
 
     try {
-      const res = await api.post('/owner/profile/photo', formData, {
+      const res = await api.post('/profile/photo', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       setProfile({ ...profile, profile_photo: res.data.photo_url })
@@ -816,7 +887,7 @@ function OwnerProfile() {
   const handleDeletePhoto = async () => {
     if (!confirm('Eliminar foto de perfil?')) return
     try {
-      await api.delete('/owner/profile/photo')
+      await api.delete('/profile/photo')
       setProfile({ ...profile, profile_photo: null })
     } catch (error) {
       alert('Error al eliminar foto')
@@ -835,7 +906,7 @@ function OwnerProfile() {
 
     setChangingPassword(true)
     try {
-      await api.put('/owner/profile/password', passwordForm)
+      await api.put('/profile/password', passwordForm)
       alert('Contrasena actualizada exitosamente')
       setShowPasswordModal(false)
       setPasswordForm({ current_password: '', new_password: '', confirm_password: '' })
@@ -848,7 +919,7 @@ function OwnerProfile() {
   const handleResendVerification = async () => {
     setResendingVerification(true)
     try {
-      await api.post('/auth/resend-verification')
+      await authApi.post('/auth/resend-verification')
       alert('Correo de verificacion enviado. Revisa tu bandeja de entrada.')
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -861,7 +932,7 @@ function OwnerProfile() {
 
     setDeletingAccount(true)
     try {
-      await api.delete('/owner/account')
+      await api.delete('/account')
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       alert('Cuenta eliminada exitosamente')
@@ -967,7 +1038,7 @@ function OwnerProfile() {
               <p>{profile.ci || '-'}</p>
             </div>
             <div className="form-group">
-              <label>NIT (opcional)</label>
+              <label>NIT</label>
               {editing ? (
                 <input value={form.nit || ''} onChange={e => setForm({ ...form, nit: e.target.value })} placeholder="Numero de Identificacion Tributaria" />
               ) : (

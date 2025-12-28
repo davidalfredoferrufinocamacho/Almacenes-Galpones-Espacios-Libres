@@ -832,3 +832,89 @@
     flex-direction: column;
   }
 }
+
+/* Anti-Bypass Modal */
+.anti-bypass-modal {
+  max-width: 700px;
+  width: 95%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.anti-bypass-modal .modal-body {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.anti-bypass-intro {
+  margin-bottom: 1.5rem;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.legal-text-container {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.legal-text-container h3 {
+  margin: 0 0 1rem 0;
+  color: #1f2937;
+}
+
+.legal-content {
+  color: #4b5563;
+  line-height: 1.7;
+  font-size: 0.95rem;
+}
+
+.version-info {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.anti-bypass-modal .modal-footer {
+  padding: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: center;
+}
+
+.anti-bypass-modal .modal-footer button {
+  padding: 0.875rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Modal base styles */
+.modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+
+.modal .modal-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.modal .modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #1f2937;
+}
+
+.modal .modal-body {
+  padding: 1.5rem;
+}
