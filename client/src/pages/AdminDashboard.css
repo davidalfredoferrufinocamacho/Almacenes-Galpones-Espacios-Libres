@@ -397,51 +397,30 @@
   }
 }
 
-/* Tabla responsive para scroll horizontal */
-.table-container {
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+/* Admin-specific table styling - extends global .data-table */
+.admin-content .table-container {
   margin-bottom: 1rem;
 }
 
-.data-table {
-  width: 100%;
+.admin-content .data-table {
   min-width: 700px;
-  border-collapse: collapse;
   background: white;
   border-radius: 8px;
 }
 
-.data-table th,
-.data-table td {
-  padding: 0.75rem 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid #eee;
-  white-space: nowrap;
-}
-
-.data-table th {
+.admin-content .data-table th {
   background: var(--primary);
   color: white;
-  font-weight: 500;
 }
 
-.data-table tr:hover {
+.admin-content .data-table tr:hover {
   background: #f8f9fa;
 }
 
 @media (max-width: 480px) {
-  .data-table th,
-  .data-table td {
-    padding: 0.5rem 0.3rem;
-    font-size: 0.8rem;
-  }
-  
   .admin-content h1 {
     font-size: 1.25rem;
   }
-  
 }
 
 /* Backup section responsive */
