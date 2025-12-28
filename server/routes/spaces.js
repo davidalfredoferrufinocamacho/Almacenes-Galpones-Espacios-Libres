@@ -734,4 +734,31 @@ router.post('/:id/calendar/toggle', authenticateToken, requireRole('HOST'), (req
   }
 });
 
+router.get('/config/homepage', (req, res) => {
+  try {
+    const keys = [
+      'hero_title', 'hero_subtitle', 'hero_button1_text', 'hero_button2_text',
+      'howit_section_title', 'howit_step1_title', 'howit_step1_description',
+      'howit_step2_title', 'howit_step2_description', 'howit_step3_title', 'howit_step3_description',
+      'featured_section_title', 'featured_see_all_text',
+      'trust_section_title', 'trust_feature1_title', 'trust_feature1_description',
+      'trust_feature2_title', 'trust_feature2_description', 'trust_feature3_title', 'trust_feature3_description',
+      'trust_feature4_title', 'trust_feature4_description'
+    ];
+    
+    const placeholders = keys.map(() => '?').join(', ');
+    const configs = db.prepare(`SELECT key, value FROM system_config WHERE key IN (${placeholders})`).all(...keys);
+    
+    const content = {};
+    configs.forEach(cfg => {
+      content[cfg.key] = cfg.value;
+    });
+    
+    res.json(content);
+  } catch (error) {
+    console.error('Error fetching homepage content:', error);
+    res.status(500).json({ error: 'Error al obtener contenido' });
+  }
+});
+
 module.exports = router;

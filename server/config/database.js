@@ -509,6 +509,37 @@ function initDatabase() {
       ('cfg_contact_response_time', 'contact_response_time', '24-48 horas habiles', 'Tiempo de respuesta');
   `);
 
+  // Agregar contenido editable de la pagina principal
+  db.exec(`
+    INSERT OR IGNORE INTO system_config (id, key, value, description) VALUES
+      -- Hero Section
+      ('cfg_hero_title', 'hero_title', 'Encuentra el Espacio Perfecto para tu Negocio', 'Titulo principal del hero'),
+      ('cfg_hero_subtitle', 'hero_subtitle', 'Plataforma lider en Bolivia para alquiler temporal de almacenes, galpones y espacios libres', 'Subtitulo del hero'),
+      ('cfg_hero_btn1', 'hero_button1_text', 'Ver Espacios', 'Texto boton 1 del hero'),
+      ('cfg_hero_btn2', 'hero_button2_text', 'Publicar Espacio', 'Texto boton 2 del hero'),
+      -- Como Funciona Section
+      ('cfg_howit_title', 'howit_section_title', 'Como Funciona', 'Titulo seccion Como Funciona'),
+      ('cfg_howit_step1_title', 'howit_step1_title', 'Busca', 'Titulo paso 1'),
+      ('cfg_howit_step1_desc', 'howit_step1_description', 'Explora nuestra amplia seleccion de espacios disponibles en toda Bolivia', 'Descripcion paso 1'),
+      ('cfg_howit_step2_title', 'howit_step2_title', 'Reserva', 'Titulo paso 2'),
+      ('cfg_howit_step2_desc', 'howit_step2_description', 'Paga un anticipo seguro y agenda una visita presencial al espacio', 'Descripcion paso 2'),
+      ('cfg_howit_step3_title', 'howit_step3_title', 'Confirma', 'Titulo paso 3'),
+      ('cfg_howit_step3_desc', 'howit_step3_description', 'Firma el contrato digital y comienza a usar tu espacio alquilado', 'Descripcion paso 3'),
+      -- Featured Spaces Section
+      ('cfg_featured_title', 'featured_section_title', 'Espacios Destacados', 'Titulo seccion Espacios Destacados'),
+      ('cfg_featured_link', 'featured_see_all_text', 'Ver todos', 'Texto link ver todos'),
+      -- Trust Section (Intermediacion Segura)
+      ('cfg_trust_title', 'trust_section_title', 'Intermediacion Segura', 'Titulo seccion de confianza'),
+      ('cfg_trust_f1_title', 'trust_feature1_title', 'Pagos Protegidos', 'Titulo feature 1'),
+      ('cfg_trust_f1_desc', 'trust_feature1_description', 'Tu anticipo queda en escrow hasta la confirmacion del contrato', 'Descripcion feature 1'),
+      ('cfg_trust_f2_title', 'trust_feature2_title', 'Contratos Digitales', 'Titulo feature 2'),
+      ('cfg_trust_f2_desc', 'trust_feature2_description', 'Firma electronica con validez legal segun legislacion boliviana', 'Descripcion feature 2'),
+      ('cfg_trust_f3_title', 'trust_feature3_title', '100% Reembolsable', 'Titulo feature 3'),
+      ('cfg_trust_f3_desc', 'trust_feature3_description', 'Si no confirmas, recuperas el 100% de tu anticipo', 'Descripcion feature 3'),
+      ('cfg_trust_f4_title', 'trust_feature4_title', 'Auditoria Completa', 'Titulo feature 4'),
+      ('cfg_trust_f4_desc', 'trust_feature4_description', 'Todas las transacciones quedan registradas y exportables', 'Descripcion feature 4');
+  `);
+
   // Tablas de Contabilidad Profesional Boliviana
   db.exec(`
     -- Socios/Accionistas
