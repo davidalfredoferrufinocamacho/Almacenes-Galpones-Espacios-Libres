@@ -70,12 +70,13 @@ router.get('/dashboard', (req, res) => {
     `).get(userId);
 
     const recentReservations = db.prepare(`
-      SELECT r.id, r.start_date, r.end_date, r.status, r.total_amount,
+      SELECT r.id, r.created_at, r.status, r.total_amount,
+             r.period_type, r.period_quantity,
              s.title as space_title,
              u.first_name || ' ' || u.last_name as guest_name
       FROM reservations r
       JOIN spaces s ON r.space_id = s.id
-      JOIN users u ON r.user_id = u.id
+      JOIN users u ON r.guest_id = u.id
       WHERE s.host_id = ?
       ORDER BY r.created_at DESC
       LIMIT 5
@@ -681,7 +682,7 @@ router.delete('/account', async (req, res) => {
       fs.unlinkSync(user.profile_photo);
     }
 
-    db.prepare('UPDATE spaces SET status = "deleted" WHERE host_id = ?').run(userId);
+    db.prepare("UPDATE spaces SET status = 'deleted' WHERE host_id = ?").run(userId);
     db.prepare('DELETE FROM notification_log WHERE recipient_id = ?').run(userId);
     db.prepare('UPDATE audit_log SET user_id = NULL WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM campaign_recipients WHERE user_id = ?').run(userId);
