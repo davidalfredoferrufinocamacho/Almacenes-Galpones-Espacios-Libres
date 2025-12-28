@@ -166,7 +166,7 @@ router.post('/spaces', [
             is_open, has_roof, rain_protected, dust_protected, 
             access_type, has_security, security_description, schedule,
             city, department, address, street, street_number, latitude, longitude,
-            min_rental_days, max_rental_days } = req.body;
+            min_rental_days, max_rental_days, available_from, available_until } = req.body;
 
     console.log('Creando espacio:', req.body);
 
@@ -185,8 +185,8 @@ router.post('/spaces', [
         is_open, has_roof, rain_protected, dust_protected,
         access_type, has_security, security_description, schedule,
         address, city, department, latitude, longitude,
-        min_rental_days, max_rental_days, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
+        min_rental_days, max_rental_days, available_from, available_until, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'))
     `).run(
       id, userId, title, description, space_type || 'almacen',
       finalTotalSqm, finalAvailableSqm,
@@ -208,7 +208,9 @@ router.post('/spaces', [
       latitude ? parseFloat(latitude) : null,
       longitude ? parseFloat(longitude) : null,
       min_rental_days ? parseInt(min_rental_days) : 1,
-      max_rental_days ? parseInt(max_rental_days) : null
+      max_rental_days ? parseInt(max_rental_days) : null,
+      available_from || null,
+      available_until || null
     );
 
     const sanitizedBody = { ...req.body };
@@ -237,7 +239,7 @@ router.put('/spaces/:id', (req, res) => {
             is_open, has_roof, rain_protected, dust_protected,
             access_type, has_security, security_description, schedule,
             city, department, address, latitude, longitude,
-            min_rental_days, max_rental_days, status } = req.body;
+            min_rental_days, max_rental_days, available_from, available_until, status } = req.body;
 
     const body = req.body;
     const isOpenVal = Object.prototype.hasOwnProperty.call(body, 'is_open') ? (is_open ? 1 : 0) : space.is_open;
@@ -247,6 +249,9 @@ router.put('/spaces/:id', (req, res) => {
     const hasSecurityVal = Object.prototype.hasOwnProperty.call(body, 'has_security') ? (has_security ? 1 : 0) : space.has_security;
     const securityDescVal = Object.prototype.hasOwnProperty.call(body, 'security_description') ? (security_description || null) : space.security_description;
     const scheduleVal = Object.prototype.hasOwnProperty.call(body, 'schedule') ? (schedule || null) : space.schedule;
+
+    const availableFromVal = Object.prototype.hasOwnProperty.call(body, 'available_from') ? (available_from || null) : space.available_from;
+    const availableUntilVal = Object.prototype.hasOwnProperty.call(body, 'available_until') ? (available_until || null) : space.available_until;
 
     db.prepare(`
       UPDATE spaces SET 
@@ -276,6 +281,8 @@ router.put('/spaces/:id', (req, res) => {
         longitude = ?,
         min_rental_days = COALESCE(?, min_rental_days),
         max_rental_days = ?,
+        available_from = ?,
+        available_until = ?,
         status = COALESCE(?, status),
         updated_at = datetime('now')
       WHERE id = ? AND host_id = ?
@@ -302,6 +309,8 @@ router.put('/spaces/:id', (req, res) => {
       longitude ? parseFloat(longitude) : null,
       min_rental_days ? parseInt(min_rental_days) : null,
       max_rental_days ? parseInt(max_rental_days) : null,
+      availableFromVal,
+      availableUntilVal,
       status,
       req.params.id, userId
     );

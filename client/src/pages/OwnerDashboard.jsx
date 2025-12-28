@@ -580,6 +580,18 @@ function OwnerSpaces() {
                 </div>
               </div>
 
+              <h4>Disponibilidad</h4>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Disponible Desde</label>
+                  <input type="date" value={form.available_from || ''} onChange={e => setForm({...form, available_from: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label>Disponible Hasta</label>
+                  <input type="date" value={form.available_until || ''} onChange={e => setForm({...form, available_until: e.target.value})} />
+                </div>
+              </div>
+
               {form.id && (
                 <>
                   <h4>Fotos del Espacio</h4>
