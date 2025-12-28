@@ -6245,7 +6245,7 @@ function AdminBackup() {
         </div>
       )}
 
-      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem'}}>
+      <div className="backup-grid">
         <div className="card" style={{padding: '1.5rem'}}>
           <h3 style={{marginBottom: '1rem'}}>Backup Manual</h3>
           <p style={{color: '#666', marginBottom: '1rem'}}>
@@ -6321,7 +6321,7 @@ function AdminBackup() {
 
       <div className="card" style={{padding: '1.5rem', marginBottom: '2rem'}}>
         <h3 style={{marginBottom: '1rem'}}>Notificaciones</h3>
-        <div style={{display: 'flex', gap: '2rem'}}>
+        <div className="notifications-options">
           <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer'}}>
             <input 
               type="checkbox" 
