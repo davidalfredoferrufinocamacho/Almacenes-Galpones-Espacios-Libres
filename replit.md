@@ -44,6 +44,12 @@ The project uses a Node.js 20 backend with Express.js and SQLite (better-sqlite3
     *   **Mi Perfil:** Personal info display, verification status, and badges earned.
     *   **API Endpoints:** All under `/api/owner/*` with JWT authentication and HOST role requirement. Endpoints: /dashboard, /spaces (CRUD), /spaces/:id/publish, /spaces/:id/unpublish, /reservations, /reservations/:id, /payments, /calendar, /statements, /statements/:id, /profile.
     *   **Route:** `/propietario/*` accessible only to HOST users via Header navigation.
+*   **Editable Site Configuration:** Contact information and footer content are dynamically managed through the admin panel:
+    *   **Editable Fields:** Footer title, footer description, contact page description, contact notice, business hours, response time
+    *   **Database Table:** `system_config` stores key-value pairs with descriptions
+    *   **API Endpoints:** GET `/api/contact/site-config` (public - returns footer/contact info), PUT `/admin/config/:key` (admin - updates any config)
+    *   **Admin UI:** "Configuracion" section with two categories: "Informacion del Sitio y Contacto" (6 fields) and "Parametros del Sistema" (deposit/commission percentages, video settings)
+    *   **Dynamic Loading:** Footer and Contact page load configuration on mount with sensible defaults
 *   **Bolivian Professional Accounting Module:** A comprehensive accounting system compliant with Bolivian tax regulations including:
     *   **Tax Calculations:** IVA (13%), IT (3%), IUE (25%), RC-IVA (13% with 12.5% withholding on dividends)
     *   **Database Tables:** shareholders, accounting_entries, tax_periods, tax_payments, dividend_distributions, dividend_details, capital_transactions, chart_of_accounts
