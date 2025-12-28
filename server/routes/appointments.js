@@ -22,6 +22,11 @@ router.post('/', authenticateToken, requireRole('GUEST'), [
 
     const { reservation_id, scheduled_date, scheduled_time } = req.body;
 
+    const userAntiBypass = db.prepare('SELECT anti_bypass_accepted FROM users WHERE id = ?').get(req.user.id);
+    if (!userAntiBypass || !userAntiBypass.anti_bypass_accepted) {
+      return res.status(403).json({ error: 'Debe aceptar la Clausula Anti-Bypass antes de contactar propietarios. Vaya a su perfil para aceptarla.' });
+    }
+
     const reservation = db.prepare(`
       SELECT r.*, s.id as space_id, s.host_id, s.is_calendar_active, s.status as space_status
       FROM reservations r 

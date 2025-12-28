@@ -1083,6 +1083,38 @@ function ClientProfile() {
           )}
         </div>
 
+        <div className="form-section anti-bypass-section">
+          <h3>Clausula Anti-Bypass</h3>
+          <p className="anti-bypass-info">
+            La Clausula Anti-Bypass es obligatoria para poder realizar reservaciones y contactar a los propietarios. 
+            Al aceptar, se compromete a no realizar transacciones fuera de la plataforma.
+          </p>
+          {profile.anti_bypass_accepted ? (
+            <div className="anti-bypass-status accepted">
+              <span className="status-icon">✓</span>
+              <div className="status-text">
+                <strong>Clausula Aceptada</strong>
+                <p className="accepted-info">Aceptada el: {new Date(profile.anti_bypass_accepted_at).toLocaleDateString()}</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="form-group checkbox-group">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={form.anti_bypass_accepted || false}
+                    onChange={e => setForm({ ...form, anti_bypass_accepted: e.target.checked })}
+                    disabled={!editing}
+                  />
+                  Acepto la Clausula Anti-Bypass
+                </label>
+              </div>
+              <p className="warning-info">No ha aceptado la clausula. No podra realizar reservaciones ni contactar propietarios.</p>
+            </>
+          )}
+        </div>
+
         <div className="form-section danger-zone">
           <h3>Zona de Peligro</h3>
           <p>Eliminar su cuenta es una accion permanente e irreversible. Se eliminaran todos sus datos, reservaciones, contratos y cualquier informacion asociada a su cuenta.</p>

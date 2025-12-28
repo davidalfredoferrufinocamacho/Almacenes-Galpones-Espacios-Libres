@@ -38,6 +38,11 @@ router.post('/deposit', authenticateToken, requireRole('GUEST'), [
       return res.status(400).json({ error: 'Metodo de pago no valido o no disponible' });
     }
 
+    const user = db.prepare('SELECT anti_bypass_accepted FROM users WHERE id = ?').get(req.user.id);
+    if (!user || !user.anti_bypass_accepted) {
+      return res.status(403).json({ error: 'Debe aceptar la Clausula Anti-Bypass antes de realizar reservaciones. Vaya a su perfil para aceptarla.' });
+    }
+
     const space = db.prepare('SELECT * FROM spaces WHERE id = ? AND status = ?').get(space_id, 'published');
     if (!space) {
       return res.status(404).json({ error: 'Espacio no encontrado o no disponible' });

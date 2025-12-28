@@ -809,6 +809,58 @@
   to { transform: rotate(360deg); }
 }
 
+.anti-bypass-section {
+  background: #fefce8;
+  border: 1px solid #fef08a;
+  border-radius: 8px;
+  margin-top: 2rem;
+}
+
+.anti-bypass-section h3 {
+  color: #a16207;
+}
+
+.anti-bypass-info {
+  color: #713f12;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.anti-bypass-section .accepted-info {
+  color: #166534;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  font-weight: 500;
+}
+
+.anti-bypass-section .warning-info {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  font-weight: 500;
+}
+
+.anti-bypass-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 8px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+}
+
+.anti-bypass-status.accepted .status-icon {
+  font-size: 1.5rem;
+  color: #16a34a;
+}
+
+.anti-bypass-status .status-text strong {
+  color: #166534;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
 .danger-zone {
   background: #fef2f2;
   border: 1px solid #fecaca;

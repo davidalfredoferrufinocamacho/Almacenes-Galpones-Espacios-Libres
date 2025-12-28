@@ -32,7 +32,12 @@ router.post('/register', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, role, person_type, first_name, last_name, company_name, ci, ci_extension, nit, phone, address, city, department } = req.body;
+    const { email, password, role, person_type, first_name, last_name, company_name, ci, ci_extension, nit, phone, address, city, department, anti_bypass_accepted } = req.body;
+
+    // GUEST users MUST accept anti-bypass clause at registration (server-side enforcement)
+    if (role === 'GUEST' && !anti_bypass_accepted) {
+      return res.status(400).json({ error: 'Debe aceptar los Terminos y la Clausula Anti-Bypass para registrarse' });
+    }
 
     const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existingUser) {
@@ -41,13 +46,15 @@ router.post('/register', [
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const userId = generateId();
+    const antiBypassAccepted = anti_bypass_accepted ? 1 : 0;
+    const antiBypassAcceptedAt = anti_bypass_accepted ? new Date().toISOString() : null;
 
     const stmt = db.prepare(`
-      INSERT INTO users (id, email, password, role, person_type, first_name, last_name, company_name, ci, ci_extension, nit, phone, address, city, department)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, email, password, role, person_type, first_name, last_name, company_name, ci, ci_extension, nit, phone, address, city, department, anti_bypass_accepted, anti_bypass_accepted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    stmt.run(userId, email, hashedPassword, role, person_type, first_name, last_name, company_name, ci, ci_extension, nit, phone, address, city, department);
+    stmt.run(userId, email, hashedPassword, role, person_type, first_name, last_name, company_name, ci, ci_extension, nit, phone, address, city, department, antiBypassAccepted, antiBypassAcceptedAt);
 
     logAudit(userId, 'USER_REGISTERED', 'users', userId, null, { email, role, person_type }, req);
 

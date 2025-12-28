@@ -536,15 +536,36 @@ router.put('/profile', [
     }
 
     const allowedFields = ['first_name', 'last_name', 'phone', 'address', 'street_number', 'city', 
-      'department', 'country', 'nit', 'email_notifications', 'newsletter'];
+      'department', 'country', 'nit', 'email_notifications', 'newsletter', 'anti_bypass_accepted'];
+    
+    // Check if user has already accepted anti-bypass (one-way enforcement)
+    const currentUser = db.prepare('SELECT anti_bypass_accepted FROM users WHERE id = ?').get(req.user.id);
     
     const updates = [];
     const values = [];
 
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
-        updates.push(`${field} = ?`);
         const val = req.body[field];
+        
+        // Anti-bypass acceptance is ONE-WAY ONLY - cannot be revoked once accepted
+        if (field === 'anti_bypass_accepted') {
+          if (currentUser.anti_bypass_accepted === 1) {
+            // Already accepted - ignore any attempt to change (including to false)
+            continue;
+          }
+          // Not yet accepted - only allow setting to true
+          if (!val) {
+            continue; // Ignore attempts to explicitly set false
+          }
+          updates.push(`${field} = ?`);
+          values.push(1);
+          updates.push('anti_bypass_accepted_at = ?');
+          values.push(new Date().toISOString());
+          continue;
+        }
+        
+        updates.push(`${field} = ?`);
         if (field === 'email_notifications' || field === 'newsletter') {
           values.push(val ? 1 : 0);
         } else {

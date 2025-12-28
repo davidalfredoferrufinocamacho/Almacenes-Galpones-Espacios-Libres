@@ -20,7 +20,9 @@ function Register() {
     nit: '',
     phone: '',
     city: '',
-    department: ''
+    department: '',
+    terms_accepted: false,
+    anti_bypass_accepted: false
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -31,8 +33,8 @@ function Register() {
   ]
 
   const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    const { name, value, type, checked } = e.target
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
   const handleSubmit = async (e) => {
@@ -46,6 +48,16 @@ function Register() {
 
     if (formData.password.length < 8) {
       setError('La contrasena debe tener al menos 8 caracteres')
+      return
+    }
+
+    if (!formData.terms_accepted) {
+      setError('Debe aceptar los Terminos y Condiciones y Politica de Privacidad')
+      return
+    }
+
+    if (!formData.anti_bypass_accepted) {
+      setError('Debe aceptar la Clausula Anti-Bypass para poder usar la plataforma')
       return
     }
 
@@ -238,13 +250,35 @@ function Register() {
             />
           </div>
 
-          <div className="terms-notice">
-            <p>
-              Al registrarte, aceptas nuestros{' '}
-              <Link to="/legal/terminos" target="_blank">Terminos y Condiciones</Link>,{' '}
-              <Link to="/legal/privacidad" target="_blank">Politica de Privacidad</Link> y la{' '}
-              <Link to="/legal/anti-bypass" target="_blank">Clausula Anti-Bypass</Link>.
-            </p>
+          <div className="terms-checkboxes">
+            <div className="form-group checkbox-group">
+              <label>
+                <input
+                  type="checkbox"
+                  name="terms_accepted"
+                  checked={formData.terms_accepted}
+                  onChange={handleChange}
+                  required
+                />
+                Acepto los{' '}
+                <Link to="/legal/terminos" target="_blank">Terminos y Condiciones</Link> y la{' '}
+                <Link to="/legal/privacidad" target="_blank">Politica de Privacidad</Link>
+              </label>
+            </div>
+            <div className="form-group checkbox-group">
+              <label>
+                <input
+                  type="checkbox"
+                  name="anti_bypass_accepted"
+                  checked={formData.anti_bypass_accepted}
+                  onChange={handleChange}
+                  required
+                />
+                Acepto la{' '}
+                <Link to="/legal/anti-bypass" target="_blank">Clausula Anti-Bypass</Link>{' '}
+                <span className="required-note">(Obligatorio para realizar reservaciones)</span>
+              </label>
+            </div>
           </div>
 
           <button type="submit" className="btn btn-primary auth-btn" disabled={loading}>
