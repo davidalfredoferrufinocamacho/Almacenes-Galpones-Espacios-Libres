@@ -40,6 +40,14 @@ function SpaceCard({ space }) {
         <h3>{space.title}</h3>
         <p className="location">{space.city}, {space.department}</p>
         
+        {(space.available_from || space.available_until) && (
+          <p className="availability">
+            {space.available_from && `Desde ${new Date(space.available_from).toLocaleDateString('es-BO')}`}
+            {space.available_from && space.available_until && ' - '}
+            {space.available_until && `Hasta ${new Date(space.available_until).toLocaleDateString('es-BO')}`}
+          </p>
+        )}
+        
         <div className="space-details">
           <span className="sqm">{space.available_sqm} m² disponibles</span>
           <div className="conditions">

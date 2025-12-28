@@ -129,7 +129,16 @@ router.get('/', optionalAuth, [
     sql += ' ORDER BY s.created_at DESC';
 
     const spaces = db.prepare(sql).all(...params);
-    res.json(spaces);
+    
+    const sanitizedSpaces = spaces.map(space => {
+      if (!req.user) {
+        const { address, ...rest } = space;
+        return rest;
+      }
+      return space;
+    });
+    
+    res.json(sanitizedSpaces);
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al buscar espacios' });
@@ -219,11 +228,18 @@ router.get('/:id', optionalAuth, (req, res) => {
     const config = db.prepare("SELECT value FROM system_config WHERE key = 'deposit_percentage'").get();
     const depositPercentage = config ? parseFloat(config.value) : 10;
 
-    res.json({
+    let responseData = {
       ...space,
       photos,
       deposit_percentage: depositPercentage
-    });
+    };
+    
+    if (!req.user) {
+      const { address, ...rest } = responseData;
+      responseData = rest;
+    }
+
+    res.json(responseData);
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener espacio' });

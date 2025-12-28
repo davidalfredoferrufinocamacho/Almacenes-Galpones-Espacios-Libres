@@ -120,7 +120,20 @@ function SpaceDetail() {
             <div className="info-section card">
               <span className="space-type-badge">{spaceTypes[space.space_type]}</span>
               <h1>{space.title}</h1>
-              <p className="location">{space.address}, {space.city}, {space.department}</p>
+              {isAuthenticated ? (
+                <p className="location">{space.address}, {space.city}, {space.department}</p>
+              ) : (
+                <p className="location">{space.city}, {space.department}</p>
+              )}
+              
+              {(space.available_from || space.available_until) && (
+                <div className="availability-dates">
+                  <strong>Disponibilidad:</strong>{' '}
+                  {space.available_from && <span>Desde {new Date(space.available_from).toLocaleDateString('es-BO')}</span>}
+                  {space.available_from && space.available_until && ' - '}
+                  {space.available_until && <span>Hasta {new Date(space.available_until).toLocaleDateString('es-BO')}</span>}
+                </div>
+              )}
 
               <div className="structural-info">
                 <div className="info-item">
@@ -235,37 +248,54 @@ function SpaceDetail() {
               </div>
             </div>
 
-            <Calculator 
-              space={space} 
-              depositPercentage={space.deposit_percentage}
-              onCalculate={setCalculation}
-            />
+            {isAuthenticated ? (
+              <>
+                <Calculator 
+                  space={space} 
+                  depositPercentage={space.deposit_percentage}
+                  onCalculate={setCalculation}
+                />
 
-            <div className="reserve-card card">
-              <h3>Pagar Anticipo y Reservar</h3>
-              <p className="reserve-info">
-                El anticipo ({space.deposit_percentage}%) queda en escrow hasta confirmar el contrato.
-                Reembolso 100% si no confirma.
-              </p>
+                <div className="reserve-card card">
+                  <h3>Pagar Anticipo y Reservar</h3>
+                  <p className="reserve-info">
+                    El anticipo ({space.deposit_percentage}%) queda en escrow hasta confirmar el contrato.
+                    Reembolso 100% si no confirma.
+                  </p>
 
-              <div className="form-group">
-                <label>Metodo de Pago</label>
-                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                  <option value="card">Tarjeta</option>
-                  <option value="qr">QR</option>
-                </select>
+                  <div className="form-group">
+                    <label>Metodo de Pago</label>
+                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                      <option value="card">Tarjeta</option>
+                      <option value="qr">QR</option>
+                    </select>
+                  </div>
+
+                  {error && <div className="alert alert-error">{error}</div>}
+
+                  <button 
+                    className="btn btn-primary reserve-btn" 
+                    onClick={handleReserve}
+                    disabled={processing || !calculation}
+                  >
+                    {processing ? 'Procesando...' : `Pagar Anticipo Bs. ${calculation?.deposit?.toFixed(2) || '0.00'}`}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="login-prompt card">
+                <h3>Reservar este Espacio</h3>
+                <p>Para ver la direccion completa y realizar una reserva, inicia sesion o registrate.</p>
+                <div className="login-buttons">
+                  <button className="btn btn-primary" onClick={() => navigate('/login')}>
+                    Iniciar Sesion
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => navigate('/registro')}>
+                    Registrarse
+                  </button>
+                </div>
               </div>
-
-              {error && <div className="alert alert-error">{error}</div>}
-
-              <button 
-                className="btn btn-primary reserve-btn" 
-                onClick={handleReserve}
-                disabled={processing || !calculation}
-              >
-                {processing ? 'Procesando...' : `Pagar Anticipo Bs. ${calculation?.deposit?.toFixed(2) || '0.00'}`}
-              </button>
-            </div>
+            )}
           </aside>
         </div>
       </div>

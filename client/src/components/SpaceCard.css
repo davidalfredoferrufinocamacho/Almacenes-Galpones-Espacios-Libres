@@ -55,7 +55,14 @@
 .location {
   color: var(--text-light);
   font-size: 0.9rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.availability {
+  color: var(--secondary);
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+  font-weight: 500;
 }
 
 .space-details {

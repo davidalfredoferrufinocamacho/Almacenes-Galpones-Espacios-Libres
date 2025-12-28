@@ -279,3 +279,42 @@
     font-size: 1rem;
   }
 }
+
+.availability-dates {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--light);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.availability-dates strong {
+  color: var(--primary);
+}
+
+.login-prompt {
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.login-prompt h3 {
+  color: var(--primary);
+  margin-bottom: 1rem;
+}
+
+.login-prompt p {
+  color: var(--text-light);
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.login-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.login-buttons .btn {
+  width: 100%;
+}
