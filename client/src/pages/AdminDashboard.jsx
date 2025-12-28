@@ -3364,12 +3364,12 @@ function AdminLegalTexts() {
                   <td><span className={`status-badge status-${t.is_active ? 'active' : 'inactive'}`}>{t.is_active ? 'ACTIVO' : 'INACTIVO'}</span></td>
                   <td>
                     <div style={{display: 'flex', gap: '0.25rem', flexWrap: 'wrap'}}>
+                      <button onClick={() => { setEditingId(t.id); setEditContent(t.content); setEditTitle(t.title) }} className="btn btn-sm btn-secondary">Editar</button>
                       {t.is_active ? (
                         <button onClick={() => handleDeactivate(t.id)} className="btn btn-sm btn-danger">Desactivar</button>
                       ) : (
                         <>
                           <button onClick={() => handleActivate(t.id)} className="btn btn-sm btn-success">Activar</button>
-                          <button onClick={() => { setEditingId(t.id); setEditContent(t.content); setEditTitle(t.title) }} className="btn btn-sm btn-secondary">Editar</button>
                           <button onClick={() => handleDelete(t.id, t.title)} className="btn btn-sm btn-danger">Eliminar</button>
                         </>
                       )}

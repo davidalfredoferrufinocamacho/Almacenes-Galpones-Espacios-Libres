@@ -1921,12 +1921,6 @@ router.put('/legal-texts/:id', requireSuperAdmin, [
       return res.status(404).json({ error: 'Texto legal no encontrado' });
     }
 
-    if (text.is_active) {
-      return res.status(400).json({ 
-        error: 'No se puede editar un texto legal activo. Desactivelo primero o cree una nueva version.'
-      });
-    }
-
     const { title, content, effective_date } = req.body;
     const oldData = { title: text.title, content: text.content, effective_date: text.effective_date };
 
