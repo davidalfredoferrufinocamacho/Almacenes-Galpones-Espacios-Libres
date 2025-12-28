@@ -49,3 +49,17 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 480px) {
+  .contact-info, .contact-form {
+    padding: 1.25rem;
+  }
+  
+  .contact-info h2, .contact-form h2 {
+    font-size: 1.25rem;
+  }
+  
+  .contact-info p {
+    font-size: 0.9rem;
+  }
+}

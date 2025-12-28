@@ -63,3 +63,36 @@
     position: static;
   }
 }
+
+@media (max-width: 480px) {
+  .spaces-layout {
+    gap: 1rem;
+    padding: 1rem 0;
+  }
+  
+  .filters-sidebar {
+    padding: 1rem;
+  }
+  
+  .filters-sidebar h3 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .range-inputs {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .range-inputs input {
+    width: 100%;
+  }
+  
+  .filter-buttons {
+    margin-top: 1rem;
+  }
+  
+  .no-results {
+    padding: 2rem 1rem;
+  }
+}

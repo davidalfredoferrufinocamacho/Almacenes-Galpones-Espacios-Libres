@@ -213,3 +213,69 @@
     position: static;
   }
 }
+
+@media (max-width: 768px) {
+  .info-section h1 {
+    font-size: 1.5rem;
+  }
+  
+  .structural-info {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  
+  .gallery .photos-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+  
+  .gallery img {
+    height: 150px;
+  }
+}
+
+@media (max-width: 480px) {
+  .space-detail {
+    padding: 1rem 0;
+  }
+  
+  .detail-main .card,
+  .detail-sidebar .card {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .info-section h1 {
+    font-size: 1.25rem;
+  }
+  
+  .info-section h3 {
+    font-size: 1rem;
+  }
+  
+  .structural-info {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .info-item span {
+    font-size: 1.1rem;
+  }
+  
+  .conditions-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .gallery .photos-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .gallery img {
+    height: 200px;
+  }
+  
+  .reserve-btn {
+    padding: 0.875rem;
+    font-size: 1rem;
+  }
+}

@@ -99,3 +99,25 @@
   color: var(--text-light);
   font-size: 0.85rem;
 }
+
+@media (max-width: 480px) {
+  .space-image {
+    height: 180px;
+  }
+  
+  .space-info {
+    padding: 1rem;
+  }
+  
+  .space-info h3 {
+    font-size: 1rem;
+  }
+  
+  .location {
+    font-size: 0.85rem;
+  }
+  
+  .price {
+    font-size: 1.1rem;
+  }
+}
