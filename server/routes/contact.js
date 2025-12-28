@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const { db } = require('../config/database');
 const { optionalAuth } = require('../middleware/auth');
 const { generateId } = require('../utils/helpers');
+const { logAudit } = require('../middleware/audit');
 
 const router = express.Router();
 
@@ -49,9 +50,19 @@ router.post('/', optionalAuth, [
     const messageId = generateId();
 
     db.prepare(`
-      INSERT INTO contact_messages (id, user_id, name, email, subject, message, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'pending')
+      INSERT INTO contact_messages (id, user_id, name, email, subject, message, status, category, priority)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', 'general', 'normal')
     `).run(messageId, userId, name, email, subject, message);
+
+    logAudit(
+      userId,
+      'CONTACT_MESSAGE_SENT',
+      'contact_message',
+      messageId,
+      null,
+      { name, email, subject, message_preview: message.substring(0, 100) },
+      req
+    );
 
     res.status(201).json({
       id: messageId,

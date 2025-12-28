@@ -334,7 +334,10 @@ function initDatabase() {
       email TEXT NOT NULL,
       subject TEXT NOT NULL,
       message TEXT NOT NULL,
+      category TEXT DEFAULT 'general' CHECK(category IN ('general', 'consulta', 'soporte', 'reclamo', 'sugerencia', 'comercial')),
+      priority TEXT DEFAULT 'normal' CHECK(priority IN ('baja', 'normal', 'alta', 'urgente')),
       status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'read', 'responded', 'closed')),
+      admin_notes TEXT,
       admin_response TEXT,
       responded_at TEXT,
       responded_by TEXT,
@@ -1026,7 +1029,10 @@ function initDatabase() {
     { table: 'payments', column: 'it_amount', type: 'REAL DEFAULT 0' },
     { table: 'invoices', column: 'taxable_base', type: 'REAL DEFAULT 0' },
     { table: 'invoices', column: 'iva_amount', type: 'REAL DEFAULT 0' },
-    { table: 'invoices', column: 'it_amount', type: 'REAL DEFAULT 0' }
+    { table: 'invoices', column: 'it_amount', type: 'REAL DEFAULT 0' },
+    { table: 'contact_messages', column: 'category', type: 'TEXT DEFAULT "general"' },
+    { table: 'contact_messages', column: 'priority', type: 'TEXT DEFAULT "normal"' },
+    { table: 'contact_messages', column: 'admin_notes', type: 'TEXT' }
   ];
 
   // Backfill null categories to 'legal'
