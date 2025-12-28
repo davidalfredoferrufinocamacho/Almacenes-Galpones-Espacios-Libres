@@ -639,7 +639,7 @@ router.delete('/account', async (req, res) => {
 
     const hasActiveSpaces = db.prepare(`
       SELECT COUNT(*) as count FROM spaces s
-      WHERE s.user_id = ? AND s.status IN ('published', 'paused')
+      WHERE s.owner_id = ? AND s.status IN ('published', 'paused')
       AND EXISTS (
         SELECT 1 FROM reservations r 
         WHERE r.space_id = s.id AND r.status NOT IN ('cancelled', 'refunded', 'completed', 'expired')
@@ -655,7 +655,7 @@ router.delete('/account', async (req, res) => {
     const hasActiveContracts = db.prepare(`
       SELECT COUNT(*) as count FROM contracts c
       JOIN spaces s ON c.space_id = s.id
-      WHERE s.user_id = ? AND c.status NOT IN ('cancelled', 'completed', 'expired')
+      WHERE s.owner_id = ? AND c.status NOT IN ('cancelled', 'completed', 'expired')
     `).get(userId);
 
     if (hasActiveContracts.count > 0) {
@@ -668,7 +668,7 @@ router.delete('/account', async (req, res) => {
       SELECT COUNT(*) as count FROM payments p
       JOIN reservations r ON p.reservation_id = r.id
       JOIN spaces s ON r.space_id = s.id
-      WHERE s.user_id = ? AND p.escrow_status = 'held'
+      WHERE s.owner_id = ? AND p.escrow_status = 'held'
     `).get(userId);
 
     if (hasPendingPayments.count > 0) {
@@ -681,7 +681,7 @@ router.delete('/account', async (req, res) => {
       fs.unlinkSync(user.profile_photo);
     }
 
-    db.prepare('UPDATE spaces SET status = "deleted" WHERE user_id = ?').run(userId);
+    db.prepare('UPDATE spaces SET status = "deleted" WHERE owner_id = ?').run(userId);
     db.prepare('DELETE FROM notification_log WHERE recipient_id = ?').run(userId);
     db.prepare('UPDATE audit_log SET user_id = NULL WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM campaign_recipients WHERE user_id = ?').run(userId);
