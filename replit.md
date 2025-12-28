@@ -67,7 +67,7 @@ The project structure indicates a clear separation between `client/` (frontend) 
 *   **Frontend Framework:** React
 *   **Build Tool:** Vite
 *   **Authentication:** JSON Web Tokens (JWT)
-*   **Email Service:** Currently a MOCK implementation; future integration with actual email service is implied.
+*   **Email Service:** Gmail integration via Google APIs for real email delivery. Used for admin responses to contact messages. Account: almacenesgalponesespacioslibre@gmail.com
 *   **SMS/WhatsApp:** Currently MOCK implementations; future integration with actual messaging services is implied.
 *   **Payment Gateway:** Not explicitly detailed but implied by payment and escrow features.
 *   **PDF Generation Libraries:** Implied by the functionality to generate contract and invoice PDFs.

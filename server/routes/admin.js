@@ -4,6 +4,7 @@ const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { getClientInfo, generateId } = require('../utils/helpers');
+const { sendContactResponseEmail } = require('../utils/gmailService');
 
 const router = express.Router();
 
@@ -1258,7 +1259,7 @@ router.get('/contact-messages', (req, res) => {
 
 router.put('/contact-messages/:id/respond', [
   body('response').notEmpty().trim()
-], (req, res) => {
+], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -1268,6 +1269,19 @@ router.put('/contact-messages/:id/respond', [
     const message = db.prepare('SELECT * FROM contact_messages WHERE id = ?').get(req.params.id);
     if (!message) {
       return res.status(404).json({ error: 'Mensaje no encontrado' });
+    }
+
+    const emailResult = await sendContactResponseEmail({
+      recipientEmail: message.email,
+      recipientName: message.name,
+      originalSubject: message.subject,
+      originalMessage: message.message,
+      adminResponse: req.body.response
+    });
+
+    if (!emailResult.success) {
+      console.error('[ADMIN] Failed to send email:', emailResult.error);
+      return res.status(500).json({ error: 'Error al enviar el correo: ' + emailResult.error });
     }
 
     db.prepare(`
@@ -1282,11 +1296,11 @@ router.put('/contact-messages/:id/respond', [
     const clientInfo = getClientInfo(req);
     logAudit(req.user.id, 'ADMIN_CONTACT_RESPONSE', 'contact_messages', req.params.id, 
       { status: message.status }, 
-      { status: 'responded', response_length: req.body.response.length, ...clientInfo }, 
+      { status: 'responded', response_length: req.body.response.length, email_sent: true, email_to: message.email, ...clientInfo }, 
       req
     );
 
-    res.json({ message: 'Respuesta enviada' });
+    res.json({ message: 'Respuesta enviada por correo electronico a ' + message.email });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al responder mensaje' });
