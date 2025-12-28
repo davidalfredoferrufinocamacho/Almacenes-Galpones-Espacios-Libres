@@ -104,6 +104,24 @@ function SpaceDetail() {
               )}
             </div>
 
+            <div className="space-header card">
+              <span className="space-type-badge">{spaceTypes[space.space_type]}</span>
+              <h1>{space.title}</h1>
+              {isAuthenticated ? (
+                <p className="location">{space.address}, {space.city}, {space.department}</p>
+              ) : (
+                <p className="location">{space.city}, {space.department}</p>
+              )}
+              {(space.available_from || space.available_until) && (
+                <div className="availability-dates">
+                  <strong>Disponibilidad:</strong>{' '}
+                  {space.available_from && <span>Desde {new Date(space.available_from).toLocaleDateString('es-BO')}</span>}
+                  {space.available_from && space.available_until && ' - '}
+                  {space.available_until && <span>Hasta {new Date(space.available_until).toLocaleDateString('es-BO')}</span>}
+                </div>
+              )}
+            </div>
+
             {space.video_url && (
               <div className="video-section card">
                 <h3>Video del Espacio (Obligatorio)</h3>
@@ -118,23 +136,6 @@ function SpaceDetail() {
             )}
 
             <div className="info-section card">
-              <span className="space-type-badge">{spaceTypes[space.space_type]}</span>
-              <h1>{space.title}</h1>
-              {isAuthenticated ? (
-                <p className="location">{space.address}, {space.city}, {space.department}</p>
-              ) : (
-                <p className="location">{space.city}, {space.department}</p>
-              )}
-              
-              {(space.available_from || space.available_until) && (
-                <div className="availability-dates">
-                  <strong>Disponibilidad:</strong>{' '}
-                  {space.available_from && <span>Desde {new Date(space.available_from).toLocaleDateString('es-BO')}</span>}
-                  {space.available_from && space.available_until && ' - '}
-                  {space.available_until && <span>Hasta {new Date(space.available_until).toLocaleDateString('es-BO')}</span>}
-                </div>
-              )}
-
               <div className="structural-info">
                 <div className="info-item">
                   <strong>m² Totales</strong>
