@@ -428,6 +428,25 @@ router.get('/invoices/:id', (req, res) => {
   }
 });
 
+router.get('/appointments', (req, res) => {
+  try {
+    const appointments = db.prepare(`
+      SELECT a.*, s.title as space_title, s.city,
+             u.first_name || ' ' || u.last_name as host_name
+      FROM appointments a
+      JOIN spaces s ON a.space_id = s.id
+      JOIN users u ON s.host_id = u.id
+      WHERE a.guest_id = ?
+      ORDER BY a.date DESC, a.time DESC
+    `).all(req.user.id);
+
+    res.json(appointments);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener citas' });
+  }
+});
+
 router.get('/favorites', (req, res) => {
   try {
     const favorites = db.prepare(`

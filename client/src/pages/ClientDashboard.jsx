@@ -18,10 +18,22 @@ function ClientDashboard() {
   const [showAntiBypass, setShowAntiBypass] = useState(false)
   const [antiBypassData, setAntiBypassData] = useState(null)
   const [antiBypassAccepting, setAntiBypassAccepting] = useState(false)
+  const [clientName, setClientName] = useState('')
 
   useEffect(() => {
     checkAntiBypass()
+    loadClientName()
   }, [])
+
+  const loadClientName = async () => {
+    try {
+      const res = await api.get('/client/profile')
+      const fullName = [res.data.first_name, res.data.last_name].filter(Boolean).join(' ')
+      setClientName(fullName || '')
+    } catch (error) {
+      console.error('Error loading client name:', error)
+    }
+  }
 
   const checkAntiBypass = async () => {
     try {
@@ -52,22 +64,23 @@ function ClientDashboard() {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'reservations', label: 'Mis Reservaciones', icon: '📅' },
+    { id: 'appointments', label: 'Citas', icon: '📅' },
     { id: 'contracts', label: 'Contratos', icon: '📝' },
-    { id: 'payments', label: 'Pagos', icon: '💳' },
+    { id: 'spaces', label: 'Espacios', icon: '🏢' },
     { id: 'invoices', label: 'Facturas', icon: '🧾' },
-    { id: 'favorites', label: 'Favoritos', icon: '❤️' },
-    { id: 'profile', label: 'Mi Perfil', icon: '👤' }
+    { id: 'payments', label: 'Pagos', icon: '💳' },
+    { id: 'reservations', label: 'Reservaciones', icon: '📋' }
   ]
 
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard': return <ClientHome />
-      case 'reservations': return <ClientReservations />
+      case 'appointments': return <ClientAppointments />
       case 'contracts': return <ClientContracts />
-      case 'payments': return <ClientPayments />
+      case 'spaces': return <ClientSpaces />
       case 'invoices': return <ClientInvoices />
-      case 'favorites': return <ClientFavorites />
+      case 'payments': return <ClientPayments />
+      case 'reservations': return <ClientReservations />
       case 'profile': return <ClientProfile />
       default: return <ClientHome />
     }
@@ -103,6 +116,13 @@ function ClientDashboard() {
       <aside className="client-sidebar">
         <div className="client-sidebar-header">
           <h2>Portal del Cliente</h2>
+          {clientName && <p className="client-name">{clientName}</p>}
+          <button 
+            className={`profile-btn ${activeSection === 'profile' ? 'active' : ''}`}
+            onClick={() => setActiveSection('profile')}
+          >
+            <span>👤</span> Mi Perfil
+          </button>
         </div>
         <nav className="client-nav">
           {menuItems.map(item => (
@@ -1194,6 +1214,140 @@ function ClientProfile() {
               <button onClick={() => setShowPasswordModal(false)} className="btn btn-secondary">Cancelar</button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ClientAppointments() {
+  const [appointments, setAppointments] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadAppointments()
+  }, [])
+
+  const loadAppointments = async () => {
+    try {
+      const res = await api.get('/client/appointments')
+      setAppointments(res.data || [])
+    } catch (error) {
+      console.error('Error loading appointments:', error)
+    }
+    setLoading(false)
+  }
+
+  const getStatusLabel = (status) => {
+    const labels = {
+      'solicitada': 'Solicitada',
+      'aceptada': 'Aceptada',
+      'rechazada': 'Rechazada',
+      'reprogramada': 'Reprogramada',
+      'realizada': 'Realizada',
+      'no_asistida': 'No Asistida'
+    }
+    return labels[status] || status
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Citas</h1>
+
+      {appointments.length === 0 ? (
+        <div className="empty-state">
+          <p>No tienes citas programadas.</p>
+          <p>Puedes solicitar citas para visitar espacios desde la seccion de Espacios.</p>
+        </div>
+      ) : (
+        <div className="table-container">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Espacio</th>
+                <th>Propietario</th>
+                <th>Fecha</th>
+                <th>Hora</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {appointments.map(apt => (
+                <tr key={apt.id}>
+                  <td>{apt.space_title || 'N/A'}</td>
+                  <td>{apt.host_name || 'N/A'}</td>
+                  <td>{apt.date ? new Date(apt.date).toLocaleDateString() : 'N/A'}</td>
+                  <td>{apt.time || 'N/A'}</td>
+                  <td>
+                    <span className={`status-badge status-${apt.status}`}>
+                      {getStatusLabel(apt.status)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ClientSpaces() {
+  const [spaces, setSpaces] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadSpaces()
+  }, [])
+
+  const loadSpaces = async () => {
+    try {
+      const res = await api.get('/spaces?limit=20')
+      setSpaces(res.data.spaces || [])
+    } catch (error) {
+      console.error('Error loading spaces:', error)
+    }
+    setLoading(false)
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Espacios</h1>
+      <p className="section-description">Explora los espacios disponibles para alquilar.</p>
+
+      {spaces.length === 0 ? (
+        <div className="empty-state">
+          <p>No hay espacios disponibles en este momento.</p>
+        </div>
+      ) : (
+        <div className="spaces-grid">
+          {spaces.map(space => (
+            <div key={space.id} className="space-card">
+              <div className="space-image">
+                {space.main_image ? (
+                  <img src={space.main_image} alt={space.title} />
+                ) : (
+                  <div className="no-image">Sin imagen</div>
+                )}
+              </div>
+              <div className="space-info">
+                <h3>{space.title}</h3>
+                <p className="space-location">{space.city}, {space.department}</p>
+                <p className="space-size">{space.total_sqm} m²</p>
+                <p className="space-price">
+                  Desde Bs. {(space.price_per_day_sqm || 0).toFixed(2)}/m²/dia
+                </p>
+                <a href={`/espacios/${space.id}`} className="btn btn-primary btn-sm">
+                  Ver Detalles
+                </a>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

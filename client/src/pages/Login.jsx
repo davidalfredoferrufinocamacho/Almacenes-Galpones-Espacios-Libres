@@ -28,7 +28,7 @@ function Login() {
       } else if (user.role === 'HOST') {
         navigate('/propietario')
       } else {
-        navigate('/dashboard')
+        navigate('/cliente')
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Error al iniciar sesion')

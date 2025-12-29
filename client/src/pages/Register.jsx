@@ -72,7 +72,7 @@ function Register() {
       } else if (formData.role === 'HOST') {
         navigate('/propietario')
       } else {
-        navigate('/dashboard')
+        navigate('/cliente')
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Error al registrar')

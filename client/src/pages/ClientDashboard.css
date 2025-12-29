@@ -20,6 +20,37 @@
   margin: 0;
 }
 
+.client-name {
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.7);
+  margin: 0.5rem 0 0 0;
+  font-weight: 400;
+}
+
+.client-sidebar .profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.client-sidebar .profile-btn:hover {
+  color: white;
+}
+
+.client-sidebar .profile-btn.active {
+  color: white;
+}
+
 .client-nav {
   padding: 1rem 0;
 }

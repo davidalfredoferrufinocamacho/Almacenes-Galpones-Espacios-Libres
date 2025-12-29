@@ -32,10 +32,7 @@ function Header() {
           {isAuthenticated ? (
             <>
               {user?.role === 'GUEST' && (
-                <>
-                  <Link to="/dashboard" onClick={closeMenu}>Mi Panel</Link>
-                  <Link to="/cliente" onClick={closeMenu}>Mi Portal</Link>
-                </>
+                <Link to="/cliente" onClick={closeMenu}>Portal del Cliente</Link>
               )}
               {user?.role === 'HOST' && (
                 <Link to="/propietario" onClick={closeMenu}>Portal del Propietario</Link>
