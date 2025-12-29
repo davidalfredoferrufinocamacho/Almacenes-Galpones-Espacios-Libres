@@ -25,6 +25,8 @@ function Login() {
         navigate(returnTo)
       } else if (user.role === 'ADMIN') {
         navigate('/admin')
+      } else if (user.role === 'HOST') {
+        navigate('/propietario')
       } else {
         navigate('/dashboard')
       }

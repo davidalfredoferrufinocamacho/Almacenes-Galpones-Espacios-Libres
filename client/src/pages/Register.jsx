@@ -69,6 +69,8 @@ function Register() {
       const returnTo = searchParams.get('returnTo')
       if (returnTo) {
         navigate(returnTo)
+      } else if (formData.role === 'HOST') {
+        navigate('/propietario')
       } else {
         navigate('/dashboard')
       }
