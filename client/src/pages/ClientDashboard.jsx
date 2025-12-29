@@ -66,7 +66,7 @@ function ClientDashboard() {
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'appointments', label: 'Citas', icon: '📅' },
     { id: 'contracts', label: 'Contratos', icon: '📝' },
-    { id: 'spaces', label: 'Espacios', icon: '🏢' },
+    { id: 'spaces', label: 'Mis Espacios', icon: '🏢' },
     { id: 'invoices', label: 'Facturas', icon: '🧾' },
     { id: 'payments', label: 'Pagos', icon: '💳' },
     { id: 'reservations', label: 'Reservaciones', icon: '📋' }
@@ -1305,49 +1305,74 @@ function ClientSpaces() {
 
   const loadSpaces = async () => {
     try {
-      const res = await api.get('/spaces?limit=20')
-      setSpaces(res.data.spaces || [])
+      const res = await api.get('/client/my-spaces')
+      setSpaces(res.data || [])
     } catch (error) {
       console.error('Error loading spaces:', error)
     }
     setLoading(false)
   }
 
+  const getStatusLabel = (status) => {
+    const labels = {
+      'pending': 'Pendiente',
+      'confirmed': 'Confirmada',
+      'contract_pending': 'Contrato Pendiente',
+      'contract_signed': 'Contrato Firmado',
+      'completed': 'Completada',
+      'cancelled': 'Cancelada',
+      'rejected': 'Rechazada',
+      'refunded': 'Reembolsada'
+    }
+    return labels[status] || status
+  }
+
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
-      <h1>Espacios</h1>
-      <p className="section-description">Explora los espacios disponibles para alquilar.</p>
+      <h1>Mis Espacios</h1>
+      <p className="section-description">Espacios con los que has tenido interaccion (reservados, contratados, etc.).</p>
 
       {spaces.length === 0 ? (
         <div className="empty-state">
-          <p>No hay espacios disponibles en este momento.</p>
+          <p>No tienes espacios en tu historial.</p>
+          <p>Cuando realices reservaciones, los espacios apareceran aqui.</p>
         </div>
       ) : (
-        <div className="spaces-grid">
-          {spaces.map(space => (
-            <div key={space.id} className="space-card">
-              <div className="space-image">
-                {space.main_image ? (
-                  <img src={space.main_image} alt={space.title} />
-                ) : (
-                  <div className="no-image">Sin imagen</div>
-                )}
-              </div>
-              <div className="space-info">
-                <h3>{space.title}</h3>
-                <p className="space-location">{space.city}, {space.department}</p>
-                <p className="space-size">{space.total_sqm} m²</p>
-                <p className="space-price">
-                  Desde Bs. {(space.price_per_day_sqm || 0).toFixed(2)}/m²/dia
-                </p>
-                <a href={`/espacios/${space.id}`} className="btn btn-primary btn-sm">
-                  Ver Detalles
-                </a>
-              </div>
-            </div>
-          ))}
+        <div className="table-container">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Espacio</th>
+                <th>Ubicacion</th>
+                <th>Propietario</th>
+                <th>Ultima Reservacion</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {spaces.map(space => (
+                <tr key={space.space_id}>
+                  <td>{space.space_title}</td>
+                  <td>{space.city}, {space.department}</td>
+                  <td>{space.host_name}</td>
+                  <td>{space.last_reservation_date ? new Date(space.last_reservation_date).toLocaleDateString() : 'N/A'}</td>
+                  <td>
+                    <span className={`status-badge status-${space.reservation_status}`}>
+                      {getStatusLabel(space.reservation_status)}
+                    </span>
+                  </td>
+                  <td>
+                    <a href={`/espacios/${space.space_id}`} className="btn btn-primary btn-sm">
+                      Ver Detalles
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

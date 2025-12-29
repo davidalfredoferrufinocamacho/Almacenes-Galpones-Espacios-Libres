@@ -447,6 +447,40 @@ router.get('/appointments', (req, res) => {
   }
 });
 
+router.get('/my-spaces', (req, res) => {
+  try {
+    const spaces = db.prepare(`
+      SELECT DISTINCT 
+        s.id as space_id, 
+        s.title as space_title, 
+        s.city, 
+        s.department,
+        u.first_name || ' ' || u.last_name as host_name,
+        r.status as reservation_status,
+        r.created_at as last_reservation_date
+      FROM reservations r
+      JOIN spaces s ON r.space_id = s.id
+      JOIN users u ON s.host_id = u.id
+      WHERE r.guest_id = ?
+      ORDER BY r.created_at DESC
+    `).all(req.user.id);
+
+    const uniqueSpaces = [];
+    const seenIds = new Set();
+    for (const space of spaces) {
+      if (!seenIds.has(space.space_id)) {
+        seenIds.add(space.space_id);
+        uniqueSpaces.push(space);
+      }
+    }
+
+    res.json(uniqueSpaces);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener mis espacios' });
+  }
+});
+
 router.get('/favorites', (req, res) => {
   try {
     const favorites = db.prepare(`
