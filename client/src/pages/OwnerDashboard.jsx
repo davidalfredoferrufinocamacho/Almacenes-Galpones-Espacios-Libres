@@ -83,8 +83,7 @@ function OwnerDashboard() {
     { id: 'invoices', label: 'Facturas', icon: '🧾' },
     { id: 'income', label: 'Ingresos', icon: '💵' },
     { id: 'payments', label: 'Pagos', icon: '💰' },
-    { id: 'reservations', label: 'Reservaciones', icon: '📋' },
-    { id: 'profile', label: 'Mi Perfil', icon: '👤' }
+    { id: 'reservations', label: 'Reservaciones', icon: '📋' }
   ]
 
   const renderContent = () => {
@@ -133,6 +132,12 @@ function OwnerDashboard() {
         <div className="owner-sidebar-header">
           <h2>Portal del Propietario</h2>
           {ownerName && <p className="owner-name">{ownerName}</p>}
+          <button 
+            className={`profile-btn ${activeSection === 'profile' ? 'active' : ''}`}
+            onClick={() => setActiveSection('profile')}
+          >
+            <span>👤</span> Mi Perfil
+          </button>
         </div>
         <nav className="owner-nav">
           {menuItems.map(item => (
