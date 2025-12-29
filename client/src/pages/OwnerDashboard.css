@@ -3,6 +3,35 @@
   min-height: calc(100vh - 120px);
 }
 
+.tabs-container {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.tab-btn {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  color: #0f172a;
+}
+
+.tab-btn.active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+  font-weight: 500;
+}
+
 .owner-sidebar {
   width: 250px;
   background: #1a1a2e;

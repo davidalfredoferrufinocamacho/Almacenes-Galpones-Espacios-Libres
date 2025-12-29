@@ -654,6 +654,26 @@ router.get('/invoices', (req, res) => {
   }
 });
 
+router.get('/invoices/received', (req, res) => {
+  try {
+    const userId = req.user.id;
+    const invoices = db.prepare(`
+      SELECT i.*, 
+             s.title as space_title
+      FROM invoices i
+      LEFT JOIN contracts c ON i.contract_id = c.id
+      LEFT JOIN spaces s ON c.space_id = s.id
+      WHERE i.recipient_id = ? AND i.recipient_type = 'host'
+      ORDER BY i.created_at DESC
+    `).all(userId);
+
+    res.json(invoices);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener facturas recibidas' });
+  }
+});
+
 router.get('/profile', (req, res) => {
   try {
     const userId = req.user.id;

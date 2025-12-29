@@ -1575,7 +1575,9 @@ function OwnerProfile() {
 }
 
 function OwnerInvoices() {
-  const [invoices, setInvoices] = useState([])
+  const [activeTab, setActiveTab] = useState('emitidas')
+  const [emitidas, setEmitidas] = useState([])
+  const [recibidas, setRecibidas] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -1584,12 +1586,26 @@ function OwnerInvoices() {
 
   const loadInvoices = async () => {
     try {
-      const res = await api.get('/invoices')
-      setInvoices(res.data || [])
+      const [emitidasRes, recibidasRes] = await Promise.all([
+        api.get('/invoices'),
+        api.get('/invoices/received')
+      ])
+      setEmitidas(emitidasRes.data || [])
+      setRecibidas(recibidasRes.data || [])
     } catch (error) {
       console.error('Error loading invoices:', error)
     }
     setLoading(false)
+  }
+
+  const getStatusLabel = (status) => {
+    const labels = {
+      'paid': 'Pagada',
+      'pending': 'Pendiente',
+      'cancelled': 'Cancelada',
+      'overdue': 'Vencida'
+    }
+    return labels[status] || status || 'Pendiente'
   }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
@@ -1598,52 +1614,117 @@ function OwnerInvoices() {
     <div>
       <h1>Facturas</h1>
 
-      {invoices.length === 0 ? (
-        <div className="empty-state">
-          <p>No tienes facturas generadas.</p>
-          <p>Las facturas se generan automaticamente cuando recibes pagos por tus espacios.</p>
-        </div>
-      ) : (
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Numero</th>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Espacio</th>
-                <th>Monto</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map(invoice => (
-                <tr key={invoice.id}>
-                  <td>{invoice.invoice_number || invoice.id}</td>
-                  <td>{new Date(invoice.created_at).toLocaleDateString()}</td>
-                  <td>{invoice.guest_name || 'N/A'}</td>
-                  <td>{invoice.space_title || 'N/A'}</td>
-                  <td>Bs. {(invoice.amount || 0).toLocaleString()}</td>
-                  <td>
-                    <span className={`status-badge status-${invoice.status || 'pending'}`}>
-                      {invoice.status === 'paid' ? 'Pagada' : 
-                       invoice.status === 'pending' ? 'Pendiente' : 
-                       invoice.status === 'cancelled' ? 'Cancelada' : invoice.status || 'Pendiente'}
-                    </span>
-                  </td>
-                  <td>
-                    {invoice.pdf_url && (
-                      <a href={invoice.pdf_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm">
-                        Ver PDF
-                      </a>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="tabs-container">
+        <button 
+          className={`tab-btn ${activeTab === 'emitidas' ? 'active' : ''}`}
+          onClick={() => setActiveTab('emitidas')}
+        >
+          Emitidas a Clientes ({emitidas.length})
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'recibidas' ? 'active' : ''}`}
+          onClick={() => setActiveTab('recibidas')}
+        >
+          Recibidas de Plataforma ({recibidas.length})
+        </button>
+      </div>
+
+      {activeTab === 'emitidas' && (
+        <>
+          {emitidas.length === 0 ? (
+            <div className="empty-state">
+              <p>No tienes facturas emitidas a clientes.</p>
+              <p>Las facturas se generan automaticamente cuando recibes pagos por tus espacios.</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Numero</th>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Espacio</th>
+                    <th>Monto</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emitidas.map(invoice => (
+                    <tr key={invoice.id}>
+                      <td>{invoice.invoice_number || invoice.id}</td>
+                      <td>{new Date(invoice.created_at).toLocaleDateString()}</td>
+                      <td>{invoice.guest_name || 'N/A'}</td>
+                      <td>{invoice.space_title || 'N/A'}</td>
+                      <td>Bs. {(invoice.amount || 0).toLocaleString()}</td>
+                      <td>
+                        <span className={`status-badge status-${invoice.status || 'pending'}`}>
+                          {getStatusLabel(invoice.status)}
+                        </span>
+                      </td>
+                      <td>
+                        {invoice.pdf_url && (
+                          <a href={invoice.pdf_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm">
+                            Ver PDF
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {activeTab === 'recibidas' && (
+        <>
+          {recibidas.length === 0 ? (
+            <div className="empty-state">
+              <p>No tienes facturas recibidas de la plataforma.</p>
+              <p>Aqui apareceran las facturas por comisiones y servicios de la plataforma.</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Numero</th>
+                    <th>Fecha</th>
+                    <th>Concepto</th>
+                    <th>Monto</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recibidas.map(invoice => (
+                    <tr key={invoice.id}>
+                      <td>{invoice.invoice_number || invoice.id}</td>
+                      <td>{new Date(invoice.created_at).toLocaleDateString()}</td>
+                      <td>{invoice.concept || 'Comision de plataforma'}</td>
+                      <td>Bs. {(invoice.amount || 0).toLocaleString()}</td>
+                      <td>
+                        <span className={`status-badge status-${invoice.status || 'pending'}`}>
+                          {getStatusLabel(invoice.status)}
+                        </span>
+                      </td>
+                      <td>
+                        {invoice.pdf_url && (
+                          <a href={invoice.pdf_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm">
+                            Ver PDF
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
