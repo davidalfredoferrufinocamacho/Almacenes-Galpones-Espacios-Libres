@@ -632,6 +632,28 @@ router.get('/income', (req, res) => {
   }
 });
 
+router.get('/invoices', (req, res) => {
+  try {
+    const userId = req.user.id;
+    const invoices = db.prepare(`
+      SELECT i.*, 
+             s.title as space_title,
+             u.first_name || ' ' || u.last_name as guest_name
+      FROM invoices i
+      JOIN contracts c ON i.contract_id = c.id
+      JOIN spaces s ON c.space_id = s.id
+      JOIN users u ON i.guest_id = u.id
+      WHERE i.host_id = ?
+      ORDER BY i.created_at DESC
+    `).all(userId);
+
+    res.json(invoices);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener facturas' });
+  }
+});
+
 router.get('/profile', (req, res) => {
   try {
     const userId = req.user.id;

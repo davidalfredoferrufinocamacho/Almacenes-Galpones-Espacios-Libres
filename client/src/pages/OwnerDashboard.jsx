@@ -30,10 +30,21 @@ function OwnerDashboard() {
   const [showAntiBypass, setShowAntiBypass] = useState(false)
   const [antiBypassData, setAntiBypassData] = useState(null)
   const [antiBypassAccepting, setAntiBypassAccepting] = useState(false)
+  const [ownerName, setOwnerName] = useState('')
 
   useEffect(() => {
     checkAntiBypass()
+    loadOwnerName()
   }, [])
+
+  const loadOwnerName = async () => {
+    try {
+      const res = await api.get('/profile')
+      setOwnerName(res.data.name || '')
+    } catch (error) {
+      console.error('Error loading owner name:', error)
+    }
+  }
 
   const checkAntiBypass = async () => {
     try {
@@ -67,8 +78,9 @@ function OwnerDashboard() {
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'appointments', label: 'Citas', icon: '📅' },
     { id: 'contracts', label: 'Contratos', icon: '📝' },
+    { id: 'spaces', label: 'Espacios', icon: '🏢' },
+    { id: 'invoices', label: 'Facturas', icon: '🧾' },
     { id: 'income', label: 'Ingresos', icon: '💵' },
-    { id: 'spaces', label: 'Mis Espacios', icon: '🏢' },
     { id: 'profile', label: 'Mi Perfil', icon: '👤' },
     { id: 'payments', label: 'Pagos', icon: '💰' },
     { id: 'reservations', label: 'Reservaciones', icon: '📋' }
@@ -79,8 +91,9 @@ function OwnerDashboard() {
       case 'dashboard': return <OwnerHome />
       case 'appointments': return <OwnerAppointments />
       case 'contracts': return <OwnerContracts />
-      case 'income': return <OwnerIncome />
       case 'spaces': return <OwnerSpaces />
+      case 'invoices': return <OwnerInvoices />
+      case 'income': return <OwnerIncome />
       case 'profile': return <OwnerProfile />
       case 'payments': return <OwnerPayments />
       case 'reservations': return <OwnerReservations />
@@ -117,7 +130,8 @@ function OwnerDashboard() {
 
       <aside className="owner-sidebar">
         <div className="owner-sidebar-header">
-          <h2>Portal de Propietario</h2>
+          <h2>Portal del Propietario</h2>
+          {ownerName && <p className="owner-name">{ownerName}</p>}
         </div>
         <nav className="owner-nav">
           {menuItems.map(item => (
@@ -1548,6 +1562,81 @@ function OwnerProfile() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OwnerInvoices() {
+  const [invoices, setInvoices] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadInvoices()
+  }, [])
+
+  const loadInvoices = async () => {
+    try {
+      const res = await api.get('/invoices')
+      setInvoices(res.data || [])
+    } catch (error) {
+      console.error('Error loading invoices:', error)
+    }
+    setLoading(false)
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Facturas</h1>
+
+      {invoices.length === 0 ? (
+        <div className="empty-state">
+          <p>No tienes facturas generadas.</p>
+          <p>Las facturas se generan automaticamente cuando recibes pagos por tus espacios.</p>
+        </div>
+      ) : (
+        <div className="table-container">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Numero</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Espacio</th>
+                <th>Monto</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map(invoice => (
+                <tr key={invoice.id}>
+                  <td>{invoice.invoice_number || invoice.id}</td>
+                  <td>{new Date(invoice.created_at).toLocaleDateString()}</td>
+                  <td>{invoice.guest_name || 'N/A'}</td>
+                  <td>{invoice.space_title || 'N/A'}</td>
+                  <td>Bs. {(invoice.amount || 0).toLocaleString()}</td>
+                  <td>
+                    <span className={`status-badge status-${invoice.status || 'pending'}`}>
+                      {invoice.status === 'paid' ? 'Pagada' : 
+                       invoice.status === 'pending' ? 'Pendiente' : 
+                       invoice.status === 'cancelled' ? 'Cancelada' : invoice.status || 'Pendiente'}
+                    </span>
+                  </td>
+                  <td>
+                    {invoice.pdf_url && (
+                      <a href={invoice.pdf_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm">
+                        Ver PDF
+                      </a>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

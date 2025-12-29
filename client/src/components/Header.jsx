@@ -38,7 +38,7 @@ function Header() {
                 </>
               )}
               {user?.role === 'HOST' && (
-                <Link to="/propietario" onClick={closeMenu}>Portal Propietario</Link>
+                <Link to="/propietario" onClick={closeMenu}>Portal del Propietario</Link>
               )}
               {user?.role === 'ADMIN' && (
                 <Link to="/admin" onClick={closeMenu}>Admin</Link>
