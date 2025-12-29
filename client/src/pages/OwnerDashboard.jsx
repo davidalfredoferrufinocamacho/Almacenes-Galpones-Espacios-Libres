@@ -263,8 +263,8 @@ function OwnerSpaces() {
 
   const loadSpaces = () => {
     setLoading(true)
-    api.get('/owner/spaces').then(res => {
-      setSpaces(res.data)
+    api.get('/spaces').then(res => {
+      setSpaces(Array.isArray(res.data) ? res.data : [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }
@@ -274,10 +274,10 @@ function OwnerSpaces() {
     setSaving(true)
     try {
       if (form.id) {
-        await api.put(`/owner/spaces/${form.id}`, form)
+        await api.put(`/spaces/${form.id}`, form)
         alert('Espacio actualizado exitosamente')
       } else {
-        await api.post('/owner/spaces', form)
+        await api.post('/spaces', form)
         alert('Espacio creado exitosamente')
       }
       setShowModal(false)
@@ -291,7 +291,7 @@ function OwnerSpaces() {
 
   const handlePublish = async (id) => {
     try {
-      await api.put(`/owner/spaces/${id}/publish`)
+      await api.put(`/spaces/${id}/publish`)
       loadSpaces()
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -300,7 +300,7 @@ function OwnerSpaces() {
 
   const handleUnpublish = async (id) => {
     try {
-      await api.put(`/owner/spaces/${id}/unpublish`)
+      await api.put(`/spaces/${id}/unpublish`)
       loadSpaces()
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -309,7 +309,7 @@ function OwnerSpaces() {
 
   const handleEdit = async (id) => {
     try {
-      const res = await api.get(`/owner/spaces/${id}`)
+      const res = await api.get(`/spaces/${id}`)
       setForm(res.data)
       setPhotos(res.data.photos || [])
       setShowModal(true)
@@ -394,7 +394,7 @@ function OwnerSpaces() {
     if (!confirm('¿Estas seguro de eliminar este espacio? Esta accion no se puede deshacer.')) return
     setDeleting(id)
     try {
-      await api.delete(`/owner/spaces/${id}`)
+      await api.delete(`/spaces/${id}`)
       alert('Espacio eliminado exitosamente')
       loadSpaces()
     } catch (error) {
@@ -685,16 +685,16 @@ function OwnerReservations() {
 
   const loadData = () => {
     setLoading(true)
-    const url = filterStatus ? `/owner/reservations?status=${filterStatus}` : '/owner/reservations'
+    const url = filterStatus ? `/reservations?status=${filterStatus}` : '/reservations'
     api.get(url).then(res => {
-      setReservations(res.data)
+      setReservations(Array.isArray(res.data) ? res.data : [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }
 
   const viewDetails = async (id) => {
     try {
-      const res = await api.get(`/owner/reservations/${id}`)
+      const res = await api.get(`/reservations/${id}`)
       setSelected(res.data)
     } catch (error) {
       alert('Error al cargar detalles')
@@ -808,7 +808,7 @@ function OwnerPayments() {
 
   const loadData = () => {
     setLoading(true)
-    const url = filterStatus ? `/owner/payments?status=${filterStatus}` : '/owner/payments'
+    const url = filterStatus ? `/payments?status=${filterStatus}` : '/payments'
     api.get(url).then(res => {
       setData(res.data)
       setLoading(false)
@@ -905,12 +905,13 @@ function OwnerAppointments() {
   const loadData = async () => {
     try {
       const [aptsRes, spacesRes] = await Promise.all([
-        api.get('/owner/appointments'),
-        api.get('/owner/spaces')
+        api.get('/appointments'),
+        api.get('/spaces')
       ])
-      setAppointments(aptsRes.data)
-      setSpaces(spacesRes.data)
-      if (spacesRes.data.length > 0) setSelectedSpace(spacesRes.data[0].id)
+      setAppointments(Array.isArray(aptsRes.data) ? aptsRes.data : [])
+      const spacesData = Array.isArray(spacesRes.data) ? spacesRes.data : []
+      setSpaces(spacesData)
+      if (spacesData.length > 0) setSelectedSpace(spacesData[0].id)
     } catch (error) {
       console.error('Error loading data:', error)
     }
@@ -925,7 +926,7 @@ function OwnerAppointments() {
 
   const loadAvailability = async () => {
     try {
-      const res = await api.get(`/owner/spaces/${selectedSpace}/availability`)
+      const res = await api.get(`/spaces/${selectedSpace}/availability`)
       setAvailability(res.data?.availability || [])
       setExceptions(res.data?.exceptions || [])
     } catch (error) {
@@ -935,7 +936,7 @@ function OwnerAppointments() {
 
   const handleHostComplete = async (id) => {
     try {
-      await api.put(`/owner/appointments/${id}/host-complete`)
+      await api.put(`/appointments/${id}/host-complete`)
       setAppointments(appointments.map(a => a.id === id ? { ...a, host_completed: 1 } : a))
       alert('Visita marcada como completada. Esperando confirmacion del cliente.')
       loadData()
@@ -947,7 +948,7 @@ function OwnerAppointments() {
   const handleSaveAvailability = async (dayOfWeek, schedule) => {
     setSaving(true)
     try {
-      await api.post(`/owner/spaces/${selectedSpace}/availability`, {
+      await api.post(`/spaces/${selectedSpace}/availability`, {
         day_of_week: dayOfWeek,
         ...schedule
       })
@@ -961,7 +962,7 @@ function OwnerAppointments() {
   const handleBlockDate = async (date, reason = '') => {
     setSaving(true)
     try {
-      await api.post(`/owner/spaces/${selectedSpace}/availability/exceptions`, {
+      await api.post(`/spaces/${selectedSpace}/availability/exceptions`, {
         exception_date: date,
         is_blocked: true,
         reason
@@ -975,7 +976,7 @@ function OwnerAppointments() {
 
   const handleDeleteException = async (id) => {
     try {
-      await api.delete(`/owner/spaces/${selectedSpace}/availability/exceptions/${id}`)
+      await api.delete(`/spaces/${selectedSpace}/availability/exceptions/${id}`)
       loadAvailability()
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -985,7 +986,7 @@ function OwnerAppointments() {
   const handleActivateCalendar = async () => {
     setSaving(true)
     try {
-      await api.put(`/owner/spaces/${selectedSpace}/calendar/activate`)
+      await api.put(`/spaces/${selectedSpace}/calendar/activate`)
       alert('Calendario activado correctamente')
       loadData()
     } catch (error) {
@@ -1176,8 +1177,8 @@ function OwnerContracts() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/owner/contracts').then(res => {
-      setContracts(res.data)
+    api.get('/contracts').then(res => {
+      setContracts(Array.isArray(res.data) ? res.data : [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
@@ -1237,7 +1238,7 @@ function OwnerIncome() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/owner/income').then(res => {
+    api.get('/income').then(res => {
       setData(res.data)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -1794,8 +1795,8 @@ function OwnerInvoices() {
   const loadInvoices = async () => {
     try {
       const [emitidasRes, recibidasRes] = await Promise.all([
-        api.get('/owner/invoices'),
-        api.get('/owner/invoices/received')
+        api.get('/invoices'),
+        api.get('/invoices/received')
       ])
       setEmitidas(emitidasRes.data || [])
       setRecibidas(recibidasRes.data || [])
