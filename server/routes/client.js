@@ -4,6 +4,7 @@ const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, getClientInfo } = require('../utils/helpers');
+const { notifyRefundProcessed } = require('../utils/notificationsService');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
@@ -1080,6 +1081,8 @@ router.post('/reservations/:id/reject-after-visit', (req, res) => {
 
     logAudit(req.user.id, 'RESERVATION_REJECTED_AFTER_VISIT', 'reservations', req.params.id, 
       { status: 'visit_completed' }, { status: 'refunded' }, req);
+
+    notifyRefundProcessed(refundId, reservation.deposit_amount, 'post_visit_rejection', req);
 
     res.json({ 
       message: 'Espacio rechazado. Se procedera con el reembolso del anticipo.',
