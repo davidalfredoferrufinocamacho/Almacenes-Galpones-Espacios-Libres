@@ -255,6 +255,19 @@ function ClientReservations() {
   const [selected, setSelected] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
+  const statusLabels = {
+    pending: 'Pendiente',
+    PAID_DEPOSIT_ESCROW: 'Anticipo Pagado',
+    appointment_scheduled: 'Cita Agendada',
+    visit_completed: 'Visita Realizada',
+    confirmed: 'Confirmado',
+    contract_pending: 'Contrato Pendiente',
+    contract_signed: 'Contrato Firmado',
+    completed: 'Completado',
+    cancelled: 'Cancelado',
+    refunded: 'Reembolsado'
+  }
+
   useEffect(() => { loadReservations() }, [filter])
 
   const loadReservations = () => {
@@ -290,6 +303,25 @@ function ClientReservations() {
     }
   }
 
+  const handlePayRemaining = async (id) => {
+    try {
+      await api.post(`/payments/remaining/${id}`, { payment_method: 'card' })
+      loadReservations()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al procesar pago')
+    }
+  }
+
+  const handleRefund = async (id) => {
+    if (!confirm('Esta seguro de solicitar el reembolso? Esta accion no se puede deshacer.')) return
+    try {
+      await api.post(`/payments/refund/${id}`)
+      loadReservations()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al procesar reembolso')
+    }
+  }
+
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
@@ -299,11 +331,15 @@ function ClientReservations() {
         <select value={filter.status} onChange={e => setFilter({ ...filter, status: e.target.value })}>
           <option value="">Todos los estados</option>
           <option value="pending">Pendiente</option>
+          <option value="PAID_DEPOSIT_ESCROW">Anticipo Pagado</option>
+          <option value="appointment_scheduled">Cita Agendada</option>
+          <option value="visit_completed">Visita Realizada</option>
           <option value="confirmed">Confirmada</option>
           <option value="contract_pending">Contrato Pendiente</option>
           <option value="contract_signed">Contrato Firmado</option>
           <option value="completed">Completada</option>
           <option value="cancelled">Cancelada</option>
+          <option value="refunded">Reembolsada</option>
         </select>
         <select value={filter.period} onChange={e => setFilter({ ...filter, period: e.target.value })}>
           <option value="">Todo el tiempo</option>
@@ -314,18 +350,59 @@ function ClientReservations() {
       </div>
 
       {reservations.length > 0 ? (
-        <div className="reservations-grid">
+        <div className="reservations-list">
           {reservations.map(r => (
-            <div key={r.id} className="reservation-card" onClick={() => viewDetail(r.id)}>
-              {r.space_photo && <img src={`/${r.space_photo}`} alt={r.space_title} className="rc-photo" />}
-              <div className="rc-info">
+            <div key={r.id} className="reservation-item card">
+              <div className="reservation-header">
                 <h3>{r.space_title}</h3>
-                <p className="rc-location">{r.city}</p>
-                <p className="rc-dates">{r.start_date} - {r.end_date}</p>
-                <div className="rc-footer">
-                  <span className="rc-amount">Bs. {r.total_amount?.toLocaleString()}</span>
-                  <span className={`status-badge status-${r.status}`}>{r.status}</span>
+                <span className={`status-badge status-${r.status?.toLowerCase().replace('_', '-')}`}>
+                  {statusLabels[r.status] || r.status}
+                </span>
+              </div>
+              <div className="reservation-details">
+                <div className="detail">
+                  <span className="label">Ubicacion:</span>
+                  <span>{r.city}, {r.department}</span>
                 </div>
+                <div className="detail">
+                  <span className="label">m² solicitados:</span>
+                  <span>{r.sqm_requested} m²</span>
+                </div>
+                <div className="detail">
+                  <span className="label">Periodo:</span>
+                  <span>{r.period_quantity} {r.period_type}</span>
+                </div>
+                <div className="detail">
+                  <span className="label">Total:</span>
+                  <span className="amount">Bs. {r.total_amount?.toFixed(2)}</span>
+                </div>
+                <div className="detail">
+                  <span className="label">Anticipo:</span>
+                  <span className="deposit">Bs. {r.deposit_amount?.toFixed(2)}</span>
+                </div>
+                <div className="detail">
+                  <span className="label">Saldo:</span>
+                  <span>Bs. {r.remaining_amount?.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="reservation-actions">
+                {r.status === 'PAID_DEPOSIT_ESCROW' && (
+                  <>
+                    <button onClick={() => window.location.href = `/citas?reservation=${r.id}`} className="btn btn-secondary">
+                      Agendar Cita
+                    </button>
+                    <button onClick={() => handlePayRemaining(r.id)} className="btn btn-primary">
+                      Pagar Saldo (Sin Visita)
+                    </button>
+                    <button onClick={() => handleRefund(r.id)} className="btn btn-outline-danger">
+                      No me interesa (Reembolso)
+                    </button>
+                  </>
+                )}
+                {['pending', 'confirmed'].includes(r.status) && (
+                  <button onClick={() => handleCancel(r.id)} className="btn btn-danger">Cancelar</button>
+                )}
+                <button onClick={() => viewDetail(r.id)} className="btn btn-outline">Ver Detalle</button>
               </div>
             </div>
           ))}

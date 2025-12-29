@@ -65,8 +65,8 @@ router.get('/dashboard', (req, res) => {
       SELECT r.*, s.title as space_title, s.city
       FROM reservations r
       JOIN spaces s ON r.space_id = s.id
-      WHERE r.guest_id = ? AND r.start_date >= date('now') AND r.status NOT IN ('cancelled', 'refunded')
-      ORDER BY r.start_date ASC LIMIT 1
+      WHERE r.guest_id = ? AND r.status NOT IN ('cancelled', 'refunded', 'completed')
+      ORDER BY r.created_at DESC LIMIT 1
     `).get(userId);
 
     const pendingPayments = db.prepare(`
@@ -119,7 +119,7 @@ router.get('/reservations', (req, res) => {
   try {
     const { status, period } = req.query;
     let query = `
-      SELECT r.*, s.title as space_title, s.city, s.type as space_type,
+      SELECT r.*, s.title as space_title, s.city, s.department, s.space_type,
              u.first_name || ' ' || u.last_name as host_name,
              (SELECT url FROM space_photos WHERE space_id = s.id LIMIT 1) as space_photo
       FROM reservations r
@@ -155,8 +155,8 @@ router.get('/reservations', (req, res) => {
 router.get('/reservations/:id', (req, res) => {
   try {
     const reservation = db.prepare(`
-      SELECT r.*, s.title as space_title, s.address, s.city, s.type as space_type,
-             s.description as space_description, s.amenities,
+      SELECT r.*, s.title as space_title, s.address, s.city, s.department, s.space_type,
+             s.description as space_description,
              u.first_name || ' ' || u.last_name as host_name
       FROM reservations r
       JOIN spaces s ON r.space_id = s.id
