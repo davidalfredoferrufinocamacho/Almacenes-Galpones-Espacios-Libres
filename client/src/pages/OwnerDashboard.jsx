@@ -63,37 +63,15 @@ function OwnerDashboard() {
     setAntiBypassAccepting(false)
   }
 
-  const [menuCounts, setMenuCounts] = useState({})
-
-  useEffect(() => {
-    loadMenuCounts()
-  }, [])
-
-  const loadMenuCounts = async () => {
-    try {
-      const res = await api.get('/dashboard')
-      setMenuCounts({
-        appointments: res.data.appointments?.pending || 0,
-        contracts: res.data.contracts?.total || 0,
-        income: res.data.earnings?.total_earned || 0,
-        spaces: res.data.spaces?.total || 0,
-        payments: res.data.payments?.total || 0,
-        reservations: res.data.reservations?.total || 0
-      })
-    } catch (error) {
-      console.error('Error loading menu counts:', error)
-    }
-  }
-
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'appointments', label: 'Citas', icon: '📅', count: menuCounts.appointments },
-    { id: 'contracts', label: 'Contratos', icon: '📝', count: menuCounts.contracts },
-    { id: 'income', label: 'Ingresos', icon: '💵', count: menuCounts.income, isCurrency: true },
-    { id: 'spaces', label: 'Mis Espacios', icon: '🏢', count: menuCounts.spaces },
+    { id: 'appointments', label: 'Citas', icon: '📅' },
+    { id: 'contracts', label: 'Contratos', icon: '📝' },
+    { id: 'income', label: 'Ingresos', icon: '💵' },
+    { id: 'spaces', label: 'Mis Espacios', icon: '🏢' },
     { id: 'profile', label: 'Mi Perfil', icon: '👤' },
-    { id: 'payments', label: 'Pagos', icon: '💰', count: menuCounts.payments },
-    { id: 'reservations', label: 'Reservaciones', icon: '📋', count: menuCounts.reservations }
+    { id: 'payments', label: 'Pagos', icon: '💰' },
+    { id: 'reservations', label: 'Reservaciones', icon: '📋' }
   ]
 
   const renderContent = () => {
@@ -150,11 +128,6 @@ function OwnerDashboard() {
             >
               <span className="nav-icon">{item.icon}</span>
               <span className="nav-label">{item.label}</span>
-              {item.count !== undefined && item.count !== null && (
-                <span className="nav-count">
-                  {item.isCurrency ? `Bs. ${item.count.toLocaleString()}` : item.count}
-                </span>
-              )}
             </button>
           ))}
         </nav>
@@ -826,7 +799,7 @@ function OwnerPayments() {
 
   return (
     <div>
-      <h1>Pagos e Ingresos</h1>
+      <h1>Pagos</h1>
 
       <div className="owner-stats-grid" style={{marginBottom: '1.5rem'}}>
         <div className="stat-card">
