@@ -267,6 +267,38 @@ router.put('/:id/accept-reschedule', authenticateToken, requireRole('GUEST'), (r
   }
 });
 
+router.put('/:id/reject-reschedule', authenticateToken, requireRole('GUEST'), (req, res) => {
+  try {
+    const appointment = db.prepare(`
+      SELECT * FROM appointments WHERE id = ? AND guest_id = ? AND status = 'reprogramada'
+    `).get(req.params.id, req.user.id);
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Cita no encontrada' });
+    }
+
+    const oldStatus = appointment.status;
+
+    db.prepare(`
+      UPDATE appointments SET status = 'cancelada', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(req.params.id);
+
+    if (appointment.reservation_id) {
+      db.prepare(`
+        UPDATE reservations SET status = 'PAID_DEPOSIT_ESCROW', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).run(appointment.reservation_id);
+    }
+
+    logAudit(req.user.id, 'APPOINTMENT_RESCHEDULE_REJECTED', 'appointments', req.params.id, 
+      { status: oldStatus }, { status: 'cancelada' }, req);
+
+    res.json({ message: 'Reprogramacion rechazada, cita cancelada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al rechazar reprogramacion' });
+  }
+});
+
 router.put('/:id/mark-completed', authenticateToken, requireRole('HOST'), (req, res) => {
   try {
     const appointment = db.prepare(`

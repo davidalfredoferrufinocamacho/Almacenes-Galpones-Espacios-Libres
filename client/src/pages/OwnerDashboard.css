@@ -32,6 +32,35 @@
   font-weight: 500;
 }
 
+.filter-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.filter-btn {
+  padding: 0.5rem 1rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.filter-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
 .owner-sidebar {
   width: 250px;
   background: #1a1a2e;

@@ -1344,6 +1344,7 @@ function ClientAppointments() {
   const [selectedReservation, setSelectedReservation] = useState(null)
   const [selectedSlot, setSelectedSlot] = useState(null)
   const [schedulingLoading, setSchedulingLoading] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('all')
 
   useEffect(() => {
     loadData()
@@ -1405,6 +1406,28 @@ function ClientAppointments() {
     }
   }
 
+  const handleAcceptReschedule = async (id) => {
+    if (!confirm('¿Confirma que acepta la nueva fecha propuesta por el propietario?')) return
+    try {
+      await api.put(`/appointments/${id}/accept-reschedule`)
+      alert('Nueva fecha aceptada exitosamente.')
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleRejectReschedule = async (id) => {
+    if (!confirm('¿Rechazar la nueva fecha propuesta? La cita sera cancelada.')) return
+    try {
+      await api.put(`/appointments/${id}/reject-reschedule`)
+      alert('Reprogramacion rechazada.')
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
   const getStatusLabel = (status) => ({
     'solicitada': 'Solicitada', 'aceptada': 'Aceptada', 'rechazada': 'Rechazada',
     'reprogramada': 'Reprogramada', 'realizada': 'Realizada', 'no_asistida': 'No Asistida', 'cancelada': 'Cancelada'
@@ -1443,9 +1466,30 @@ function ClientAppointments() {
         </div>
       )}
 
-      {appointments.length === 0 ? (
+      <div className="filter-tabs" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <button className={`filter-btn ${statusFilter === 'all' ? 'active' : ''}`} onClick={() => setStatusFilter('all')}>
+          Todas ({appointments.length})
+        </button>
+        <button className={`filter-btn ${statusFilter === 'solicitada' ? 'active' : ''}`} onClick={() => setStatusFilter('solicitada')}>
+          Pendientes ({appointments.filter(a => a.status === 'solicitada').length})
+        </button>
+        <button className={`filter-btn ${statusFilter === 'aceptada' ? 'active' : ''}`} onClick={() => setStatusFilter('aceptada')}>
+          Aceptadas ({appointments.filter(a => a.status === 'aceptada').length})
+        </button>
+        <button className={`filter-btn ${statusFilter === 'reprogramada' ? 'active' : ''}`} onClick={() => setStatusFilter('reprogramada')}>
+          Reprogramadas ({appointments.filter(a => a.status === 'reprogramada').length})
+        </button>
+        <button className={`filter-btn ${statusFilter === 'realizada' ? 'active' : ''}`} onClick={() => setStatusFilter('realizada')}>
+          Realizadas ({appointments.filter(a => a.status === 'realizada').length})
+        </button>
+        <button className={`filter-btn ${statusFilter === 'cancelada' ? 'active' : ''}`} onClick={() => setStatusFilter('cancelada')}>
+          Canceladas ({appointments.filter(a => a.status === 'cancelada' || a.status === 'rechazada').length})
+        </button>
+      </div>
+
+      {appointments.filter(a => statusFilter === 'all' || a.status === statusFilter || (statusFilter === 'cancelada' && (a.status === 'cancelada' || a.status === 'rechazada'))).length === 0 ? (
         <div className="empty-state">
-          <p>No tienes citas programadas.</p>
+          <p>No tienes citas {statusFilter !== 'all' ? `con estado "${getStatusLabel(statusFilter)}"` : 'programadas'}.</p>
         </div>
       ) : (
         <div className="table-container">
@@ -1462,7 +1506,7 @@ function ClientAppointments() {
               </tr>
             </thead>
             <tbody>
-              {appointments.map(apt => (
+              {appointments.filter(a => statusFilter === 'all' || a.status === statusFilter || (statusFilter === 'cancelada' && (a.status === 'cancelada' || a.status === 'rechazada'))).map(apt => (
                 <tr key={apt.id}>
                   <td>{apt.space_title || 'N/A'}</td>
                   <td>{apt.host_first_name} {apt.host_last_name}</td>
@@ -1473,13 +1517,26 @@ function ClientAppointments() {
                     <span style={{marginRight: '0.5rem'}}>Host: {apt.host_completed ? '✅' : '⏳'}</span>
                     <span>Tu: {apt.guest_completed ? '✅' : '⏳'}</span>
                   </td>
-                  <td>
+                  <td style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                    {apt.status === 'solicitada' && <span className="text-muted">Esperando respuesta del propietario</span>}
+                    {apt.status === 'reprogramada' && (
+                      <>
+                        <div style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+                          Nueva fecha: {apt.reschedule_date ? new Date(apt.reschedule_date).toLocaleDateString() : 'N/A'} - {apt.reschedule_time || 'N/A'}
+                        </div>
+                        <button onClick={() => handleAcceptReschedule(apt.id)} className="btn btn-small btn-success">Aceptar</button>
+                        <button onClick={() => handleRejectReschedule(apt.id)} className="btn btn-small btn-danger">Rechazar</button>
+                      </>
+                    )}
                     {apt.status === 'aceptada' && !apt.guest_completed && (
                       <button onClick={() => handleGuestComplete(apt.id)} className="btn btn-small btn-success">
                         Confirmar Visita
                       </button>
                     )}
                     {apt.status === 'realizada' && <span className="text-success">Visita Completada</span>}
+                    {apt.status === 'rechazada' && <span className="text-danger">Rechazada por propietario</span>}
+                    {apt.status === 'cancelada' && <span className="text-muted">Cancelada</span>}
+                    {apt.status === 'no_asistida' && <span className="text-warning">No asististe</span>}
                   </td>
                 </tr>
               ))}

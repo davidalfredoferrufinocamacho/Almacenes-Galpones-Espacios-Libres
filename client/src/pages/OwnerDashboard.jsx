@@ -894,6 +894,11 @@ function OwnerAppointments() {
   const [exceptions, setExceptions] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false)
+  const [rescheduleData, setRescheduleData] = useState({ id: null, new_date: '', new_time: '', reason: '' })
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [rejectData, setRejectData] = useState({ id: null, reason: '' })
 
   const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado']
   const defaultSchedule = { start_time: '09:00', end_time: '18:00', slot_duration_minutes: 60, buffer_minutes: 15, is_active: true }
@@ -943,6 +948,70 @@ function OwnerAppointments() {
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
     }
+  }
+
+  const handleAccept = async (id) => {
+    if (!confirm('¿Confirma que desea ACEPTAR esta cita?')) return
+    try {
+      await authApi.put(`/appointments/${id}/accept`)
+      alert('Cita aceptada exitosamente. Se ha notificado al cliente.')
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleReject = async () => {
+    if (!rejectData.id) return
+    try {
+      await authApi.put(`/appointments/${rejectData.id}/reject`, { reason: rejectData.reason })
+      alert('Cita rechazada. Se ha notificado al cliente.')
+      setShowRejectModal(false)
+      setRejectData({ id: null, reason: '' })
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleReschedule = async () => {
+    if (!rescheduleData.id || !rescheduleData.new_date || !rescheduleData.new_time) {
+      return alert('Complete la nueva fecha y hora')
+    }
+    try {
+      await authApi.put(`/appointments/${rescheduleData.id}/reschedule`, {
+        new_date: rescheduleData.new_date,
+        new_time: rescheduleData.new_time,
+        reason: rescheduleData.reason
+      })
+      alert('Propuesta de reprogramacion enviada al cliente.')
+      setShowRescheduleModal(false)
+      setRescheduleData({ id: null, new_date: '', new_time: '', reason: '' })
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleNoShow = async (id) => {
+    if (!confirm('¿Confirma que el cliente NO ASISTIO a esta cita?')) return
+    try {
+      await authApi.put(`/appointments/${id}/mark-no-show`)
+      alert('Cita marcada como no asistida.')
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const openRejectModal = (id) => {
+    setRejectData({ id, reason: '' })
+    setShowRejectModal(true)
+  }
+
+  const openRescheduleModal = (id) => {
+    setRescheduleData({ id, new_date: '', new_time: '', reason: '' })
+    setShowRescheduleModal(true)
   }
 
   const handleSaveAvailability = async (dayOfWeek, schedule) => {
@@ -1019,7 +1088,28 @@ function OwnerAppointments() {
 
       {activeTab === 'appointments' && (
         <>
-          {appointments.length > 0 ? (
+          <div className="filter-tabs" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button className={`filter-btn ${statusFilter === 'all' ? 'active' : ''}`} onClick={() => setStatusFilter('all')}>
+              Todas ({appointments.length})
+            </button>
+            <button className={`filter-btn ${statusFilter === 'solicitada' ? 'active' : ''}`} onClick={() => setStatusFilter('solicitada')}>
+              Pendientes ({appointments.filter(a => a.status === 'solicitada').length})
+            </button>
+            <button className={`filter-btn ${statusFilter === 'aceptada' ? 'active' : ''}`} onClick={() => setStatusFilter('aceptada')}>
+              Aceptadas ({appointments.filter(a => a.status === 'aceptada').length})
+            </button>
+            <button className={`filter-btn ${statusFilter === 'reprogramada' ? 'active' : ''}`} onClick={() => setStatusFilter('reprogramada')}>
+              Reprogramadas ({appointments.filter(a => a.status === 'reprogramada').length})
+            </button>
+            <button className={`filter-btn ${statusFilter === 'realizada' ? 'active' : ''}`} onClick={() => setStatusFilter('realizada')}>
+              Realizadas ({appointments.filter(a => a.status === 'realizada').length})
+            </button>
+            <button className={`filter-btn ${statusFilter === 'cancelada' ? 'active' : ''}`} onClick={() => setStatusFilter('cancelada')}>
+              Canceladas ({appointments.filter(a => a.status === 'cancelada' || a.status === 'rechazada').length})
+            </button>
+          </div>
+
+          {appointments.filter(a => statusFilter === 'all' || a.status === statusFilter || (statusFilter === 'cancelada' && (a.status === 'cancelada' || a.status === 'rechazada'))).length > 0 ? (
             <div className="table-container">
               <table className="owner-table">
                 <thead>
@@ -1034,7 +1124,7 @@ function OwnerAppointments() {
                   </tr>
                 </thead>
                 <tbody>
-                  {appointments.map(a => (
+                  {appointments.filter(a => statusFilter === 'all' || a.status === statusFilter || (statusFilter === 'cancelada' && (a.status === 'cancelada' || a.status === 'rechazada'))).map(a => (
                     <tr key={a.id}>
                       <td>{new Date(a.scheduled_date).toLocaleDateString()}</td>
                       <td>{a.scheduled_time}</td>
@@ -1045,13 +1135,26 @@ function OwnerAppointments() {
                         <span style={{marginRight: '0.5rem'}}>Host: {a.host_completed ? '✅' : '⏳'}</span>
                         <span>Cliente: {a.guest_completed ? '✅' : '⏳'}</span>
                       </td>
-                      <td>
-                        {a.status === 'aceptada' && !a.host_completed && (
-                          <button onClick={() => handleHostComplete(a.id)} className="btn btn-small btn-success">
-                            Marcar Visita Completada
-                          </button>
+                      <td style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                        {a.status === 'solicitada' && (
+                          <>
+                            <button onClick={() => handleAccept(a.id)} className="btn btn-small btn-success">Aceptar</button>
+                            <button onClick={() => openRejectModal(a.id)} className="btn btn-small btn-danger">Rechazar</button>
+                            <button onClick={() => openRescheduleModal(a.id)} className="btn btn-small btn-secondary">Reprogramar</button>
+                          </>
                         )}
-                        {a.status === 'realizada' && <span className="text-success">Visita Completada</span>}
+                        {a.status === 'aceptada' && !a.host_completed && (
+                          <>
+                            <button onClick={() => handleHostComplete(a.id)} className="btn btn-small btn-success">
+                              Marcar Completada
+                            </button>
+                            <button onClick={() => handleNoShow(a.id)} className="btn btn-small btn-warning">No Asistio</button>
+                          </>
+                        )}
+                        {a.status === 'realizada' && <span className="text-success">Completada</span>}
+                        {a.status === 'rechazada' && <span className="text-danger">Rechazada</span>}
+                        {a.status === 'cancelada' && <span className="text-muted">Cancelada</span>}
+                        {a.status === 'no_asistida' && <span className="text-warning">No Asistio</span>}
                       </td>
                     </tr>
                   ))}
@@ -1060,7 +1163,7 @@ function OwnerAppointments() {
             </div>
           ) : (
             <div className="empty-state">
-              <p>No hay citas registradas</p>
+              <p>No hay citas {statusFilter !== 'all' ? `con estado "${statusLabels[statusFilter] || statusFilter}"` : 'registradas'}</p>
             </div>
           )}
         </>
@@ -1166,6 +1269,77 @@ function OwnerAppointments() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {showRejectModal && (
+        <div className="modal-overlay" onClick={() => setShowRejectModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>Rechazar Cita</h3>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Motivo del rechazo (opcional):</label>
+                <textarea
+                  value={rejectData.reason}
+                  onChange={e => setRejectData({ ...rejectData, reason: e.target.value })}
+                  rows={3}
+                  className="form-control"
+                  placeholder="Explique brevemente el motivo..."
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={handleReject} className="btn btn-danger">Rechazar Cita</button>
+              <button onClick={() => setShowRejectModal(false)} className="btn btn-secondary">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRescheduleModal && (
+        <div className="modal-overlay" onClick={() => setShowRescheduleModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>Proponer Nueva Fecha</h3>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Nueva fecha:</label>
+                <input
+                  type="date"
+                  value={rescheduleData.new_date}
+                  onChange={e => setRescheduleData({ ...rescheduleData, new_date: e.target.value })}
+                  className="form-control"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+              <div className="form-group">
+                <label>Nueva hora:</label>
+                <input
+                  type="time"
+                  value={rescheduleData.new_time}
+                  onChange={e => setRescheduleData({ ...rescheduleData, new_time: e.target.value })}
+                  className="form-control"
+                />
+              </div>
+              <div className="form-group">
+                <label>Motivo (opcional):</label>
+                <textarea
+                  value={rescheduleData.reason}
+                  onChange={e => setRescheduleData({ ...rescheduleData, reason: e.target.value })}
+                  rows={2}
+                  className="form-control"
+                  placeholder="Explique el motivo de la reprogramacion..."
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={handleReschedule} className="btn btn-primary">Enviar Propuesta</button>
+              <button onClick={() => setShowRescheduleModal(false)} className="btn btn-secondary">Cancelar</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
