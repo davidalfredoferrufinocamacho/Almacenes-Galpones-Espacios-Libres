@@ -3,7 +3,9 @@ const { body, validationResult } = require('express-validator');
 const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
-const { generateId, getClientInfo } = require('../utils/helpers');
+const { generateId, getClientInfo, generateContractNumber, generateContractHash, calculateEndDate } = require('../utils/helpers');
+const { getLegalClausesForContract } = require('../utils/legalTexts');
+const { notifyContractCreated } = require('../utils/notificationsService');
 const { notifyDepositPaid, notifyRemainingPaid, notifyRefundProcessed } = require('../utils/notificationsService');
 
 const router = express.Router();
@@ -197,6 +199,17 @@ router.post('/remaining/:reservation_id', authenticateToken, requireRole('GUEST'
       return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido' });
     }
 
+    // Verificar que no exista contrato previo
+    const existingContract = db.prepare('SELECT id FROM contracts WHERE reservation_id = ?').get(reservation.id);
+    if (existingContract) {
+      return res.status(400).json({ error: 'Ya existe un contrato para esta reservacion', contract_id: existingContract.id });
+    }
+
+    // Validar datos FROZEN
+    if (!reservation.frozen_space_data) {
+      return res.status(400).json({ error: 'La reservacion no tiene datos contractuales congelados' });
+    }
+
     const paymentId = generateId();
     const clientInfo = getClientInfo(req);
 
@@ -219,10 +232,91 @@ router.post('/remaining/:reservation_id', authenticateToken, requireRole('GUEST'
 
     notifyRemainingPaid(reservation.id, reservation.remaining_amount, req);
 
+    // === GENERAR CONTRATO AUTOMATICAMENTE ===
+    const guest = db.prepare('SELECT * FROM users WHERE id = ?').get(reservation.guest_id);
+    const host = db.prepare('SELECT * FROM users WHERE id = ?').get(reservation.host_id);
+
+    const contractId = generateId();
+    const contractNumber = generateContractNumber();
+    const startDate = new Date().toISOString().split('T')[0];
+    const endDate = calculateEndDate(startDate, reservation.period_type, reservation.period_quantity);
+    const hostPayoutAmount = reservation.total_amount - reservation.commission_amount;
+
+    const frozenSpace = JSON.parse(reservation.frozen_space_data);
+    const frozenPricing = reservation.frozen_pricing ? JSON.parse(reservation.frozen_pricing) : null;
+
+    const contractData = JSON.stringify({
+      parties: {
+        guest: {
+          id: guest.id,
+          name: guest.person_type === 'juridica' ? guest.company_name : `${guest.first_name} ${guest.last_name}`,
+          person_type: guest.person_type,
+          ci: guest.ci,
+          nit: guest.nit
+        },
+        host: {
+          id: host.id,
+          name: host.person_type === 'juridica' ? host.company_name : `${host.first_name} ${host.last_name}`,
+          person_type: host.person_type,
+          ci: host.ci,
+          nit: host.nit
+        }
+      },
+      space: frozenSpace,
+      pricing_snapshot: frozenPricing,
+      rental: {
+        sqm: reservation.sqm_requested,
+        period_type: reservation.period_type,
+        period_quantity: reservation.period_quantity,
+        start_date: startDate,
+        end_date: endDate,
+        total_amount: reservation.total_amount,
+        deposit_amount: reservation.deposit_amount,
+        commission_amount: reservation.commission_amount,
+        host_payout: hostPayoutAmount
+      },
+      legal: getLegalClausesForContract()
+    });
+
+    const contractHash = generateContractHash(contractData);
+
+    db.prepare(`
+      INSERT INTO contracts (
+        id, reservation_id, space_id, guest_id, host_id, contract_number,
+        contract_data, contract_hash,
+        frozen_space_data, frozen_video_url, frozen_video_duration, frozen_description,
+        frozen_pricing, frozen_deposit_percentage, frozen_commission_percentage,
+        frozen_price_per_sqm_applied, frozen_snapshot_created_at,
+        sqm, period_type, period_quantity, start_date, end_date,
+        total_amount, deposit_amount, commission_amount, host_payout_amount, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    `).run(
+      contractId, reservation.id, reservation.space_id, reservation.guest_id, reservation.host_id,
+      contractNumber, contractData, contractHash,
+      reservation.frozen_space_data, reservation.frozen_video_url, reservation.frozen_video_duration,
+      reservation.frozen_description, reservation.frozen_pricing, reservation.frozen_deposit_percentage,
+      reservation.frozen_commission_percentage, reservation.frozen_price_per_sqm_applied,
+      reservation.frozen_snapshot_created_at,
+      reservation.sqm_requested, reservation.period_type,
+      reservation.period_quantity, startDate, endDate, reservation.total_amount,
+      reservation.deposit_amount, reservation.commission_amount, hostPayoutAmount
+    );
+
+    logAudit(req.user.id, 'CONTRACT_AUTO_CREATED', 'contracts', contractId, null, {
+      contract_number: contractNumber,
+      triggered_by: 'remaining_payment',
+      payment_id: paymentId,
+      ...clientInfo
+    }, req);
+
+    notifyContractCreated(contractId, req);
+
     res.json({
       payment_id: paymentId,
       amount: reservation.remaining_amount,
-      message: 'Pago restante completado. Proceda a firmar el contrato.'
+      contract_id: contractId,
+      contract_number: contractNumber,
+      message: 'Pago completado y contrato generado automaticamente. Proceda a firmar.'
     });
   } catch (error) {
     console.error('Error:', error);

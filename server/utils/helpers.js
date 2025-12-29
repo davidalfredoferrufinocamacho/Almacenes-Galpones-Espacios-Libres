@@ -90,6 +90,30 @@ function getClientInfo(req) {
   };
 }
 
+function generateContractHash(contractData) {
+  const dataString = typeof contractData === 'string' ? contractData : JSON.stringify(contractData);
+  return crypto.createHash('sha256').update(dataString).digest('hex');
+}
+
+function generateSignatureCertificate(contractId, signerId, signerRole, contractHash, clientInfo) {
+  const certificateData = {
+    contract_id: contractId,
+    signer_id: signerId,
+    signer_role: signerRole,
+    contract_hash: contractHash,
+    timestamp: clientInfo.timestamp,
+    ip_address: clientInfo.ip,
+    user_agent: clientInfo.userAgent,
+    certificate_version: '1.0'
+  };
+  const certificateString = JSON.stringify(certificateData);
+  const certificateHash = crypto.createHash('sha256').update(certificateString).digest('hex');
+  return {
+    ...certificateData,
+    certificate_hash: certificateHash
+  };
+}
+
 module.exports = {
   generateId,
   generateContractNumber,
@@ -103,5 +127,7 @@ module.exports = {
   calculateEndDate,
   formatCurrency,
   getClientInfo,
+  generateContractHash,
+  generateSignatureCertificate,
   OTP_EXPIRATION_MINUTES
 };

@@ -6,7 +6,7 @@ const PDFDocument = require('pdfkit');
 const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
-const { generateId, generateContractNumber, generateInvoiceNumber, generateOTP, hashOTP, verifyOTP, getOTPExpiration, isOTPExpired, calculateEndDate, getClientInfo, OTP_EXPIRATION_MINUTES } = require('../utils/helpers');
+const { generateId, generateContractNumber, generateInvoiceNumber, generateOTP, hashOTP, verifyOTP, getOTPExpiration, isOTPExpired, calculateEndDate, getClientInfo, generateContractHash, generateSignatureCertificate, OTP_EXPIRATION_MINUTES } = require('../utils/helpers');
 const { getLegalClausesForContract, getActiveLegalText } = require('../utils/legalTexts');
 const { notifyContractCreated, notifyContractSigned } = require('../utils/notificationsService');
 
@@ -140,6 +140,9 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
       }
     });
 
+    // Generar hash criptografico del contrato
+    const contractHash = generateContractHash(contractData);
+
     // =====================================================================
     // FROZEN CONTRACTUAL SNAPSHOT - Copiar datos inmutables desde reservations
     // IMPORTANTE: Estos datos provienen del snapshot creado al pagar anticipo
@@ -148,16 +151,16 @@ router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), 
     db.prepare(`
       INSERT INTO contracts (
         id, reservation_id, space_id, guest_id, host_id, contract_number,
-        contract_data,
+        contract_data, contract_hash,
         frozen_space_data, frozen_video_url, frozen_video_duration, frozen_description,
         frozen_pricing, frozen_deposit_percentage, frozen_commission_percentage,
         frozen_price_per_sqm_applied, frozen_snapshot_created_at,
         sqm, period_type, period_quantity, start_date, end_date,
         total_amount, deposit_amount, commission_amount, host_payout_amount, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     `).run(
       contractId, reservation.id, reservation.space_id, reservation.guest_id, reservation.host_id,
-      contractNumber, contractData,
+      contractNumber, contractData, contractHash,
       reservation.frozen_space_data, reservation.frozen_video_url, reservation.frozen_video_duration,
       reservation.frozen_description, reservation.frozen_pricing, reservation.frozen_deposit_percentage,
       reservation.frozen_commission_percentage, reservation.frozen_price_per_sqm_applied,
@@ -236,6 +239,12 @@ router.post('/:id/sign', authenticateToken, [
     const clientInfo = getClientInfo(req);
     const otpHashForRecord = pendingOtp.otp_hash;
 
+    // Generar certificado de firma digital
+    const signatureCertificate = generateSignatureCertificate(
+      req.params.id, req.user.id, isGuest ? 'GUEST' : 'HOST', 
+      contract.contract_hash, clientInfo
+    );
+
     if (isGuest) {
       if (contract.guest_signed) {
         return res.status(400).json({ error: 'Ya ha firmado este contrato' });
@@ -248,12 +257,18 @@ router.post('/:id/sign', authenticateToken, [
           guest_sign_ip = ?,
           guest_sign_otp = ?,
           guest_sign_user_agent = ?,
+          guest_sign_certificate = ?,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(clientInfo.timestamp, clientInfo.ip, otpHashForRecord, clientInfo.userAgent, req.params.id);
+      `).run(clientInfo.timestamp, clientInfo.ip, otpHashForRecord, clientInfo.userAgent, JSON.stringify(signatureCertificate), req.params.id);
 
       const signDisclaimerGuest = getActiveLegalText('disclaimer_firma');
-      logAudit(req.user.id, 'CONTRACT_SIGNED_GUEST_MOCK', 'contracts', req.params.id, null, { ...clientInfo, disclaimer: signDisclaimerGuest.content, disclaimer_version: signDisclaimerGuest.version }, req);
+      logAudit(req.user.id, 'CONTRACT_SIGNED_GUEST', 'contracts', req.params.id, null, { 
+        ...clientInfo, 
+        certificate_hash: signatureCertificate.certificate_hash,
+        disclaimer: signDisclaimerGuest.content, 
+        disclaimer_version: signDisclaimerGuest.version 
+      }, req);
       notifyContractSigned(req.params.id, 'GUEST', req);
     } else {
       if (contract.host_signed) {
@@ -271,10 +286,11 @@ router.post('/:id/sign', authenticateToken, [
           host_sign_ip = ?,
           host_sign_otp = ?,
           host_sign_user_agent = ?,
+          host_sign_certificate = ?,
           status = 'signed',
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(clientInfo.timestamp, clientInfo.ip, otpHashForRecord, clientInfo.userAgent, req.params.id);
+      `).run(clientInfo.timestamp, clientInfo.ip, otpHashForRecord, clientInfo.userAgent, JSON.stringify(signatureCertificate), req.params.id);
 
       db.prepare(`
         UPDATE reservations SET status = 'contract_signed', updated_at = CURRENT_TIMESTAMP WHERE id = ?
@@ -286,8 +302,13 @@ router.post('/:id/sign', authenticateToken, [
       `).run(contract.reservation_id);
 
       const signDisclaimerHost = getActiveLegalText('disclaimer_firma');
-      logAudit(req.user.id, 'CONTRACT_SIGNED_HOST_MOCK', 'contracts', req.params.id, null, { ...clientInfo, disclaimer: signDisclaimerHost.content, disclaimer_version: signDisclaimerHost.version }, req);
-      logAudit(req.user.id, 'ESCROW_RELEASED_MOCK', 'contracts', req.params.id, null, { reservation_id: contract.reservation_id, disclaimer: 'MOCK - Sin transferencia real de fondos' }, req);
+      logAudit(req.user.id, 'CONTRACT_SIGNED_HOST', 'contracts', req.params.id, null, { 
+        ...clientInfo, 
+        certificate_hash: signatureCertificate.certificate_hash,
+        disclaimer: signDisclaimerHost.content, 
+        disclaimer_version: signDisclaimerHost.version 
+      }, req);
+      logAudit(req.user.id, 'ESCROW_RELEASED', 'contracts', req.params.id, null, { reservation_id: contract.reservation_id }, req);
       notifyContractSigned(req.params.id, 'HOST', req);
     }
 

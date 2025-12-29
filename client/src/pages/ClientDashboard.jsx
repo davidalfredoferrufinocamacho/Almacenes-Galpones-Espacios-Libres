@@ -304,8 +304,11 @@ function ClientReservations() {
   }
 
   const handlePayRemaining = async (id) => {
+    if (!confirm('Confirma el pago del saldo restante? Se generara automaticamente el contrato.')) return
     try {
-      await api.post(`/payments/remaining/${id}`, { payment_method: 'card' })
+      const res = await api.post(`/payments/remaining/${id}`, { payment_method: 'card' })
+      alert(`Pago completado. Contrato #${res.data.contract_number} generado. Por favor proceda a firmarlo en la seccion de Contratos.`)
+      setSelected(null)
       loadReservations()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al procesar pago')
@@ -319,6 +322,18 @@ function ClientReservations() {
       loadReservations()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al procesar reembolso')
+    }
+  }
+
+  const handleRejectAfterVisit = async (id) => {
+    if (!confirm('Rechazar el espacio despues de la visita? Se procesara el reembolso de su anticipo.')) return
+    try {
+      const res = await api.post(`/client/reservations/${id}/reject-after-visit`)
+      alert(`Espacio rechazado. Reembolso de Bs. ${res.data.refund_amount} procesado.`)
+      setSelected(null)
+      loadReservations()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
     }
   }
 
@@ -480,6 +495,29 @@ function ClientReservations() {
               </div>
             )}
             <div className="modal-footer">
+              {selected.status === 'visit_completed' && (
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%', marginBottom: '1rem' }}>
+                  <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '8px', textAlign: 'center', flex: 1, minWidth: '200px' }}>
+                    <h4 style={{ marginBottom: '0.5rem', color: '#92400e' }}>Visita Completada</h4>
+                    <p style={{ fontSize: '0.9rem', color: '#78350f', marginBottom: '1rem' }}>Elija una opcion para continuar:</p>
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      <button 
+                        onClick={() => handleRejectAfterVisit(selected.id)} 
+                        className="btn btn-outline"
+                        style={{ borderColor: '#dc2626', color: '#dc2626' }}
+                      >
+                        No me interesa (Reembolso)
+                      </button>
+                      <button 
+                        onClick={() => handlePayRemaining(selected.id)} 
+                        className="btn btn-primary"
+                      >
+                        Pagar Saldo (Bs. {selected.remaining_amount?.toLocaleString()})
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               {['pending', 'confirmed'].includes(selected.status) && (
                 <button onClick={() => handleCancel(selected.id)} className="btn btn-danger">Cancelar Reservacion</button>
               )}
