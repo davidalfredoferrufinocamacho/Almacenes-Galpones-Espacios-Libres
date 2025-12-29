@@ -1331,7 +1331,7 @@ function ClientAppointments() {
 
   return (
     <div>
-      <h1>Citas</h1>
+      <h1>Mis Citas</h1>
 
       {appointments.length === 0 ? (
         <div className="empty-state">
