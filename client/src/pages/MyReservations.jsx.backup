@@ -13,7 +13,7 @@ function MyReservations() {
 
   const loadReservations = async () => {
     try {
-      const response = await api.get('/client/reservations')
+      const response = await api.get('/users/my-reservations')
       setReservations(response.data)
     } catch (error) {
       console.error('Error loading reservations:', error)
