@@ -5,7 +5,16 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, getClientInfo } = require('../utils/helpers');
 const { getAntiBypassForRole } = require('../utils/legalTexts');
-const { notifyAppointmentRequested, notifyAppointmentAccepted, notifyAppointmentRejected, notifyAppointmentRescheduled } = require('../utils/notificationsService');
+const { 
+  notifyAppointmentRequested, 
+  notifyAppointmentAccepted, 
+  notifyAppointmentRejected, 
+  notifyAppointmentRescheduled,
+  notifyAppointmentRescheduleAccepted,
+  notifyAppointmentRescheduleRejected,
+  notifyAppointmentNoShow,
+  notifyAppointmentCancelledByHost
+} = require('../utils/notificationsService');
 
 const router = express.Router();
 
@@ -260,6 +269,8 @@ router.put('/:id/accept-reschedule', authenticateToken, requireRole('GUEST'), (r
       { status: oldStatus, scheduled_date: appointment.scheduled_date, scheduled_time: appointment.scheduled_time }, 
       { status: 'aceptada', scheduled_date: appointment.reschedule_date, scheduled_time: appointment.reschedule_time }, req);
 
+    notifyAppointmentRescheduleAccepted(req.params.id, req);
+
     res.json({ message: 'Reprogramacion aceptada' });
   } catch (error) {
     console.error('Error:', error);
@@ -291,6 +302,8 @@ router.put('/:id/reject-reschedule', authenticateToken, requireRole('GUEST'), (r
 
     logAudit(req.user.id, 'APPOINTMENT_RESCHEDULE_REJECTED', 'appointments', req.params.id, 
       { status: oldStatus }, { status: 'cancelada' }, req);
+
+    notifyAppointmentRescheduleRejected(req.params.id, req);
 
     res.json({ message: 'Reprogramacion rechazada, cita cancelada' });
   } catch (error) {
@@ -347,6 +360,8 @@ router.put('/:id/mark-no-show', authenticateToken, requireRole('HOST'), (req, re
 
     logAudit(req.user.id, 'APPOINTMENT_NO_SHOW', 'appointments', req.params.id, 
       { status: oldStatus }, { status: 'no_asistida' }, req);
+
+    notifyAppointmentNoShow(req.params.id, req);
 
     res.json({ message: 'Visita marcada como no asistida' });
   } catch (error) {

@@ -190,6 +190,97 @@ function notifyAppointmentRescheduled(appointmentId, newDate, newTime, reason, r
   });
 }
 
+function notifyAppointmentRescheduleAccepted(appointmentId, req) {
+  const appointment = db.prepare(`
+    SELECT a.*, s.title as space_title
+    FROM appointments a
+    JOIN spaces s ON a.space_id = s.id
+    WHERE a.id = ?
+  `).get(appointmentId);
+
+  if (!appointment) return;
+
+  sendNotification({
+    eventType: 'appointment_reschedule_accepted',
+    recipientId: appointment.host_id,
+    channel: 'email',
+    payload: {
+      space_title: appointment.space_title,
+      scheduled_date: appointment.scheduled_date,
+      scheduled_time: appointment.scheduled_time
+    },
+    req
+  });
+}
+
+function notifyAppointmentRescheduleRejected(appointmentId, req) {
+  const appointment = db.prepare(`
+    SELECT a.*, s.title as space_title
+    FROM appointments a
+    JOIN spaces s ON a.space_id = s.id
+    WHERE a.id = ?
+  `).get(appointmentId);
+
+  if (!appointment) return;
+
+  sendNotification({
+    eventType: 'appointment_reschedule_rejected',
+    recipientId: appointment.host_id,
+    channel: 'email',
+    payload: {
+      space_title: appointment.space_title
+    },
+    req
+  });
+}
+
+function notifyAppointmentNoShow(appointmentId, req) {
+  const appointment = db.prepare(`
+    SELECT a.*, s.title as space_title
+    FROM appointments a
+    JOIN spaces s ON a.space_id = s.id
+    WHERE a.id = ?
+  `).get(appointmentId);
+
+  if (!appointment) return;
+
+  sendNotification({
+    eventType: 'appointment_noshow',
+    recipientId: appointment.guest_id,
+    channel: 'email',
+    payload: {
+      space_title: appointment.space_title,
+      scheduled_date: appointment.scheduled_date,
+      scheduled_time: appointment.scheduled_time
+    },
+    req
+  });
+}
+
+function notifyAppointmentCancelledByHost(appointmentId, reason, req) {
+  const appointment = db.prepare(`
+    SELECT a.*, s.title as space_title
+    FROM appointments a
+    JOIN spaces s ON a.space_id = s.id
+    WHERE a.id = ?
+  `).get(appointmentId);
+
+  if (!appointment) return;
+
+  sendNotification({
+    eventType: 'appointment_cancelled_by_host',
+    recipientId: appointment.guest_id,
+    channel: 'email',
+    payload: {
+      space_title: appointment.space_title,
+      scheduled_date: appointment.scheduled_date,
+      scheduled_time: appointment.scheduled_time,
+      reason: reason || 'No especificado'
+    },
+    req
+  });
+}
+
 function notifyDepositPaid(reservationId, amount, req) {
   const reservation = db.prepare(`
     SELECT r.*, s.title as space_title, s.host_id
@@ -380,6 +471,10 @@ module.exports = {
   notifyAppointmentAccepted,
   notifyAppointmentRejected,
   notifyAppointmentRescheduled,
+  notifyAppointmentRescheduleAccepted,
+  notifyAppointmentRescheduleRejected,
+  notifyAppointmentNoShow,
+  notifyAppointmentCancelledByHost,
   notifyDepositPaid,
   notifyRemainingPaid,
   notifyContractCreated,
