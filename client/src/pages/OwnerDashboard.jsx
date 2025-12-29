@@ -913,10 +913,12 @@ function OwnerAppointments() {
   }
 
   const statusLabels = {
-    pending: 'Pendiente',
-    confirmed: 'Confirmada',
-    completed: 'Completada',
-    cancelled: 'Cancelada'
+    solicitada: 'Solicitada',
+    aceptada: 'Aceptada',
+    rechazada: 'Rechazada',
+    reprogramada: 'Reprogramada',
+    realizada: 'Realizada',
+    no_asistida: 'No Asistida'
   }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
@@ -940,20 +942,20 @@ function OwnerAppointments() {
           <tbody>
             {appointments.map(a => (
               <tr key={a.id}>
-                <td>{new Date(a.appointment_date).toLocaleDateString()}</td>
-                <td>{a.appointment_time}</td>
+                <td>{new Date(a.scheduled_date).toLocaleDateString()}</td>
+                <td>{a.scheduled_time}</td>
                 <td>{a.space_title}</td>
                 <td>{a.guest_name}</td>
-                <td><span className={`status-badge status-${a.status}`}>{statusLabels[a.status]}</span></td>
+                <td><span className={`status-badge status-${a.status}`}>{statusLabels[a.status] || a.status}</span></td>
                 <td>
-                  {a.status === 'pending' && (
+                  {a.status === 'solicitada' && (
                     <>
-                      <button onClick={() => handleStatusChange(a.id, 'confirmed')} className="btn btn-small btn-success">Confirmar</button>
-                      <button onClick={() => handleStatusChange(a.id, 'cancelled')} className="btn btn-small btn-danger" style={{marginLeft: '0.5rem'}}>Cancelar</button>
+                      <button onClick={() => handleStatusChange(a.id, 'aceptada')} className="btn btn-small btn-success">Aceptar</button>
+                      <button onClick={() => handleStatusChange(a.id, 'rechazada')} className="btn btn-small btn-danger" style={{marginLeft: '0.5rem'}}>Rechazar</button>
                     </>
                   )}
-                  {a.status === 'confirmed' && (
-                    <button onClick={() => handleStatusChange(a.id, 'completed')} className="btn btn-small btn-primary">Completar</button>
+                  {a.status === 'aceptada' && (
+                    <button onClick={() => handleStatusChange(a.id, 'realizada')} className="btn btn-small btn-primary">Marcar Realizada</button>
                   )}
                 </td>
               </tr>

@@ -164,6 +164,12 @@
 .status-completed { background: #dbeafe; color: #1e40af; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
 .status-draft { background: #e2e8f0; color: #475569; }
+.status-solicitada { background: #fef3c7; color: #92400e; }
+.status-aceptada { background: #d1fae5; color: #065f46; }
+.status-rechazada { background: #fee2e2; color: #991b1b; }
+.status-reprogramada { background: #e0e7ff; color: #3730a3; }
+.status-realizada { background: #dbeafe; color: #1e40af; }
+.status-no_asistida { background: #fce7f3; color: #9d174d; }
 .status-published { background: #d1fae5; color: #065f46; }
 .status-held { background: #fef3c7; color: #92400e; }
 .status-released { background: #d1fae5; color: #065f46; }

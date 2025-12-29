@@ -71,8 +71,8 @@ router.get('/dashboard', (req, res) => {
 
     const appointments = db.prepare(`
       SELECT COUNT(*) as total,
-             SUM(CASE WHEN a.status = 'pending' THEN 1 ELSE 0 END) as pending,
-             SUM(CASE WHEN a.status = 'confirmed' THEN 1 ELSE 0 END) as confirmed
+             SUM(CASE WHEN a.status = 'solicitada' THEN 1 ELSE 0 END) as pending,
+             SUM(CASE WHEN a.status = 'aceptada' THEN 1 ELSE 0 END) as confirmed
       FROM appointments a
       JOIN spaces s ON a.space_id = s.id
       WHERE s.host_id = ?
@@ -538,7 +538,7 @@ router.get('/appointments', (req, res) => {
       JOIN spaces s ON a.space_id = s.id
       JOIN users u ON a.guest_id = u.id
       WHERE s.host_id = ?
-      ORDER BY a.appointment_date DESC, a.appointment_time DESC
+      ORDER BY a.scheduled_date DESC, a.scheduled_time DESC
     `).all(userId);
 
     res.json(appointments);
@@ -552,6 +552,11 @@ router.put('/appointments/:id', (req, res) => {
   try {
     const userId = req.user.id;
     const { status } = req.body;
+    
+    const validStatuses = ['solicitada', 'aceptada', 'rechazada', 'reprogramada', 'realizada', 'no_asistida'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Estado invalido' });
+    }
     
     const appointment = db.prepare(`
       SELECT a.* FROM appointments a
