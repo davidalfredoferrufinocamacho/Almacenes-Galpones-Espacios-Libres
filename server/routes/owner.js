@@ -69,6 +69,31 @@ router.get('/dashboard', (req, res) => {
       WHERE s.host_id = ?
     `).get(userId);
 
+    const appointments = db.prepare(`
+      SELECT COUNT(*) as total,
+             SUM(CASE WHEN a.status = 'pending' THEN 1 ELSE 0 END) as pending,
+             SUM(CASE WHEN a.status = 'confirmed' THEN 1 ELSE 0 END) as confirmed
+      FROM appointments a
+      JOIN spaces s ON a.space_id = s.id
+      WHERE s.host_id = ?
+    `).get(userId);
+
+    const contracts = db.prepare(`
+      SELECT COUNT(*) as total,
+             SUM(CASE WHEN c.status = 'active' THEN 1 ELSE 0 END) as active
+      FROM contracts c
+      JOIN spaces s ON c.space_id = s.id
+      WHERE s.host_id = ?
+    `).get(userId);
+
+    const payments = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM payments p
+      JOIN reservations r ON p.reservation_id = r.id
+      JOIN spaces s ON r.space_id = s.id
+      WHERE s.host_id = ?
+    `).get(userId);
+
     const recentReservations = db.prepare(`
       SELECT r.id, r.created_at, r.status, r.total_amount,
              r.period_type, r.period_quantity,
@@ -82,25 +107,14 @@ router.get('/dashboard', (req, res) => {
       LIMIT 5
     `).all(userId);
 
-    const monthlyEarnings = db.prepare(`
-      SELECT 
-        strftime('%Y-%m', p.created_at) as month,
-        SUM(p.amount) as amount
-      FROM payments p
-      JOIN reservations r ON p.reservation_id = r.id
-      JOIN spaces s ON r.space_id = s.id
-      WHERE s.host_id = ? AND p.status = 'completed'
-      GROUP BY strftime('%Y-%m', p.created_at)
-      ORDER BY month DESC
-      LIMIT 12
-    `).all(userId);
-
     res.json({
       spaces: spaces || { total: 0, published: 0, draft: 0 },
       reservations: reservations || { total: 0, active: 0, completed: 0, pending: 0 },
       earnings: earnings || { total_earned: 0, in_escrow: 0, released: 0 },
-      recentReservations,
-      monthlyEarnings
+      appointments: appointments || { total: 0, pending: 0, confirmed: 0 },
+      contracts: contracts || { total: 0, active: 0 },
+      payments: payments || { total: 0 },
+      recentReservations
     });
   } catch (error) {
     console.error('Error:', error);
@@ -513,68 +527,103 @@ router.get('/payments', (req, res) => {
   }
 });
 
-router.get('/calendar', (req, res) => {
+router.get('/appointments', (req, res) => {
   try {
     const userId = req.user.id;
-    const { year, month } = req.query;
-    
-    const startDate = `${year || new Date().getFullYear()}-${String(month || new Date().getMonth() + 1).padStart(2, '0')}-01`;
-    const endDate = `${year || new Date().getFullYear()}-${String(month || new Date().getMonth() + 1).padStart(2, '0')}-31`;
-    
-    const events = db.prepare(`
-      SELECT r.id, r.start_date, r.end_date, r.status,
-             s.id as space_id, s.title as space_title,
-             u.first_name || ' ' || u.last_name as guest_name
-      FROM reservations r
-      JOIN spaces s ON r.space_id = s.id
-      JOIN users u ON r.user_id = u.id
+    const appointments = db.prepare(`
+      SELECT a.*, s.title as space_title,
+             u.first_name || ' ' || u.last_name as guest_name,
+             u.email as guest_email, u.phone as guest_phone
+      FROM appointments a
+      JOIN spaces s ON a.space_id = s.id
+      JOIN users u ON a.guest_id = u.id
       WHERE s.host_id = ?
-        AND ((r.start_date BETWEEN ? AND ?) OR (r.end_date BETWEEN ? AND ?)
-             OR (r.start_date <= ? AND r.end_date >= ?))
-        AND r.status NOT IN ('cancelled', 'refunded')
-      ORDER BY r.start_date
-    `).all(userId, startDate, endDate, startDate, endDate, startDate, endDate);
-
-    const spaces = db.prepare(`
-      SELECT id, title FROM spaces WHERE host_id = ? AND status = 'published'
+      ORDER BY a.appointment_date DESC, a.appointment_time DESC
     `).all(userId);
 
-    res.json({ events, spaces });
+    res.json(appointments);
   } catch (error) {
     console.error('Error:', error);
-    res.status(500).json({ error: 'Error al obtener calendario' });
+    res.status(500).json({ error: 'Error al obtener citas' });
   }
 });
 
-router.get('/statements', (req, res) => {
+router.put('/appointments/:id', (req, res) => {
   try {
     const userId = req.user.id;
-    const statements = db.prepare(`
-      SELECT * FROM host_statements WHERE host_id = ? ORDER BY period_end DESC
-    `).all(userId);
-
-    res.json(statements);
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'Error al obtener estados de cuenta' });
-  }
-});
-
-router.get('/statements/:id', (req, res) => {
-  try {
-    const userId = req.user.id;
-    const statement = db.prepare(`
-      SELECT * FROM host_statements WHERE id = ? AND host_id = ?
+    const { status } = req.body;
+    
+    const appointment = db.prepare(`
+      SELECT a.* FROM appointments a
+      JOIN spaces s ON a.space_id = s.id
+      WHERE a.id = ? AND s.host_id = ?
     `).get(req.params.id, userId);
 
-    if (!statement) {
-      return res.status(404).json({ error: 'Estado de cuenta no encontrado' });
+    if (!appointment) {
+      return res.status(404).json({ error: 'Cita no encontrada' });
     }
 
-    res.json(statement);
+    db.prepare(`UPDATE appointments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(status, req.params.id);
+
+    res.json({ message: 'Cita actualizada' });
   } catch (error) {
     console.error('Error:', error);
-    res.status(500).json({ error: 'Error al obtener estado de cuenta' });
+    res.status(500).json({ error: 'Error al actualizar cita' });
+  }
+});
+
+router.get('/contracts', (req, res) => {
+  try {
+    const userId = req.user.id;
+    const contracts = db.prepare(`
+      SELECT c.*, s.title as space_title,
+             u.first_name || ' ' || u.last_name as guest_name,
+             u.email as guest_email
+      FROM contracts c
+      JOIN spaces s ON c.space_id = s.id
+      JOIN users u ON c.guest_id = u.id
+      WHERE s.host_id = ?
+      ORDER BY c.created_at DESC
+    `).all(userId);
+
+    res.json(contracts);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener contratos' });
+  }
+});
+
+router.get('/income', (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const summary = db.prepare(`
+      SELECT 
+        COALESCE(SUM(CASE WHEN p.status = 'completed' THEN p.amount ELSE 0 END), 0) as total,
+        COALESCE(SUM(CASE WHEN p.escrow_status = 'held' THEN p.amount ELSE 0 END), 0) as in_escrow,
+        COALESCE(SUM(CASE WHEN p.escrow_status = 'released' THEN p.amount ELSE 0 END), 0) as released
+      FROM payments p
+      JOIN reservations r ON p.reservation_id = r.id
+      JOIN spaces s ON r.space_id = s.id
+      WHERE s.host_id = ?
+    `).get(userId);
+
+    const income = db.prepare(`
+      SELECT p.id, p.amount, p.status, p.payment_type as concept, p.created_at,
+             s.title as space_title,
+             u.first_name || ' ' || u.last_name as guest_name
+      FROM payments p
+      JOIN reservations r ON p.reservation_id = r.id
+      JOIN spaces s ON r.space_id = s.id
+      JOIN users u ON r.guest_id = u.id
+      WHERE s.host_id = ? AND p.status = 'completed'
+      ORDER BY p.created_at DESC
+    `).all(userId);
+
+    res.json({ income, summary: summary || { total: 0, in_escrow: 0, released: 0 } });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener ingresos' });
   }
 });
 

@@ -53,6 +53,23 @@
   font-size: 1.25rem;
 }
 
+.nav-label {
+  flex: 1;
+}
+
+.nav-count {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.owner-nav-item.active .nav-count {
+  background: #4f46e5;
+}
+
 .owner-main {
   flex: 1;
   padding: 2rem;

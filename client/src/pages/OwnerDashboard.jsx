@@ -63,25 +63,49 @@ function OwnerDashboard() {
     setAntiBypassAccepting(false)
   }
 
+  const [menuCounts, setMenuCounts] = useState({})
+
+  useEffect(() => {
+    loadMenuCounts()
+  }, [])
+
+  const loadMenuCounts = async () => {
+    try {
+      const res = await api.get('/dashboard')
+      setMenuCounts({
+        appointments: res.data.appointments?.pending || 0,
+        contracts: res.data.contracts?.total || 0,
+        income: res.data.earnings?.total_earned || 0,
+        spaces: res.data.spaces?.total || 0,
+        payments: res.data.payments?.total || 0,
+        reservations: res.data.reservations?.total || 0
+      })
+    } catch (error) {
+      console.error('Error loading menu counts:', error)
+    }
+  }
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'spaces', label: 'Mis Espacios', icon: '🏢' },
-    { id: 'reservations', label: 'Reservaciones', icon: '📅' },
-    { id: 'payments', label: 'Pagos/Ingresos', icon: '💰' },
-    { id: 'calendar', label: 'Calendario', icon: '📆' },
-    { id: 'statements', label: 'Estados de Cuenta', icon: '📄' },
-    { id: 'profile', label: 'Mi Perfil', icon: '👤' }
+    { id: 'appointments', label: 'Citas', icon: '📅', count: menuCounts.appointments },
+    { id: 'contracts', label: 'Contratos', icon: '📝', count: menuCounts.contracts },
+    { id: 'income', label: 'Ingresos', icon: '💵', count: menuCounts.income, isCurrency: true },
+    { id: 'spaces', label: 'Mis Espacios', icon: '🏢', count: menuCounts.spaces },
+    { id: 'profile', label: 'Mi Perfil', icon: '👤' },
+    { id: 'payments', label: 'Pagos', icon: '💰', count: menuCounts.payments },
+    { id: 'reservations', label: 'Reservaciones', icon: '📋', count: menuCounts.reservations }
   ]
 
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard': return <OwnerHome />
+      case 'appointments': return <OwnerAppointments />
+      case 'contracts': return <OwnerContracts />
+      case 'income': return <OwnerIncome />
       case 'spaces': return <OwnerSpaces />
-      case 'reservations': return <OwnerReservations />
-      case 'payments': return <OwnerPayments />
-      case 'calendar': return <OwnerCalendar />
-      case 'statements': return <OwnerStatements />
       case 'profile': return <OwnerProfile />
+      case 'payments': return <OwnerPayments />
+      case 'reservations': return <OwnerReservations />
       default: return <OwnerHome />
     }
   }
@@ -126,6 +150,11 @@ function OwnerDashboard() {
             >
               <span className="nav-icon">{item.icon}</span>
               <span className="nav-label">{item.label}</span>
+              {item.count !== undefined && item.count !== null && (
+                <span className="nav-count">
+                  {item.isCurrency ? `Bs. ${item.count.toLocaleString()}` : item.count}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -156,17 +185,17 @@ function OwnerHome() {
       <h1>Dashboard</h1>
       <div className="owner-stats-grid">
         <div className="stat-card">
-          <h3>Espacios</h3>
-          <div className="stat-value">{data.spaces?.total || 0}</div>
+          <h3>Citas Pendientes</h3>
+          <div className="stat-value">{data.appointments?.pending || 0}</div>
           <div className="stat-detail">
-            {data.spaces?.published || 0} publicados, {data.spaces?.draft || 0} borradores
+            {data.appointments?.total || 0} citas totales
           </div>
         </div>
         <div className="stat-card">
-          <h3>Reservaciones</h3>
-          <div className="stat-value">{data.reservations?.total || 0}</div>
+          <h3>Contratos</h3>
+          <div className="stat-value">{data.contracts?.total || 0}</div>
           <div className="stat-detail">
-            {data.reservations?.active || 0} activas, {data.reservations?.pending || 0} pendientes
+            {data.contracts?.active || 0} activos
           </div>
         </div>
         <div className="stat-card">
@@ -177,9 +206,25 @@ function OwnerHome() {
           </div>
         </div>
         <div className="stat-card">
-          <h3>Liberado</h3>
-          <div className="stat-value">Bs. {(data.earnings?.released || 0).toLocaleString()}</div>
-          <div className="stat-detail">Fondos disponibles</div>
+          <h3>Mis Espacios</h3>
+          <div className="stat-value">{data.spaces?.total || 0}</div>
+          <div className="stat-detail">
+            {data.spaces?.published || 0} publicados
+          </div>
+        </div>
+        <div className="stat-card">
+          <h3>Pagos</h3>
+          <div className="stat-value">{data.payments?.total || 0}</div>
+          <div className="stat-detail">
+            Pagos recibidos
+          </div>
+        </div>
+        <div className="stat-card">
+          <h3>Reservaciones</h3>
+          <div className="stat-value">{data.reservations?.total || 0}</div>
+          <div className="stat-detail">
+            {data.reservations?.active || 0} activas
+          </div>
         </div>
       </div>
 
@@ -206,21 +251,6 @@ function OwnerHome() {
           <p>No hay reservaciones recientes</p>
         )}
       </div>
-
-      {data.monthlyEarnings?.length > 0 && (
-        <div className="owner-section">
-          <h2>Ingresos Mensuales</h2>
-          <div className="monthly-chart">
-            {data.monthlyEarnings.slice(0, 6).reverse().map(m => (
-              <div key={m.month} className="chart-bar">
-                <div className="bar" style={{height: `${Math.min(100, (m.amount / Math.max(...data.monthlyEarnings.map(x => x.amount))) * 100)}%`}}></div>
-                <div className="bar-label">{m.month}</div>
-                <div className="bar-value">Bs. {m.amount?.toLocaleString()}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -862,159 +892,207 @@ function OwnerPayments() {
   )
 }
 
-function OwnerCalendar() {
-  const [data, setData] = useState({ events: [], spaces: [] })
+function OwnerAppointments() {
+  const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(true)
-  const [year, setYear] = useState(new Date().getFullYear())
-  const [month, setMonth] = useState(new Date().getMonth() + 1)
-
-  useEffect(() => { loadData() }, [year, month])
-
-  const loadData = () => {
-    setLoading(true)
-    api.get(`/calendar?year=${year}&month=${month}`).then(res => {
-      setData(res.data)
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }
-
-  const daysInMonth = new Date(year, month, 0).getDate()
-  const firstDay = new Date(year, month - 1, 1).getDay()
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
-  const blanks = Array.from({ length: firstDay }, (_, i) => i)
-
-  const getEventsForDay = (day) => {
-    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    return data.events.filter(e => e.start_date <= dateStr && e.end_date >= dateStr)
-  }
-
-  if (loading) return <div className="loading"><div className="spinner"></div></div>
-
-  return (
-    <div>
-      <h1>Calendario de Ocupacion</h1>
-      
-      <div className="calendar-controls">
-        <button onClick={() => { if (month === 1) { setMonth(12); setYear(year - 1) } else setMonth(month - 1) }} className="btn btn-small">&lt;</button>
-        <span className="calendar-month">{new Date(year, month - 1).toLocaleString('es', { month: 'long', year: 'numeric' })}</span>
-        <button onClick={() => { if (month === 12) { setMonth(1); setYear(year + 1) } else setMonth(month + 1) }} className="btn btn-small">&gt;</button>
-      </div>
-
-      <div className="calendar-grid">
-        <div className="calendar-header">
-          {['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'].map(d => (
-            <div key={d} className="calendar-day-name">{d}</div>
-          ))}
-        </div>
-        <div className="calendar-body">
-          {blanks.map(b => <div key={`blank-${b}`} className="calendar-day empty"></div>)}
-          {days.map(day => {
-            const events = getEventsForDay(day)
-            return (
-              <div key={day} className={`calendar-day ${events.length > 0 ? 'has-events' : ''}`}>
-                <span className="day-number">{day}</span>
-                {events.slice(0, 2).map(e => (
-                  <div key={e.id} className={`calendar-event status-${e.status}`} title={`${e.space_title} - ${e.guest_name}`}>
-                    {e.space_title?.substring(0, 10)}
-                  </div>
-                ))}
-                {events.length > 2 && <div className="more-events">+{events.length - 2} mas</div>}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {data.spaces?.length > 0 && (
-        <div className="owner-section" style={{marginTop: '1.5rem'}}>
-          <h3>Espacios Publicados</h3>
-          <div className="space-list">
-            {data.spaces.map(s => (
-              <span key={s.id} className="space-tag">{s.title}</span>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function OwnerStatements() {
-  const [statements, setStatements] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState(null)
 
   useEffect(() => {
-    api.get('/statements').then(res => {
-      setStatements(res.data)
+    api.get('/appointments').then(res => {
+      setAppointments(res.data)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
 
-  const viewDetails = async (id) => {
+  const handleStatusChange = async (id, status) => {
     try {
-      const res = await api.get(`/statements/${id}`)
-      setSelected(res.data)
+      await api.put(`/appointments/${id}`, { status })
+      setAppointments(appointments.map(a => a.id === id ? { ...a, status } : a))
     } catch (error) {
-      alert('Error al cargar estado de cuenta')
+      alert('Error al actualizar cita')
     }
+  }
+
+  const statusLabels = {
+    pending: 'Pendiente',
+    confirmed: 'Confirmada',
+    completed: 'Completada',
+    cancelled: 'Cancelada'
   }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
-      <h1>Estados de Cuenta</h1>
+      <h1>Citas</h1>
       
-      {statements.length > 0 ? (
+      {appointments.length > 0 ? (
         <table className="owner-table">
           <thead>
             <tr>
-              <th>Periodo</th>
-              <th>Reservaciones</th>
-              <th>Ingresos Brutos</th>
-              <th>Comisiones</th>
-              <th>Neto a Pagar</th>
+              <th>Fecha</th>
+              <th>Hora</th>
+              <th>Espacio</th>
+              <th>Cliente</th>
               <th>Estado</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {statements.map(s => (
-              <tr key={s.id}>
-                <td>{s.period_start} - {s.period_end}</td>
-                <td>{s.total_reservations}</td>
-                <td>Bs. {s.gross_earnings?.toLocaleString()}</td>
-                <td>Bs. {s.total_commissions?.toLocaleString()}</td>
-                <td>Bs. {s.net_payout?.toLocaleString()}</td>
-                <td><span className={`status-badge status-${s.status}`}>{s.status}</span></td>
-                <td><button onClick={() => viewDetails(s.id)} className="btn btn-small">Ver</button></td>
+            {appointments.map(a => (
+              <tr key={a.id}>
+                <td>{new Date(a.appointment_date).toLocaleDateString()}</td>
+                <td>{a.appointment_time}</td>
+                <td>{a.space_title}</td>
+                <td>{a.guest_name}</td>
+                <td><span className={`status-badge status-${a.status}`}>{statusLabels[a.status]}</span></td>
+                <td>
+                  {a.status === 'pending' && (
+                    <>
+                      <button onClick={() => handleStatusChange(a.id, 'confirmed')} className="btn btn-small btn-success">Confirmar</button>
+                      <button onClick={() => handleStatusChange(a.id, 'cancelled')} className="btn btn-small btn-danger" style={{marginLeft: '0.5rem'}}>Cancelar</button>
+                    </>
+                  )}
+                  {a.status === 'confirmed' && (
+                    <button onClick={() => handleStatusChange(a.id, 'completed')} className="btn btn-small btn-primary">Completar</button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       ) : (
         <div className="empty-state">
-          <p>No hay estados de cuenta generados</p>
+          <p>No hay citas registradas</p>
         </div>
       )}
+    </div>
+  )
+}
 
-      {selected && (
-        <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h2>Estado de Cuenta</h2>
-            <div className="detail-grid">
-              <div><strong>Periodo:</strong> {selected.period_start} - {selected.period_end}</div>
-              <div><strong>Reservaciones:</strong> {selected.total_reservations}</div>
-              <div><strong>Ingresos Brutos:</strong> Bs. {selected.gross_earnings?.toLocaleString()}</div>
-              <div><strong>Comisiones:</strong> Bs. {selected.total_commissions?.toLocaleString()}</div>
-              <div><strong>Retenciones:</strong> Bs. {selected.total_withholdings?.toLocaleString()}</div>
-              <div><strong>Neto a Pagar:</strong> Bs. {selected.net_payout?.toLocaleString()}</div>
-              <div><strong>Estado:</strong> {selected.status}</div>
-              <div><strong>Fecha Pago:</strong> {selected.paid_at || 'Pendiente'}</div>
-            </div>
-            <button onClick={() => setSelected(null)} className="btn btn-secondary" style={{marginTop: '1rem'}}>Cerrar</button>
-          </div>
+function OwnerContracts() {
+  const [contracts, setContracts] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/contracts').then(res => {
+      setContracts(res.data)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
+
+  const statusLabels = {
+    draft: 'Borrador',
+    pending: 'Pendiente',
+    active: 'Activo',
+    completed: 'Completado',
+    cancelled: 'Cancelado'
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Contratos</h1>
+      
+      {contracts.length > 0 ? (
+        <table className="owner-table">
+          <thead>
+            <tr>
+              <th>Numero</th>
+              <th>Espacio</th>
+              <th>Cliente</th>
+              <th>Inicio</th>
+              <th>Fin</th>
+              <th>Monto</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {contracts.map(c => (
+              <tr key={c.id}>
+                <td>{c.contract_number || c.id.substring(0, 8)}</td>
+                <td>{c.space_title}</td>
+                <td>{c.guest_name}</td>
+                <td>{new Date(c.start_date).toLocaleDateString()}</td>
+                <td>{new Date(c.end_date).toLocaleDateString()}</td>
+                <td>Bs. {c.total_amount?.toLocaleString()}</td>
+                <td><span className={`status-badge status-${c.status}`}>{statusLabels[c.status]}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="empty-state">
+          <p>No hay contratos registrados</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OwnerIncome() {
+  const [data, setData] = useState({ income: [], summary: {} })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/income').then(res => {
+      setData(res.data)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div>
+      <h1>Ingresos</h1>
+      
+      <div className="owner-stats-grid">
+        <div className="stat-card">
+          <h3>Total Ingresos</h3>
+          <div className="stat-value">Bs. {(data.summary?.total || 0).toLocaleString()}</div>
+        </div>
+        <div className="stat-card">
+          <h3>En Deposito</h3>
+          <div className="stat-value">Bs. {(data.summary?.in_escrow || 0).toLocaleString()}</div>
+        </div>
+        <div className="stat-card">
+          <h3>Liberado</h3>
+          <div className="stat-value">Bs. {(data.summary?.released || 0).toLocaleString()}</div>
+        </div>
+      </div>
+
+      {data.income?.length > 0 ? (
+        <div className="owner-section" style={{marginTop: '1.5rem'}}>
+          <h2>Historial de Ingresos</h2>
+          <table className="owner-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Espacio</th>
+                <th>Cliente</th>
+                <th>Concepto</th>
+                <th>Monto</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.income.map(i => (
+                <tr key={i.id}>
+                  <td>{new Date(i.created_at).toLocaleDateString()}</td>
+                  <td>{i.space_title}</td>
+                  <td>{i.guest_name}</td>
+                  <td>{i.concept}</td>
+                  <td>Bs. {i.amount?.toLocaleString()}</td>
+                  <td><span className={`status-badge status-${i.status}`}>{i.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="empty-state">
+          <p>No hay ingresos registrados</p>
         </div>
       )}
     </div>
