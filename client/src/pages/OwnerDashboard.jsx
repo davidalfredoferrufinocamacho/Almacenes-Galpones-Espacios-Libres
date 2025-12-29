@@ -803,7 +803,7 @@ function OwnerPayments() {
 
       <div className="owner-stats-grid" style={{marginBottom: '1.5rem'}}>
         <div className="stat-card">
-          <h3>Total Recibido</h3>
+          <h3>Total Pagado</h3>
           <div className="stat-value">Bs. {(data.summary?.total_received || 0).toLocaleString()}</div>
         </div>
         <div className="stat-card">
