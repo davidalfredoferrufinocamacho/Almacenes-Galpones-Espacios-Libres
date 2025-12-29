@@ -750,6 +750,237 @@ router.post('/:id/calendar/toggle', authenticateToken, requireRole('HOST'), (req
   }
 });
 
+// Endpoint para obtener slots disponibles de un espacio (público)
+router.get('/:id/available-slots', optionalAuth, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date, from_date, to_date } = req.query;
+    
+    // Verificar que el espacio existe, está publicado y tiene calendario activo
+    const space = db.prepare(`
+      SELECT s.id, s.title, s.host_id, s.is_calendar_active, s.status,
+             u.first_name as host_first_name, u.last_name as host_last_name
+      FROM spaces s
+      JOIN users u ON s.host_id = u.id
+      WHERE s.id = ? AND s.status = 'published' AND s.is_calendar_active = 1
+    `).get(id);
+    
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado o sin calendario activo' });
+    }
+    
+    // Obtener disponibilidad semanal del host
+    const availability = db.prepare(`
+      SELECT day_of_week, start_time, end_time, slot_duration_minutes, buffer_minutes, is_active
+      FROM host_availability
+      WHERE space_id = ? AND is_active = 1
+      ORDER BY day_of_week
+    `).all(id);
+    
+    // Obtener excepciones (fechas bloqueadas)
+    const exceptions = db.prepare(`
+      SELECT exception_date, reason
+      FROM host_availability_exceptions
+      WHERE space_id = ? AND is_blocked = 1
+    `).all(id);
+    
+    // Obtener citas ya agendadas para evitar conflictos
+    const existingAppointments = db.prepare(`
+      SELECT scheduled_date, scheduled_time, duration_minutes
+      FROM appointments
+      WHERE space_id = ? AND status IN ('solicitada', 'aceptada', 'reprogramada')
+    `).all(id);
+    
+    // Generar slots disponibles
+    const slots = [];
+    const startDate = date ? new Date(date) : new Date();
+    const endDate = to_date ? new Date(to_date) : new Date(startDate.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 días por defecto
+    
+    const blockedDates = new Set(exceptions.map(e => e.exception_date));
+    const bookedSlots = new Set(existingAppointments.map(a => `${a.scheduled_date}_${a.scheduled_time}`));
+    
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0];
+      const dayOfWeek = d.getDay();
+      
+      // Saltar fechas bloqueadas
+      if (blockedDates.has(dateStr)) continue;
+      
+      // Buscar disponibilidad para este día de la semana
+      const dayAvailability = availability.find(a => a.day_of_week === dayOfWeek);
+      if (!dayAvailability) continue;
+      
+      // Generar slots para este día
+      const slotDuration = dayAvailability.slot_duration_minutes || 60;
+      const buffer = dayAvailability.buffer_minutes || 15;
+      const [startHour, startMin] = dayAvailability.start_time.split(':').map(Number);
+      const [endHour, endMin] = dayAvailability.end_time.split(':').map(Number);
+      
+      let currentTime = startHour * 60 + startMin;
+      const endTime = endHour * 60 + endMin;
+      
+      while (currentTime + slotDuration <= endTime) {
+        const hours = Math.floor(currentTime / 60);
+        const mins = currentTime % 60;
+        const timeStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+        
+        // Verificar si el slot no está ocupado
+        if (!bookedSlots.has(`${dateStr}_${timeStr}`)) {
+          slots.push({
+            date: dateStr,
+            time: timeStr,
+            duration_minutes: slotDuration,
+            day_name: ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][dayOfWeek]
+          });
+        }
+        
+        currentTime += slotDuration + buffer;
+      }
+    }
+    
+    res.json({
+      space_id: space.id,
+      space_title: space.title,
+      host_name: `${space.host_first_name} ${space.host_last_name}`,
+      availability: availability,
+      exceptions: exceptions,
+      available_slots: slots
+    });
+  } catch (error) {
+    console.error('Error getting available slots:', error);
+    res.status(500).json({ error: 'Error al obtener disponibilidad' });
+  }
+});
+
+// Endpoint para solicitar una cita (requiere autenticación)
+router.post('/:id/request-appointment', authenticateToken, [
+  body('scheduled_date').notEmpty().isISO8601(),
+  body('scheduled_time').notEmpty().matches(/^\d{2}:\d{2}$/),
+  body('notes').optional().trim()
+], (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  
+  try {
+    const { id: spaceId } = req.params;
+    const { scheduled_date, scheduled_time, notes } = req.body;
+    const guestId = req.user.id;
+    
+    // Verificar que el usuario es un cliente (GUEST)
+    if (req.user.role !== 'GUEST') {
+      return res.status(403).json({ error: 'Solo los clientes pueden solicitar citas' });
+    }
+    
+    // Verificar que el espacio existe y tiene calendario activo
+    const space = db.prepare(`
+      SELECT s.id, s.host_id, s.title, s.is_calendar_active, s.status,
+             u.email as host_email, u.first_name as host_first_name
+      FROM spaces s
+      JOIN users u ON s.host_id = u.id
+      WHERE s.id = ? AND s.status = 'published' AND s.is_calendar_active = 1
+    `).get(spaceId);
+    
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado o sin calendario activo' });
+    }
+    
+    // Verificar que no es el mismo host
+    if (space.host_id === guestId) {
+      return res.status(400).json({ error: 'No puedes agendar cita en tu propio espacio' });
+    }
+    
+    // Verificar disponibilidad del día
+    const dayOfWeek = new Date(scheduled_date).getDay();
+    const dayAvailability = db.prepare(`
+      SELECT * FROM host_availability 
+      WHERE space_id = ? AND day_of_week = ? AND is_active = 1
+    `).get(spaceId, dayOfWeek);
+    
+    if (!dayAvailability) {
+      return res.status(400).json({ error: 'El host no tiene disponibilidad para este día' });
+    }
+    
+    // Verificar que la fecha no está bloqueada
+    const exception = db.prepare(`
+      SELECT id FROM host_availability_exceptions 
+      WHERE space_id = ? AND exception_date = ? AND is_blocked = 1
+    `).get(spaceId, scheduled_date);
+    
+    if (exception) {
+      return res.status(400).json({ error: 'Esta fecha está bloqueada por el propietario' });
+    }
+    
+    // Verificar que el slot no está ocupado
+    const existingAppointment = db.prepare(`
+      SELECT id FROM appointments 
+      WHERE space_id = ? AND scheduled_date = ? AND scheduled_time = ?
+      AND status IN ('solicitada', 'aceptada', 'reprogramada')
+    `).get(spaceId, scheduled_date, scheduled_time);
+    
+    if (existingAppointment) {
+      return res.status(400).json({ error: 'Este horario ya está ocupado' });
+    }
+    
+    // Verificar que el guest no tenga ya una cita pendiente para este espacio
+    const pendingAppointment = db.prepare(`
+      SELECT id FROM appointments 
+      WHERE space_id = ? AND guest_id = ? AND status IN ('solicitada', 'aceptada')
+    `).get(spaceId, guestId);
+    
+    if (pendingAppointment) {
+      return res.status(400).json({ error: 'Ya tienes una cita pendiente para este espacio' });
+    }
+    
+    // Crear la cita
+    const appointmentId = generateId();
+    const cancelToken = generateId();
+    const confirmationToken = generateId();
+    
+    db.prepare(`
+      INSERT INTO appointments (
+        id, space_id, guest_id, host_id, scheduled_date, scheduled_time,
+        status, notes, cancel_token, confirmation_token, duration_minutes,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'solicitada', ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      appointmentId, spaceId, guestId, space.host_id, scheduled_date, scheduled_time,
+      notes || null, cancelToken, confirmationToken, dayAvailability.slot_duration_minutes || 60
+    );
+    
+    // Enviar notificación al host
+    try {
+      const { notifyAppointmentRequested } = require('../utils/notificationsService');
+      notifyAppointmentRequested(appointmentId, req);
+    } catch (notifError) {
+      console.error('Error sending notification:', notifError);
+    }
+    
+    logAudit(guestId, 'APPOINTMENT_REQUESTED', 'appointments', appointmentId, null, {
+      space_id: spaceId,
+      scheduled_date,
+      scheduled_time
+    }, req);
+    
+    res.status(201).json({
+      message: 'Solicitud de cita enviada exitosamente',
+      appointment: {
+        id: appointmentId,
+        space_id: spaceId,
+        space_title: space.title,
+        scheduled_date,
+        scheduled_time,
+        status: 'solicitada',
+        cancel_token: cancelToken
+      }
+    });
+  } catch (error) {
+    console.error('Error requesting appointment:', error);
+    res.status(500).json({ error: 'Error al solicitar cita' });
+  }
+});
+
 router.get('/config/homepage', (req, res) => {
   try {
     const keys = [

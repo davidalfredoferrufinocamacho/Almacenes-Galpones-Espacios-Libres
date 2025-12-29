@@ -343,3 +343,119 @@
 .login-buttons .btn {
   width: 100%;
 }
+
+/* Seccion de Citas */
+.appointments-card {
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  border: 2px solid var(--secondary);
+}
+
+.appointments-card h3 {
+  color: var(--primary);
+  margin-bottom: 1rem;
+}
+
+.appointment-info {
+  color: var(--text-light);
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.no-slots {
+  color: var(--text-light);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.login-prompt-small {
+  text-align: center;
+}
+
+.login-prompt-small p {
+  color: var(--text-light);
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.appointment-success .success-message {
+  color: #2e7d32;
+  background: #e8f5e9;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+/* Modal de Citas */
+.appointment-modal {
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.slots-container {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.day-slots {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.day-slots:last-child {
+  border-bottom: none;
+}
+
+.day-slots h4 {
+  color: var(--primary);
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.slots-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.slot-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.slot-btn:hover {
+  border-color: var(--secondary);
+  background: var(--light);
+}
+
+.slot-btn.selected {
+  background: var(--secondary);
+  color: white;
+  border-color: var(--secondary);
+}
+
+.selected-slot-info {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.selected-slot-info p {
+  margin-bottom: 1rem;
+}
+
+.selected-slot-info textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
+  font-family: inherit;
+}

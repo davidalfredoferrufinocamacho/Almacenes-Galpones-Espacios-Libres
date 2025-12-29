@@ -429,25 +429,6 @@ router.get('/invoices/:id', (req, res) => {
   }
 });
 
-router.get('/appointments', (req, res) => {
-  try {
-    const appointments = db.prepare(`
-      SELECT a.*, s.title as space_title, s.city,
-             u.first_name || ' ' || u.last_name as host_name
-      FROM appointments a
-      JOIN spaces s ON a.space_id = s.id
-      JOIN users u ON s.host_id = u.id
-      WHERE a.guest_id = ?
-      ORDER BY a.date DESC, a.time DESC
-    `).all(req.user.id);
-
-    res.json(appointments);
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'Error al obtener citas' });
-  }
-});
-
 router.get('/my-spaces', (req, res) => {
   try {
     const spaces = db.prepare(`
@@ -1014,10 +995,13 @@ router.get('/appointments', (req, res) => {
 // Cliente marca visita como completada
 router.put('/appointments/:id/guest-complete', (req, res) => {
   try {
+    // Buscar cita - LEFT JOIN para manejar citas con y sin reservation_id
     const appointment = db.prepare(`
-      SELECT a.*, r.status as reservation_status, r.remaining_amount, r.id as reservation_id
+      SELECT a.*, s.title as space_title,
+             r.status as reservation_status, r.remaining_amount, r.id as res_id
       FROM appointments a
-      JOIN reservations r ON a.reservation_id = r.id
+      JOIN spaces s ON a.space_id = s.id
+      LEFT JOIN reservations r ON a.reservation_id = r.id
       WHERE a.id = ? AND a.guest_id = ? AND a.status = 'aceptada'
     `).get(req.params.id, req.user.id);
 
@@ -1034,18 +1018,24 @@ router.put('/appointments/:id/guest-complete', (req, res) => {
     
     if (updated.host_completed && updated.guest_completed) {
       db.prepare(`UPDATE appointments SET status = 'realizada', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(req.params.id);
-      db.prepare(`UPDATE reservations SET status = 'visit_completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(appointment.reservation_id);
+      
+      // Solo actualizar reservacion si existe
+      if (appointment.reservation_id) {
+        db.prepare(`UPDATE reservations SET status = 'visit_completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(appointment.reservation_id);
+      }
     }
 
     logAudit(req.user.id, 'APPOINTMENT_GUEST_COMPLETED', 'appointments', req.params.id, null, {
-      both_completed: updated.host_completed && updated.guest_completed
+      both_completed: updated.host_completed && updated.guest_completed,
+      has_reservation: !!appointment.reservation_id
     }, req);
 
     res.json({ 
       message: 'Visita marcada como completada',
       both_completed: updated.host_completed && updated.guest_completed,
-      remaining_amount: appointment.remaining_amount,
-      can_pay_full: updated.host_completed && updated.guest_completed
+      remaining_amount: appointment.remaining_amount || 0,
+      can_pay_full: updated.host_completed && updated.guest_completed && !!appointment.reservation_id,
+      has_reservation: !!appointment.reservation_id
     });
   } catch (error) {
     console.error('Error:', error);
