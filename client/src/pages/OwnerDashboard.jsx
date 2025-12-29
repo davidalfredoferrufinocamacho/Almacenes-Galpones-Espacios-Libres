@@ -925,7 +925,7 @@ function OwnerAppointments() {
 
   const loadAvailability = async () => {
     try {
-      const res = await api.get(`/spaces/${selectedSpace}/availability`)
+      const res = await api.get(`/owner/spaces/${selectedSpace}/availability`)
       setAvailability(res.data?.availability || [])
       setExceptions(res.data?.exceptions || [])
     } catch (error) {
@@ -947,7 +947,7 @@ function OwnerAppointments() {
   const handleSaveAvailability = async (dayOfWeek, schedule) => {
     setSaving(true)
     try {
-      await api.post(`/spaces/${selectedSpace}/availability`, {
+      await api.post(`/owner/spaces/${selectedSpace}/availability`, {
         day_of_week: dayOfWeek,
         ...schedule
       })
@@ -961,7 +961,7 @@ function OwnerAppointments() {
   const handleBlockDate = async (date, reason = '') => {
     setSaving(true)
     try {
-      await api.post(`/spaces/${selectedSpace}/availability/exceptions`, {
+      await api.post(`/owner/spaces/${selectedSpace}/availability/exceptions`, {
         exception_date: date,
         is_blocked: true,
         reason
@@ -975,7 +975,7 @@ function OwnerAppointments() {
 
   const handleDeleteException = async (id) => {
     try {
-      await api.delete(`/spaces/${selectedSpace}/availability/exceptions/${id}`)
+      await api.delete(`/owner/spaces/${selectedSpace}/availability/exceptions/${id}`)
       loadAvailability()
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -985,7 +985,7 @@ function OwnerAppointments() {
   const handleActivateCalendar = async () => {
     setSaving(true)
     try {
-      await api.put(`/spaces/${selectedSpace}/calendar/activate`)
+      await api.put(`/owner/spaces/${selectedSpace}/calendar/activate`)
       alert('Calendario activado correctamente')
       loadData()
     } catch (error) {

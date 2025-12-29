@@ -1175,6 +1175,25 @@ router.delete('/spaces/:id/availability/exceptions/:exceptionId', (req, res) => 
   }
 });
 
+// Activar calendario de citas para un espacio
+router.put('/spaces/:id/calendar/activate', (req, res) => {
+  try {
+    const space = db.prepare('SELECT id, appointments_enabled FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    db.prepare('UPDATE spaces SET appointments_enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'CALENDAR_ACTIVATED', 'spaces', req.params.id, { appointments_enabled: space.appointments_enabled }, { appointments_enabled: 1 }, req);
+
+    res.json({ message: 'Calendario de citas activado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al activar calendario' });
+  }
+});
+
 // Obtener citas del host (calendario)
 router.get('/appointments', (req, res) => {
   try {
