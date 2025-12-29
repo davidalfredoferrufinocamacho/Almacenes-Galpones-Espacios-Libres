@@ -146,7 +146,15 @@ function AdminDashboard() {
       {sidebarOpen && <div className="admin-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       
       <div className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <h2>Panel Admin</h2>
+        <div className="admin-sidebar-header">
+          <h2>Portal del Admin</h2>
+          {currentAdmin && (
+            <p className="admin-name">
+              {currentAdmin.first_name} {currentAdmin.last_name}
+              {isSuperAdmin && <span className="super-badge">Super</span>}
+            </p>
+          )}
+        </div>
         <nav>
           {menuItems.map(item => (
             <button 

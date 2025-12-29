@@ -38,7 +38,7 @@ function Header() {
                 <Link to="/propietario" onClick={closeMenu}>Portal del Propietario</Link>
               )}
               {user?.role === 'ADMIN' && (
-                <Link to="/admin" onClick={closeMenu}>Admin</Link>
+                <Link to="/admin" onClick={closeMenu}>Portal del Admin</Link>
               )}
               <button onClick={handleLogout} className="btn-logout">
                 Salir

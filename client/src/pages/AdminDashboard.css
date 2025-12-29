@@ -36,6 +36,39 @@
   padding: 2rem 1rem;
 }
 
+.admin-sidebar-header {
+  padding: 0 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding-bottom: 1rem;
+}
+
+.admin-sidebar-header h2 {
+  color: white;
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.admin-name {
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.7);
+  margin: 0.5rem 0 0 0;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.super-badge {
+  background: #f59e0b;
+  color: #000;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
 .admin-sidebar h2 {
   color: white;
   margin-bottom: 2rem;
