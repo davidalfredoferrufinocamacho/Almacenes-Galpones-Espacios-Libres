@@ -31,12 +31,14 @@ function Header() {
           <Link to="/espacios" onClick={closeMenu}>Espacios</Link>
           {isAuthenticated ? (
             <>
-              <Link to="/dashboard" onClick={closeMenu}>Mi Panel</Link>
+              {user?.role === 'GUEST' && (
+                <>
+                  <Link to="/dashboard" onClick={closeMenu}>Mi Panel</Link>
+                  <Link to="/cliente" onClick={closeMenu}>Mi Portal</Link>
+                </>
+              )}
               {user?.role === 'HOST' && (
                 <Link to="/propietario" onClick={closeMenu}>Portal Propietario</Link>
-              )}
-              {user?.role === 'GUEST' && (
-                <Link to="/cliente" onClick={closeMenu}>Mi Portal</Link>
               )}
               {user?.role === 'ADMIN' && (
                 <Link to="/admin" onClick={closeMenu}>Admin</Link>
