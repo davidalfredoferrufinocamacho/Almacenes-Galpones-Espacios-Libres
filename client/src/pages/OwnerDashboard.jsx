@@ -925,12 +925,9 @@ function OwnerAppointments() {
 
   const loadAvailability = async () => {
     try {
-      const [availRes, exceptRes] = await Promise.all([
-        api.get(`/spaces/${selectedSpace}/availability`),
-        api.get(`/spaces/${selectedSpace}/availability/exceptions`)
-      ])
-      setAvailability(availRes.data || [])
-      setExceptions(exceptRes.data || [])
+      const res = await api.get(`/spaces/${selectedSpace}/availability`)
+      setAvailability(res.data?.availability || [])
+      setExceptions(res.data?.exceptions || [])
     } catch (error) {
       console.error('Error loading availability:', error)
     }
