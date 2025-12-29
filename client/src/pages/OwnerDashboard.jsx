@@ -40,7 +40,8 @@ function OwnerDashboard() {
   const loadOwnerName = async () => {
     try {
       const res = await api.get('/profile')
-      setOwnerName(res.data.name || '')
+      const fullName = [res.data.first_name, res.data.last_name].filter(Boolean).join(' ')
+      setOwnerName(fullName || '')
     } catch (error) {
       console.error('Error loading owner name:', error)
     }
@@ -81,9 +82,9 @@ function OwnerDashboard() {
     { id: 'spaces', label: 'Espacios', icon: '🏢' },
     { id: 'invoices', label: 'Facturas', icon: '🧾' },
     { id: 'income', label: 'Ingresos', icon: '💵' },
-    { id: 'profile', label: 'Mi Perfil', icon: '👤' },
     { id: 'payments', label: 'Pagos', icon: '💰' },
-    { id: 'reservations', label: 'Reservaciones', icon: '📋' }
+    { id: 'reservations', label: 'Reservaciones', icon: '📋' },
+    { id: 'profile', label: 'Mi Perfil', icon: '👤' }
   ]
 
   const renderContent = () => {
