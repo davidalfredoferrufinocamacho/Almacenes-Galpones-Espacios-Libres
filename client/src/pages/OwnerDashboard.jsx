@@ -79,7 +79,7 @@ function OwnerDashboard() {
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'appointments', label: 'Citas', icon: '📅' },
     { id: 'contracts', label: 'Contratos', icon: '📝' },
-    { id: 'spaces', label: 'Espacios', icon: '🏢' },
+    { id: 'spaces', label: 'Mis Espacios', icon: '🏢' },
     { id: 'invoices', label: 'Facturas', icon: '🧾' },
     { id: 'income', label: 'Ingresos', icon: '💵' },
     { id: 'payments', label: 'Pagos', icon: '💰' },
