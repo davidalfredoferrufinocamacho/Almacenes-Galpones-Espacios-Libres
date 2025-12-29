@@ -63,13 +63,13 @@ function ClientDashboard() {
   }
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'appointments', label: 'Citas', icon: '📅' },
-    { id: 'contracts', label: 'Contratos', icon: '📝' },
+    { id: 'dashboard', label: 'Mi Dashboard', icon: '📊' },
+    { id: 'appointments', label: 'Mis Citas', icon: '📅' },
+    { id: 'contracts', label: 'Mis Contratos', icon: '📝' },
     { id: 'spaces', label: 'Mis Espacios', icon: '🏢' },
-    { id: 'invoices', label: 'Facturas', icon: '🧾' },
-    { id: 'payments', label: 'Pagos', icon: '💳' },
-    { id: 'reservations', label: 'Reservaciones', icon: '📋' }
+    { id: 'invoices', label: 'Mis Facturas', icon: '🧾' },
+    { id: 'payments', label: 'Mis Pagos', icon: '💳' },
+    { id: 'reservations', label: 'Mis Reservaciones', icon: '📋' }
   ]
 
   const renderContent = () => {
