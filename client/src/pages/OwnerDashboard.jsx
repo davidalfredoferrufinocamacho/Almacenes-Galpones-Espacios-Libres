@@ -263,7 +263,7 @@ function OwnerSpaces() {
 
   const loadSpaces = () => {
     setLoading(true)
-    api.get('/spaces').then(res => {
+    api.get('/owner/spaces').then(res => {
       setSpaces(res.data)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -274,10 +274,10 @@ function OwnerSpaces() {
     setSaving(true)
     try {
       if (form.id) {
-        await api.put(`/spaces/${form.id}`, form)
+        await api.put(`/owner/spaces/${form.id}`, form)
         alert('Espacio actualizado exitosamente')
       } else {
-        await api.post('/spaces', form)
+        await api.post('/owner/spaces', form)
         alert('Espacio creado exitosamente')
       }
       setShowModal(false)
@@ -291,7 +291,7 @@ function OwnerSpaces() {
 
   const handlePublish = async (id) => {
     try {
-      await api.put(`/spaces/${id}/publish`)
+      await api.put(`/owner/spaces/${id}/publish`)
       loadSpaces()
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -300,7 +300,7 @@ function OwnerSpaces() {
 
   const handleUnpublish = async (id) => {
     try {
-      await api.put(`/spaces/${id}/unpublish`)
+      await api.put(`/owner/spaces/${id}/unpublish`)
       loadSpaces()
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -309,7 +309,7 @@ function OwnerSpaces() {
 
   const handleEdit = async (id) => {
     try {
-      const res = await authApi.get(`/spaces/${id}`)
+      const res = await api.get(`/owner/spaces/${id}`)
       setForm(res.data)
       setPhotos(res.data.photos || [])
       setShowModal(true)
@@ -394,7 +394,7 @@ function OwnerSpaces() {
     if (!confirm('¿Estas seguro de eliminar este espacio? Esta accion no se puede deshacer.')) return
     setDeleting(id)
     try {
-      await api.delete(`/spaces/${id}`)
+      await api.delete(`/owner/spaces/${id}`)
       alert('Espacio eliminado exitosamente')
       loadSpaces()
     } catch (error) {
@@ -685,7 +685,7 @@ function OwnerReservations() {
 
   const loadData = () => {
     setLoading(true)
-    const url = filterStatus ? `/reservations?status=${filterStatus}` : '/reservations'
+    const url = filterStatus ? `/owner/reservations?status=${filterStatus}` : '/owner/reservations'
     api.get(url).then(res => {
       setReservations(res.data)
       setLoading(false)
@@ -694,7 +694,7 @@ function OwnerReservations() {
 
   const viewDetails = async (id) => {
     try {
-      const res = await api.get(`/reservations/${id}`)
+      const res = await api.get(`/owner/reservations/${id}`)
       setSelected(res.data)
     } catch (error) {
       alert('Error al cargar detalles')
@@ -808,7 +808,7 @@ function OwnerPayments() {
 
   const loadData = () => {
     setLoading(true)
-    const url = filterStatus ? `/payments?status=${filterStatus}` : '/payments'
+    const url = filterStatus ? `/owner/payments?status=${filterStatus}` : '/owner/payments'
     api.get(url).then(res => {
       setData(res.data)
       setLoading(false)
@@ -905,8 +905,8 @@ function OwnerAppointments() {
   const loadData = async () => {
     try {
       const [aptsRes, spacesRes] = await Promise.all([
-        api.get('/appointments'),
-        api.get('/spaces')
+        api.get('/owner/appointments'),
+        api.get('/owner/spaces')
       ])
       setAppointments(aptsRes.data)
       setSpaces(spacesRes.data)
@@ -935,7 +935,7 @@ function OwnerAppointments() {
 
   const handleHostComplete = async (id) => {
     try {
-      await api.put(`/appointments/${id}/host-complete`)
+      await api.put(`/owner/appointments/${id}/host-complete`)
       setAppointments(appointments.map(a => a.id === id ? { ...a, host_completed: 1 } : a))
       alert('Visita marcada como completada. Esperando confirmacion del cliente.')
       loadData()
@@ -1176,7 +1176,7 @@ function OwnerContracts() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/contracts').then(res => {
+    api.get('/owner/contracts').then(res => {
       setContracts(res.data)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -1237,7 +1237,7 @@ function OwnerIncome() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/income').then(res => {
+    api.get('/owner/income').then(res => {
       setData(res.data)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -1794,8 +1794,8 @@ function OwnerInvoices() {
   const loadInvoices = async () => {
     try {
       const [emitidasRes, recibidasRes] = await Promise.all([
-        api.get('/invoices'),
-        api.get('/invoices/received')
+        api.get('/owner/invoices'),
+        api.get('/owner/invoices/received')
       ])
       setEmitidas(emitidasRes.data || [])
       setRecibidas(recibidasRes.data || [])
