@@ -16,7 +16,7 @@ function MyContracts() {
 
   const loadContracts = async () => {
     try {
-      const response = await api.get('/client/contracts')
+      const response = await api.get('/users/my-contracts')
       setContracts(response.data)
     } catch (error) {
       console.error('Error loading contracts:', error)
