@@ -150,7 +150,9 @@ function AdminDashboard() {
           <h2>Portal del Admin</h2>
           {currentAdmin && (
             <p className="admin-name">
-              {currentAdmin.first_name} {currentAdmin.last_name}
+              {currentAdmin.first_name && currentAdmin.last_name 
+                ? `${currentAdmin.first_name} ${currentAdmin.last_name}`
+                : currentAdmin.email}
               {isSuperAdmin && <span className="super-badge">Super</span>}
             </p>
           )}
