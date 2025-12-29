@@ -791,4 +791,304 @@ router.delete('/account', async (req, res) => {
   }
 });
 
+// =====================================================================
+// ENDPOINTS DE CITAS PARA EL CLIENTE
+// =====================================================================
+
+// Obtener slots disponibles para una reservacion
+router.get('/reservations/:id/available-slots', (req, res) => {
+  try {
+    const reservation = db.prepare(`
+      SELECT r.*, s.id as space_id, s.is_calendar_active
+      FROM reservations r
+      JOIN spaces s ON r.space_id = s.id
+      WHERE r.id = ? AND r.guest_id = ? AND r.status = 'PAID_DEPOSIT_ESCROW'
+    `).get(req.params.id, req.user.id);
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido para agendar cita' });
+    }
+
+    if (!reservation.is_calendar_active) {
+      return res.status(400).json({ error: 'El propietario aun no ha configurado su disponibilidad para este espacio' });
+    }
+
+    // Obtener disponibilidad semanal del host
+    const availability = db.prepare(`
+      SELECT * FROM host_availability 
+      WHERE space_id = ? AND is_active = 1 AND specific_date IS NULL
+      ORDER BY day_of_week
+    `).all(reservation.space_id);
+
+    // Obtener excepciones (fechas bloqueadas)
+    const exceptions = db.prepare(`
+      SELECT exception_date FROM host_availability_exceptions 
+      WHERE space_id = ? AND is_blocked = 1 AND exception_date >= date('now')
+    `).all(reservation.space_id);
+
+    const blockedDates = exceptions.map(e => e.exception_date);
+
+    // Obtener citas ya programadas para este espacio
+    const existingAppointments = db.prepare(`
+      SELECT scheduled_date, scheduled_time FROM appointments 
+      WHERE space_id = ? AND status NOT IN ('cancelada', 'rechazada', 'no_asistida')
+      AND scheduled_date >= date('now')
+    `).all(reservation.space_id);
+
+    const bookedSlots = existingAppointments.map(a => `${a.scheduled_date}_${a.scheduled_time}`);
+
+    // Generar slots disponibles para los proximos 30 dias
+    const slots = [];
+    const today = new Date();
+    
+    for (let i = 1; i <= 30; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      const dayOfWeek = date.getDay();
+
+      // Verificar si la fecha esta bloqueada
+      if (blockedDates.includes(dateStr)) continue;
+
+      // Buscar disponibilidad para este dia de la semana
+      const dayAvailability = availability.find(a => a.day_of_week === dayOfWeek);
+      if (!dayAvailability) continue;
+
+      // Generar slots para este dia
+      const slotDuration = dayAvailability.slot_duration_minutes || 60;
+      const buffer = dayAvailability.buffer_minutes || 15;
+      
+      let currentTime = dayAvailability.start_time;
+      const endTime = dayAvailability.end_time;
+
+      while (currentTime < endTime) {
+        const slotKey = `${dateStr}_${currentTime}`;
+        if (!bookedSlots.includes(slotKey)) {
+          slots.push({
+            date: dateStr,
+            time: currentTime,
+            duration_minutes: slotDuration,
+            day_name: ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'][dayOfWeek]
+          });
+        }
+
+        // Avanzar al siguiente slot
+        const [hours, minutes] = currentTime.split(':').map(Number);
+        const totalMinutes = hours * 60 + minutes + slotDuration + buffer;
+        const newHours = Math.floor(totalMinutes / 60);
+        const newMinutes = totalMinutes % 60;
+        currentTime = `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}`;
+      }
+    }
+
+    res.json({ slots, availability, blocked_dates: blockedDates });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener slots disponibles' });
+  }
+});
+
+// Crear cita desde reservacion
+router.post('/reservations/:id/appointments', [
+  body('scheduled_date').isISO8601(),
+  body('scheduled_time').matches(/^\d{2}:\d{2}$/)
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const reservation = db.prepare(`
+      SELECT r.*, s.id as space_id, s.host_id, s.is_calendar_active, s.title as space_title
+      FROM reservations r
+      JOIN spaces s ON r.space_id = s.id
+      WHERE r.id = ? AND r.guest_id = ? AND r.status = 'PAID_DEPOSIT_ESCROW'
+    `).get(req.params.id, req.user.id);
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido' });
+    }
+
+    // Verificar si ya tiene una cita activa
+    const existingAppointment = db.prepare(`
+      SELECT id FROM appointments 
+      WHERE reservation_id = ? AND status NOT IN ('cancelada', 'rechazada', 'no_asistida')
+    `).get(req.params.id);
+
+    if (existingAppointment) {
+      return res.status(400).json({ error: 'Ya existe una cita para esta reservacion' });
+    }
+
+    const { scheduled_date, scheduled_time } = req.body;
+
+    // Verificar que el slot este disponible
+    const slotTaken = db.prepare(`
+      SELECT id FROM appointments 
+      WHERE space_id = ? AND scheduled_date = ? AND scheduled_time = ? 
+      AND status NOT IN ('cancelada', 'rechazada', 'no_asistida')
+    `).get(reservation.space_id, scheduled_date, scheduled_time);
+
+    if (slotTaken) {
+      return res.status(400).json({ error: 'Este horario ya no esta disponible' });
+    }
+
+    // Verificar que la fecha no este bloqueada
+    const isBlocked = db.prepare(`
+      SELECT id FROM host_availability_exceptions 
+      WHERE space_id = ? AND exception_date = ? AND is_blocked = 1
+    `).get(reservation.space_id, scheduled_date);
+
+    if (isBlocked) {
+      return res.status(400).json({ error: 'Esta fecha no esta disponible' });
+    }
+
+    const appointmentId = generateId();
+    const cancelToken = generateId();
+
+    db.prepare(`
+      INSERT INTO appointments (
+        id, reservation_id, space_id, guest_id, host_id,
+        scheduled_date, scheduled_time, status, cancel_token, duration_minutes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'aceptada', ?, 60)
+    `).run(
+      appointmentId, req.params.id, reservation.space_id,
+      req.user.id, reservation.host_id, scheduled_date, scheduled_time, cancelToken
+    );
+
+    // Actualizar estado de la reservacion
+    db.prepare(`
+      UPDATE reservations SET status = 'appointment_scheduled', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(req.params.id);
+
+    logAudit(req.user.id, 'APPOINTMENT_CREATED_BY_CLIENT', 'appointments', appointmentId, null, {
+      reservation_id: req.params.id,
+      scheduled_date,
+      scheduled_time
+    }, req);
+
+    res.status(201).json({ 
+      id: appointmentId, 
+      cancel_token: cancelToken,
+      message: 'Cita agendada exitosamente' 
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al crear cita' });
+  }
+});
+
+// Obtener citas del cliente
+router.get('/appointments', (req, res) => {
+  try {
+    const { status } = req.query;
+    
+    let query = `
+      SELECT a.*, s.title as space_title, s.address as space_address, s.city as space_city,
+             u.first_name as host_first_name, u.last_name as host_last_name, 
+             u.email as host_email, u.phone as host_phone
+      FROM appointments a
+      JOIN spaces s ON a.space_id = s.id
+      JOIN users u ON a.host_id = u.id
+      WHERE a.guest_id = ?
+    `;
+    const params = [req.user.id];
+
+    if (status) {
+      query += ' AND a.status = ?';
+      params.push(status);
+    }
+
+    query += ' ORDER BY a.scheduled_date DESC, a.scheduled_time DESC';
+
+    const appointments = db.prepare(query).all(...params);
+    res.json(appointments);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener citas' });
+  }
+});
+
+// Cliente marca visita como completada
+router.put('/appointments/:id/guest-complete', (req, res) => {
+  try {
+    const appointment = db.prepare(`
+      SELECT a.*, r.status as reservation_status, r.remaining_amount, r.id as reservation_id
+      FROM appointments a
+      JOIN reservations r ON a.reservation_id = r.id
+      WHERE a.id = ? AND a.guest_id = ? AND a.status = 'aceptada'
+    `).get(req.params.id, req.user.id);
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Cita no encontrada o no esta en estado valido' });
+    }
+
+    db.prepare(`
+      UPDATE appointments SET guest_completed = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(req.params.id);
+
+    // Verificar si ambos marcaron como completada
+    const updated = db.prepare('SELECT host_completed, guest_completed FROM appointments WHERE id = ?').get(req.params.id);
+    
+    if (updated.host_completed && updated.guest_completed) {
+      db.prepare(`UPDATE appointments SET status = 'realizada', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(req.params.id);
+      db.prepare(`UPDATE reservations SET status = 'visit_completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(appointment.reservation_id);
+    }
+
+    logAudit(req.user.id, 'APPOINTMENT_GUEST_COMPLETED', 'appointments', req.params.id, null, {
+      both_completed: updated.host_completed && updated.guest_completed
+    }, req);
+
+    res.json({ 
+      message: 'Visita marcada como completada',
+      both_completed: updated.host_completed && updated.guest_completed,
+      remaining_amount: appointment.remaining_amount,
+      can_pay_full: updated.host_completed && updated.guest_completed
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al marcar visita' });
+  }
+});
+
+// Cliente rechaza espacio despues de visita (reembolso)
+router.post('/reservations/:id/reject-after-visit', (req, res) => {
+  try {
+    const reservation = db.prepare(`
+      SELECT r.*, a.status as appointment_status
+      FROM reservations r
+      LEFT JOIN appointments a ON a.reservation_id = r.id AND a.status = 'realizada'
+      WHERE r.id = ? AND r.guest_id = ? AND r.status = 'visit_completed'
+    `).get(req.params.id, req.user.id);
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido para rechazar' });
+    }
+
+    // Cambiar estado a refunded
+    db.prepare(`
+      UPDATE reservations SET status = 'refunded', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(req.params.id);
+
+    // Crear registro de reembolso
+    const refundId = generateId();
+    db.prepare(`
+      INSERT INTO payments (id, reservation_id, user_id, amount, payment_type, status, escrow_status)
+      VALUES (?, ?, ?, ?, 'refund', 'completed', 'refunded')
+    `).run(refundId, req.params.id, req.user.id, reservation.deposit_amount);
+
+    logAudit(req.user.id, 'RESERVATION_REJECTED_AFTER_VISIT', 'reservations', req.params.id, 
+      { status: 'visit_completed' }, { status: 'refunded' }, req);
+
+    res.json({ 
+      message: 'Espacio rechazado. Se procedera con el reembolso del anticipo.',
+      refund_amount: reservation.deposit_amount
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al rechazar espacio' });
+  }
+});
+
 module.exports = router;

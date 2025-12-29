@@ -50,6 +50,7 @@ function AdminDashboard() {
     { label: 'Backup y Recovery', key: 'backup', superAdminOnly: true },
     { label: 'Badges', key: 'badges' },
     { label: 'Campanas', key: 'campaigns' },
+    { label: 'Citas', key: 'appointments' },
     { label: 'Clientes', key: 'clients' },
     { label: 'Configuracion', key: 'config', superAdminOnly: true },
     { label: 'Contabilidad', key: 'accounting', superAdminOnly: true },
@@ -97,6 +98,7 @@ function AdminDashboard() {
 
     switch (activeSection) {
       case 'reports': return <AdminReports />
+      case 'appointments': return <AdminAppointments />
       case 'clients': return <AdminClients />
       case 'hosts': return <AdminHosts />
       case 'host-verifications': return <AdminHostVerifications />
@@ -6635,6 +6637,168 @@ function AdminHomepageContent() {
           {saving ? 'Guardando...' : 'Guardar Todos los Cambios'}
         </button>
       </div>
+    </div>
+  )
+}
+
+function AdminAppointments() {
+  const [appointments, setAppointments] = useState([])
+  const [stats, setStats] = useState({ total: 0, pending: 0, accepted: 0, completed: 0, cancelled: 0 })
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState({ status: '', from_date: '', to_date: '' })
+  const [cancelModal, setCancelModal] = useState({ show: false, id: null, reason: '' })
+
+  useEffect(() => {
+    loadAppointments()
+  }, [filters])
+
+  const loadAppointments = async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (filters.status) params.append('status', filters.status)
+      if (filters.from_date) params.append('from_date', filters.from_date)
+      if (filters.to_date) params.append('to_date', filters.to_date)
+      
+      const res = await api.get(`/appointments/admin/all?${params}`)
+      setAppointments(res.data.appointments || [])
+      setStats(res.data.stats || {})
+    } catch (error) {
+      console.error('Error loading appointments:', error)
+    }
+    setLoading(false)
+  }
+
+  const handleCancelAppointment = async () => {
+    if (!cancelModal.reason.trim()) return alert('Debe ingresar un motivo')
+    try {
+      await api.put(`/appointments/admin/${cancelModal.id}/cancel`, { reason: cancelModal.reason })
+      setCancelModal({ show: false, id: null, reason: '' })
+      loadAppointments()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const statusLabels = {
+    solicitada: 'Solicitada', aceptada: 'Aceptada', rechazada: 'Rechazada',
+    reprogramada: 'Reprogramada', realizada: 'Realizada', no_asistida: 'No Asistida', cancelada: 'Cancelada'
+  }
+
+  if (loading) return <div className="loading"><div className="spinner"></div></div>
+
+  return (
+    <div className="admin-section">
+      <h1>Gestion de Citas</h1>
+      
+      <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div className="stat-card" style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.total || 0}</div>
+          <div style={{ color: '#64748b' }}>Total</div>
+        </div>
+        <div className="stat-card" style={{ background: '#fef3c7', padding: '1rem', borderRadius: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#d97706' }}>{stats.pending || 0}</div>
+          <div style={{ color: '#92400e' }}>Solicitadas</div>
+        </div>
+        <div className="stat-card" style={{ background: '#dbeafe', padding: '1rem', borderRadius: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1d4ed8' }}>{stats.accepted || 0}</div>
+          <div style={{ color: '#1e40af' }}>Aceptadas</div>
+        </div>
+        <div className="stat-card" style={{ background: '#dcfce7', padding: '1rem', borderRadius: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#16a34a' }}>{stats.completed || 0}</div>
+          <div style={{ color: '#15803d' }}>Realizadas</div>
+        </div>
+        <div className="stat-card" style={{ background: '#fee2e2', padding: '1rem', borderRadius: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#dc2626' }}>{stats.cancelled || 0}</div>
+          <div style={{ color: '#b91c1c' }}>Canceladas</div>
+        </div>
+      </div>
+
+      <div className="filters-bar" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+        <select value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })} className="form-control" style={{ maxWidth: '200px' }}>
+          <option value="">Todos los estados</option>
+          <option value="solicitada">Solicitada</option>
+          <option value="aceptada">Aceptada</option>
+          <option value="rechazada">Rechazada</option>
+          <option value="realizada">Realizada</option>
+          <option value="cancelada">Cancelada</option>
+        </select>
+        <input type="date" value={filters.from_date} onChange={e => setFilters({ ...filters, from_date: e.target.value })} className="form-control" placeholder="Desde" style={{ maxWidth: '180px' }} />
+        <input type="date" value={filters.to_date} onChange={e => setFilters({ ...filters, to_date: e.target.value })} className="form-control" placeholder="Hasta" style={{ maxWidth: '180px' }} />
+        <button onClick={() => setFilters({ status: '', from_date: '', to_date: '' })} className="btn btn-outline">Limpiar</button>
+      </div>
+
+      {appointments.length === 0 ? (
+        <div className="empty-state" style={{ textAlign: 'center', padding: '2rem' }}>
+          <p>No hay citas registradas con los filtros seleccionados.</p>
+        </div>
+      ) : (
+        <div className="table-container">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Hora</th>
+                <th>Espacio</th>
+                <th>Propietario</th>
+                <th>Cliente</th>
+                <th>Estado</th>
+                <th>Confirmaciones</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {appointments.map(a => (
+                <tr key={a.id}>
+                  <td>{new Date(a.scheduled_date).toLocaleDateString()}</td>
+                  <td>{a.scheduled_time}</td>
+                  <td>{a.space_title}</td>
+                  <td>{a.host_first_name} {a.host_last_name}</td>
+                  <td>{a.guest_first_name} {a.guest_last_name}</td>
+                  <td><span className={`status-badge status-${a.status}`}>{statusLabels[a.status] || a.status}</span></td>
+                  <td>
+                    <span style={{marginRight: '0.5rem'}}>H: {a.host_completed ? '✅' : '⏳'}</span>
+                    <span>C: {a.guest_completed ? '✅' : '⏳'}</span>
+                  </td>
+                  <td>
+                    {!['cancelada', 'realizada'].includes(a.status) && (
+                      <button onClick={() => setCancelModal({ show: true, id: a.id, reason: '' })} className="btn btn-small btn-danger">
+                        Cancelar
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {cancelModal.show && (
+        <div className="modal-overlay" onClick={() => setCancelModal({ show: false, id: null, reason: '' })}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Cancelar Cita</h2>
+              <button className="close-btn" onClick={() => setCancelModal({ show: false, id: null, reason: '' })}>×</button>
+            </div>
+            <div className="modal-body">
+              <p>Ingrese el motivo de la cancelacion:</p>
+              <textarea
+                value={cancelModal.reason}
+                onChange={e => setCancelModal({ ...cancelModal, reason: e.target.value })}
+                className="form-control"
+                rows={3}
+                placeholder="Motivo de cancelacion..."
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setCancelModal({ show: false, id: null, reason: '' })} className="btn btn-outline">Cerrar</button>
+              <button onClick={handleCancelAppointment} className="btn btn-danger">Confirmar Cancelacion</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

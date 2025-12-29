@@ -1299,32 +1299,86 @@ function ClientProfile() {
 
 function ClientAppointments() {
   const [appointments, setAppointments] = useState([])
+  const [reservations, setReservations] = useState([])
+  const [availableSlots, setAvailableSlots] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [selectedReservation, setSelectedReservation] = useState(null)
+  const [selectedSlot, setSelectedSlot] = useState(null)
+  const [schedulingLoading, setSchedulingLoading] = useState(false)
 
   useEffect(() => {
-    loadAppointments()
+    loadData()
   }, [])
 
-  const loadAppointments = async () => {
+  const loadData = async () => {
     try {
-      const res = await api.get('/client/appointments')
-      setAppointments(res.data || [])
+      const [aptsRes, resvRes] = await Promise.all([
+        api.get('/client/appointments'),
+        api.get('/client/reservations?status=PAID_DEPOSIT_ESCROW')
+      ])
+      setAppointments(aptsRes.data || [])
+      setReservations(resvRes.data || [])
     } catch (error) {
-      console.error('Error loading appointments:', error)
+      console.error('Error loading data:', error)
     }
     setLoading(false)
   }
 
-  const getStatusLabel = (status) => {
-    const labels = {
-      'solicitada': 'Solicitada',
-      'aceptada': 'Aceptada',
-      'rechazada': 'Rechazada',
-      'reprogramada': 'Reprogramada',
-      'realizada': 'Realizada',
-      'no_asistida': 'No Asistida'
+  const handleOpenSchedule = async (reservation) => {
+    setSelectedReservation(reservation)
+    setSelectedSlot(null)
+    setSchedulingLoading(true)
+    setShowScheduleModal(true)
+    try {
+      const res = await api.get(`/client/reservations/${reservation.id}/available-slots`)
+      setAvailableSlots(res.data.slots || [])
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+      setShowScheduleModal(false)
     }
-    return labels[status] || status
+    setSchedulingLoading(false)
+  }
+
+  const handleScheduleAppointment = async () => {
+    if (!selectedSlot) return alert('Seleccione un horario')
+    setSchedulingLoading(true)
+    try {
+      await api.post(`/client/reservations/${selectedReservation.id}/appointments`, {
+        scheduled_date: selectedSlot.date,
+        scheduled_time: selectedSlot.time
+      })
+      alert('Cita agendada exitosamente')
+      setShowScheduleModal(false)
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setSchedulingLoading(false)
+  }
+
+  const handleGuestComplete = async (id) => {
+    try {
+      const res = await api.put(`/client/appointments/${id}/guest-complete`)
+      alert(res.data.message)
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const getStatusLabel = (status) => ({
+    'solicitada': 'Solicitada', 'aceptada': 'Aceptada', 'rechazada': 'Rechazada',
+    'reprogramada': 'Reprogramada', 'realizada': 'Realizada', 'no_asistida': 'No Asistida', 'cancelada': 'Cancelada'
+  }[status] || status)
+
+  const groupSlotsByDate = (slots) => {
+    const grouped = {}
+    slots.forEach(s => {
+      if (!grouped[s.date]) grouped[s.date] = { date: s.date, day_name: s.day_name, slots: [] }
+      grouped[s.date].slots.push(s)
+    })
+    return Object.values(grouped)
   }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
@@ -1333,10 +1387,27 @@ function ClientAppointments() {
     <div>
       <h1>Mis Citas</h1>
 
+      {reservations.length > 0 && (
+        <div className="pending-reservations-section" style={{ marginBottom: '2rem' }}>
+          <h3>Reservaciones pendientes de agendar cita</h3>
+          <div className="reservation-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+            {reservations.map(r => (
+              <div key={r.id} className="card" style={{ padding: '1rem' }}>
+                <h4>{r.space_title}</h4>
+                <p style={{ fontSize: '0.9rem', color: '#64748b' }}>{r.city}, {r.department}</p>
+                <p style={{ fontSize: '0.9rem' }}>{r.sqm_requested} m² - {r.period_quantity} {r.period_type}</p>
+                <button onClick={() => handleOpenSchedule(r)} className="btn btn-primary" style={{ marginTop: '0.75rem' }}>
+                  Agendar Visita
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {appointments.length === 0 ? (
         <div className="empty-state">
           <p>No tienes citas programadas.</p>
-          <p>Puedes solicitar citas para visitar espacios desde la seccion de Espacios.</p>
         </div>
       ) : (
         <div className="table-container">
@@ -1348,24 +1419,93 @@ function ClientAppointments() {
                 <th>Fecha</th>
                 <th>Hora</th>
                 <th>Estado</th>
+                <th>Confirmacion</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {appointments.map(apt => (
                 <tr key={apt.id}>
                   <td>{apt.space_title || 'N/A'}</td>
-                  <td>{apt.host_name || 'N/A'}</td>
-                  <td>{apt.date ? new Date(apt.date).toLocaleDateString() : 'N/A'}</td>
-                  <td>{apt.time || 'N/A'}</td>
+                  <td>{apt.host_first_name} {apt.host_last_name}</td>
+                  <td>{apt.scheduled_date ? new Date(apt.scheduled_date).toLocaleDateString() : 'N/A'}</td>
+                  <td>{apt.scheduled_time || 'N/A'}</td>
+                  <td><span className={`status-badge status-${apt.status}`}>{getStatusLabel(apt.status)}</span></td>
                   <td>
-                    <span className={`status-badge status-${apt.status}`}>
-                      {getStatusLabel(apt.status)}
-                    </span>
+                    <span style={{marginRight: '0.5rem'}}>Host: {apt.host_completed ? '✅' : '⏳'}</span>
+                    <span>Tu: {apt.guest_completed ? '✅' : '⏳'}</span>
+                  </td>
+                  <td>
+                    {apt.status === 'aceptada' && !apt.guest_completed && (
+                      <button onClick={() => handleGuestComplete(apt.id)} className="btn btn-small btn-success">
+                        Confirmar Visita
+                      </button>
+                    )}
+                    {apt.status === 'realizada' && <span className="text-success">Visita Completada</span>}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showScheduleModal && (
+        <div className="modal-overlay" onClick={() => setShowScheduleModal(false)}>
+          <div className="modal schedule-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px' }}>
+            <div className="modal-header">
+              <h2>Agendar Visita</h2>
+              <button className="close-btn" onClick={() => setShowScheduleModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              {selectedReservation && (
+                <div className="reservation-info" style={{ marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
+                  <h4>{selectedReservation.space_title}</h4>
+                  <p>{selectedReservation.city}, {selectedReservation.department}</p>
+                </div>
+              )}
+              
+              {schedulingLoading ? (
+                <div className="loading"><div className="spinner"></div></div>
+              ) : availableSlots.length === 0 ? (
+                <div className="empty-state">
+                  <p>No hay horarios disponibles en los proximos 30 dias.</p>
+                  <p>El propietario puede no haber configurado su disponibilidad.</p>
+                </div>
+              ) : (
+                <div className="slots-grid">
+                  <p style={{ marginBottom: '1rem' }}>Seleccione una fecha y horario para su visita:</p>
+                  {groupSlotsByDate(availableSlots).map(day => (
+                    <div key={day.date} className="day-slots" style={{ marginBottom: '1rem' }}>
+                      <h4 style={{ marginBottom: '0.5rem' }}>{day.day_name} - {new Date(day.date).toLocaleDateString()}</h4>
+                      <div className="time-slots" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {day.slots.map((slot, i) => (
+                          <button key={i} 
+                            className={`slot-btn ${selectedSlot?.date === slot.date && selectedSlot?.time === slot.time ? 'selected' : ''}`}
+                            onClick={() => setSelectedSlot(slot)}
+                            style={{
+                              padding: '0.5rem 1rem',
+                              border: selectedSlot?.date === slot.date && selectedSlot?.time === slot.time ? '2px solid #1e3a8a' : '1px solid #d1d5db',
+                              borderRadius: '4px',
+                              background: selectedSlot?.date === slot.date && selectedSlot?.time === slot.time ? '#dbeafe' : 'white',
+                              cursor: 'pointer'
+                            }}>
+                            {slot.time}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowScheduleModal(false)} className="btn btn-outline">Cancelar</button>
+              <button onClick={handleScheduleAppointment} className="btn btn-primary" disabled={!selectedSlot || schedulingLoading}>
+                {schedulingLoading ? 'Agendando...' : 'Confirmar Cita'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

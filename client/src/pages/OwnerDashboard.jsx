@@ -886,78 +886,288 @@ function OwnerPayments() {
 }
 
 function OwnerAppointments() {
+  const [activeTab, setActiveTab] = useState('appointments')
   const [appointments, setAppointments] = useState([])
+  const [spaces, setSpaces] = useState([])
+  const [selectedSpace, setSelectedSpace] = useState('')
+  const [availability, setAvailability] = useState([])
+  const [exceptions, setExceptions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado']
+  const defaultSchedule = { start_time: '09:00', end_time: '18:00', slot_duration_minutes: 60, buffer_minutes: 15, is_active: true }
 
   useEffect(() => {
-    api.get('/appointments').then(res => {
-      setAppointments(res.data)
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    loadData()
   }, [])
 
-  const handleStatusChange = async (id, status) => {
+  const loadData = async () => {
     try {
-      await api.put(`/appointments/${id}`, { status })
-      setAppointments(appointments.map(a => a.id === id ? { ...a, status } : a))
+      const [aptsRes, spacesRes] = await Promise.all([
+        api.get('/appointments'),
+        api.get('/spaces')
+      ])
+      setAppointments(aptsRes.data)
+      setSpaces(spacesRes.data)
+      if (spacesRes.data.length > 0) setSelectedSpace(spacesRes.data[0].id)
     } catch (error) {
-      alert('Error al actualizar cita')
+      console.error('Error loading data:', error)
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    if (selectedSpace && activeTab === 'availability') {
+      loadAvailability()
+    }
+  }, [selectedSpace, activeTab])
+
+  const loadAvailability = async () => {
+    try {
+      const [availRes, exceptRes] = await Promise.all([
+        api.get(`/spaces/${selectedSpace}/availability`),
+        api.get(`/spaces/${selectedSpace}/availability/exceptions`)
+      ])
+      setAvailability(availRes.data || [])
+      setExceptions(exceptRes.data || [])
+    } catch (error) {
+      console.error('Error loading availability:', error)
     }
   }
 
+  const handleHostComplete = async (id) => {
+    try {
+      await api.put(`/appointments/${id}/host-complete`)
+      setAppointments(appointments.map(a => a.id === id ? { ...a, host_completed: 1 } : a))
+      alert('Visita marcada como completada. Esperando confirmacion del cliente.')
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleSaveAvailability = async (dayOfWeek, schedule) => {
+    setSaving(true)
+    try {
+      await api.post(`/spaces/${selectedSpace}/availability`, {
+        day_of_week: dayOfWeek,
+        ...schedule
+      })
+      loadAvailability()
+    } catch (error) {
+      alert('Error al guardar: ' + (error.response?.data?.error || error.message))
+    }
+    setSaving(false)
+  }
+
+  const handleBlockDate = async (date, reason = '') => {
+    setSaving(true)
+    try {
+      await api.post(`/spaces/${selectedSpace}/availability/exceptions`, {
+        exception_date: date,
+        is_blocked: true,
+        reason
+      })
+      loadAvailability()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setSaving(false)
+  }
+
+  const handleDeleteException = async (id) => {
+    try {
+      await api.delete(`/spaces/${selectedSpace}/availability/exceptions/${id}`)
+      loadAvailability()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleActivateCalendar = async () => {
+    setSaving(true)
+    try {
+      await api.put(`/spaces/${selectedSpace}/calendar/activate`)
+      alert('Calendario activado correctamente')
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setSaving(false)
+  }
+
   const statusLabels = {
-    solicitada: 'Solicitada',
-    aceptada: 'Aceptada',
-    rechazada: 'Rechazada',
-    reprogramada: 'Reprogramada',
-    realizada: 'Realizada',
-    no_asistida: 'No Asistida'
+    solicitada: 'Solicitada', aceptada: 'Aceptada', rechazada: 'Rechazada',
+    reprogramada: 'Reprogramada', realizada: 'Realizada', no_asistida: 'No Asistida', cancelada: 'Cancelada'
   }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
+  const currentSpace = spaces.find(s => s.id === selectedSpace)
+
   return (
     <div>
-      <h1>Citas</h1>
+      <h1>Gestion de Citas</h1>
       
-      {appointments.length > 0 ? (
-        <table className="owner-table">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Hora</th>
-              <th>Espacio</th>
-              <th>Cliente</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {appointments.map(a => (
-              <tr key={a.id}>
-                <td>{new Date(a.scheduled_date).toLocaleDateString()}</td>
-                <td>{a.scheduled_time}</td>
-                <td>{a.space_title}</td>
-                <td>{a.guest_name}</td>
-                <td><span className={`status-badge status-${a.status}`}>{statusLabels[a.status] || a.status}</span></td>
-                <td>
-                  {a.status === 'solicitada' && (
-                    <>
-                      <button onClick={() => handleStatusChange(a.id, 'aceptada')} className="btn btn-small btn-success">Aceptar</button>
-                      <button onClick={() => handleStatusChange(a.id, 'rechazada')} className="btn btn-small btn-danger" style={{marginLeft: '0.5rem'}}>Rechazar</button>
-                    </>
+      <div className="tabs-container" style={{ marginBottom: '1.5rem' }}>
+        <button className={`tab-btn ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => setActiveTab('appointments')}>
+          Mis Citas
+        </button>
+        <button className={`tab-btn ${activeTab === 'availability' ? 'active' : ''}`} onClick={() => setActiveTab('availability')}>
+          Configurar Disponibilidad
+        </button>
+      </div>
+
+      {activeTab === 'appointments' && (
+        <>
+          {appointments.length > 0 ? (
+            <div className="table-container">
+              <table className="owner-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Hora</th>
+                    <th>Espacio</th>
+                    <th>Cliente</th>
+                    <th>Estado</th>
+                    <th>Confirmacion</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {appointments.map(a => (
+                    <tr key={a.id}>
+                      <td>{new Date(a.scheduled_date).toLocaleDateString()}</td>
+                      <td>{a.scheduled_time}</td>
+                      <td>{a.space_title}</td>
+                      <td>{a.guest_first_name} {a.guest_last_name}</td>
+                      <td><span className={`status-badge status-${a.status}`}>{statusLabels[a.status] || a.status}</span></td>
+                      <td>
+                        <span style={{marginRight: '0.5rem'}}>Host: {a.host_completed ? '✅' : '⏳'}</span>
+                        <span>Cliente: {a.guest_completed ? '✅' : '⏳'}</span>
+                      </td>
+                      <td>
+                        {a.status === 'aceptada' && !a.host_completed && (
+                          <button onClick={() => handleHostComplete(a.id)} className="btn btn-small btn-success">
+                            Marcar Visita Completada
+                          </button>
+                        )}
+                        {a.status === 'realizada' && <span className="text-success">Visita Completada</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <p>No hay citas registradas</p>
+            </div>
+          )}
+        </>
+      )}
+
+      {activeTab === 'availability' && (
+        <div className="availability-config">
+          <div className="form-group">
+            <label>Seleccionar Espacio:</label>
+            <select value={selectedSpace} onChange={e => setSelectedSpace(e.target.value)} className="form-control">
+              {spaces.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+            </select>
+          </div>
+
+          {currentSpace && !currentSpace.is_calendar_active && (
+            <div className="alert alert-warning" style={{ marginBottom: '1rem' }}>
+              El calendario de este espacio no esta activado. Configure su disponibilidad y luego active el calendario.
+              <button onClick={handleActivateCalendar} className="btn btn-primary" style={{ marginLeft: '1rem' }} disabled={saving}>
+                Activar Calendario
+              </button>
+            </div>
+          )}
+
+          <h3>Horario Semanal</h3>
+          <p className="text-muted">Configure los dias y horarios en que los clientes pueden agendar citas.</p>
+
+          <div className="availability-grid">
+            {dayNames.map((day, index) => {
+              const dayAvail = availability.find(a => a.day_of_week === index && !a.specific_date)
+              return (
+                <div key={index} className="day-schedule-card">
+                  <h4>{day}</h4>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={dayAvail?.is_active || false}
+                      onChange={e => handleSaveAvailability(index, { ...defaultSchedule, ...(dayAvail || {}), is_active: e.target.checked })} />
+                    Disponible
+                  </label>
+                  {(dayAvail?.is_active) && (
+                    <div className="time-inputs">
+                      <div className="form-group">
+                        <label>Desde:</label>
+                        <input type="time" value={dayAvail?.start_time || '09:00'}
+                          onChange={e => handleSaveAvailability(index, { ...dayAvail, start_time: e.target.value })} />
+                      </div>
+                      <div className="form-group">
+                        <label>Hasta:</label>
+                        <input type="time" value={dayAvail?.end_time || '18:00'}
+                          onChange={e => handleSaveAvailability(index, { ...dayAvail, end_time: e.target.value })} />
+                      </div>
+                      <div className="form-group">
+                        <label>Duracion (min):</label>
+                        <select value={dayAvail?.slot_duration_minutes || 60}
+                          onChange={e => handleSaveAvailability(index, { ...dayAvail, slot_duration_minutes: parseInt(e.target.value) })}>
+                          <option value="30">30</option>
+                          <option value="45">45</option>
+                          <option value="60">60</option>
+                          <option value="90">90</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Buffer (min):</label>
+                        <select value={dayAvail?.buffer_minutes || 15}
+                          onChange={e => handleSaveAvailability(index, { ...dayAvail, buffer_minutes: parseInt(e.target.value) })}>
+                          <option value="0">0</option>
+                          <option value="15">15</option>
+                          <option value="30">30</option>
+                          <option value="45">45</option>
+                        </select>
+                      </div>
+                    </div>
                   )}
-                  {a.status === 'aceptada' && (
-                    <button onClick={() => handleStatusChange(a.id, 'realizada')} className="btn btn-small btn-primary">Marcar Realizada</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <div className="empty-state">
-          <p>No hay citas registradas</p>
+                </div>
+              )
+            })}
+          </div>
+
+          <h3 style={{ marginTop: '2rem' }}>Fechas Bloqueadas</h3>
+          <p className="text-muted">Bloquee fechas especificas donde no estara disponible.</p>
+          
+          <div className="add-exception-form" style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+            <input type="date" id="block-date" className="form-control" min={new Date().toISOString().split('T')[0]} />
+            <input type="text" id="block-reason" className="form-control" placeholder="Motivo (opcional)" />
+            <button onClick={() => {
+              const date = document.getElementById('block-date').value
+              const reason = document.getElementById('block-reason').value
+              if (date) handleBlockDate(date, reason)
+            }} className="btn btn-secondary" disabled={saving}>Bloquear Fecha</button>
+          </div>
+
+          {exceptions.length > 0 && (
+            <table className="owner-table">
+              <thead>
+                <tr><th>Fecha</th><th>Motivo</th><th>Acciones</th></tr>
+              </thead>
+              <tbody>
+                {exceptions.map(e => (
+                  <tr key={e.id}>
+                    <td>{new Date(e.exception_date).toLocaleDateString()}</td>
+                    <td>{e.reason || '-'}</td>
+                    <td><button onClick={() => handleDeleteException(e.id)} className="btn btn-small btn-danger">Eliminar</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

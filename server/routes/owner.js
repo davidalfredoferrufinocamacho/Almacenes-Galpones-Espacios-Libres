@@ -924,4 +924,338 @@ router.delete('/account', async (req, res) => {
   }
 });
 
+// =====================================================================
+// ENDPOINTS DE DISPONIBILIDAD DEL HOST
+// =====================================================================
+
+// Obtener disponibilidad de un espacio
+router.get('/spaces/:id/availability', (req, res) => {
+  try {
+    const space = db.prepare('SELECT id FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const availability = db.prepare(`
+      SELECT * FROM host_availability 
+      WHERE space_id = ? 
+      ORDER BY day_of_week, start_time
+    `).all(req.params.id);
+
+    const exceptions = db.prepare(`
+      SELECT * FROM host_availability_exceptions 
+      WHERE space_id = ? AND exception_date >= date('now')
+      ORDER BY exception_date
+    `).all(req.params.id);
+
+    res.json({ availability, exceptions });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener disponibilidad' });
+  }
+});
+
+// Crear o actualizar disponibilidad semanal
+router.post('/spaces/:id/availability', [
+  body('day_of_week').isInt({ min: 0, max: 6 }),
+  body('start_time').matches(/^\d{2}:\d{2}$/),
+  body('end_time').matches(/^\d{2}:\d{2}$/),
+  body('slot_duration_minutes').optional().isInt({ min: 15, max: 240 }),
+  body('buffer_minutes').optional().isInt({ min: 0, max: 60 })
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const space = db.prepare('SELECT id FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const { day_of_week, start_time, end_time, slot_duration_minutes = 60, buffer_minutes = 15 } = req.body;
+
+    // Verificar que end_time > start_time
+    if (start_time >= end_time) {
+      return res.status(400).json({ error: 'La hora de fin debe ser mayor a la hora de inicio' });
+    }
+
+    // Verificar si ya existe disponibilidad para este dia
+    const existing = db.prepare(`
+      SELECT id FROM host_availability 
+      WHERE space_id = ? AND day_of_week = ? AND specific_date IS NULL
+    `).get(req.params.id, day_of_week);
+
+    if (existing) {
+      // Actualizar existente
+      db.prepare(`
+        UPDATE host_availability SET 
+          start_time = ?, end_time = ?, slot_duration_minutes = ?, buffer_minutes = ?, is_active = 1
+        WHERE id = ?
+      `).run(start_time, end_time, slot_duration_minutes, buffer_minutes, existing.id);
+
+      logAudit(req.user.id, 'AVAILABILITY_UPDATED', 'host_availability', existing.id, null, {
+        space_id: req.params.id, day_of_week, start_time, end_time
+      }, req);
+
+      res.json({ id: existing.id, message: 'Disponibilidad actualizada' });
+    } else {
+      // Crear nueva
+      const id = generateId();
+      db.prepare(`
+        INSERT INTO host_availability (id, space_id, day_of_week, start_time, end_time, slot_duration_minutes, buffer_minutes, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      `).run(id, req.params.id, day_of_week, start_time, end_time, slot_duration_minutes, buffer_minutes);
+
+      logAudit(req.user.id, 'AVAILABILITY_CREATED', 'host_availability', id, null, {
+        space_id: req.params.id, day_of_week, start_time, end_time
+      }, req);
+
+      res.status(201).json({ id, message: 'Disponibilidad creada' });
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al guardar disponibilidad' });
+  }
+});
+
+// Actualizar disponibilidad masiva (todos los dias de la semana)
+router.put('/spaces/:id/availability/bulk', [
+  body('schedule').isArray(),
+  body('schedule.*.day_of_week').isInt({ min: 0, max: 6 }),
+  body('schedule.*.start_time').matches(/^\d{2}:\d{2}$/),
+  body('schedule.*.end_time').matches(/^\d{2}:\d{2}$/),
+  body('slot_duration_minutes').optional().isInt({ min: 15, max: 240 }),
+  body('buffer_minutes').optional().isInt({ min: 0, max: 60 })
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const space = db.prepare('SELECT id FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const { schedule, slot_duration_minutes = 60, buffer_minutes = 15 } = req.body;
+
+    // Desactivar toda la disponibilidad existente
+    db.prepare('UPDATE host_availability SET is_active = 0 WHERE space_id = ? AND specific_date IS NULL').run(req.params.id);
+
+    // Crear/actualizar cada dia
+    for (const day of schedule) {
+      if (day.start_time >= day.end_time) continue;
+
+      const existing = db.prepare(`
+        SELECT id FROM host_availability 
+        WHERE space_id = ? AND day_of_week = ? AND specific_date IS NULL
+      `).get(req.params.id, day.day_of_week);
+
+      if (existing) {
+        db.prepare(`
+          UPDATE host_availability SET 
+            start_time = ?, end_time = ?, slot_duration_minutes = ?, buffer_minutes = ?, is_active = 1
+          WHERE id = ?
+        `).run(day.start_time, day.end_time, slot_duration_minutes, buffer_minutes, existing.id);
+      } else {
+        const id = generateId();
+        db.prepare(`
+          INSERT INTO host_availability (id, space_id, day_of_week, start_time, end_time, slot_duration_minutes, buffer_minutes, is_active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+        `).run(id, req.params.id, day.day_of_week, day.start_time, day.end_time, slot_duration_minutes, buffer_minutes);
+      }
+    }
+
+    // Activar calendario del espacio
+    db.prepare('UPDATE spaces SET is_calendar_active = 1 WHERE id = ?').run(req.params.id);
+
+    logAudit(req.user.id, 'AVAILABILITY_BULK_UPDATE', 'host_availability', null, null, {
+      space_id: req.params.id, days_count: schedule.length
+    }, req);
+
+    res.json({ message: 'Disponibilidad actualizada', days_updated: schedule.length });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al actualizar disponibilidad' });
+  }
+});
+
+// Eliminar disponibilidad de un dia
+router.delete('/spaces/:id/availability/:availabilityId', (req, res) => {
+  try {
+    const space = db.prepare('SELECT id FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const availability = db.prepare('SELECT id FROM host_availability WHERE id = ? AND space_id = ?').get(req.params.availabilityId, req.params.id);
+    if (!availability) {
+      return res.status(404).json({ error: 'Disponibilidad no encontrada' });
+    }
+
+    db.prepare('DELETE FROM host_availability WHERE id = ?').run(req.params.availabilityId);
+
+    logAudit(req.user.id, 'AVAILABILITY_DELETED', 'host_availability', req.params.availabilityId, null, null, req);
+
+    res.json({ message: 'Disponibilidad eliminada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar disponibilidad' });
+  }
+});
+
+// Agregar excepcion (bloquear fecha especifica)
+router.post('/spaces/:id/availability/exceptions', [
+  body('exception_date').isISO8601(),
+  body('reason').optional().trim()
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const space = db.prepare('SELECT id FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const { exception_date, reason } = req.body;
+
+    // Verificar si ya existe una excepcion para esta fecha
+    const existing = db.prepare(`
+      SELECT id FROM host_availability_exceptions WHERE space_id = ? AND exception_date = ?
+    `).get(req.params.id, exception_date);
+
+    if (existing) {
+      return res.status(400).json({ error: 'Ya existe una excepcion para esta fecha' });
+    }
+
+    const id = generateId();
+    db.prepare(`
+      INSERT INTO host_availability_exceptions (id, space_id, exception_date, is_blocked, reason)
+      VALUES (?, ?, ?, 1, ?)
+    `).run(id, req.params.id, exception_date, reason || null);
+
+    logAudit(req.user.id, 'AVAILABILITY_EXCEPTION_CREATED', 'host_availability_exceptions', id, null, {
+      space_id: req.params.id, exception_date, reason
+    }, req);
+
+    res.status(201).json({ id, message: 'Fecha bloqueada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al bloquear fecha' });
+  }
+});
+
+// Eliminar excepcion
+router.delete('/spaces/:id/availability/exceptions/:exceptionId', (req, res) => {
+  try {
+    const space = db.prepare('SELECT id FROM spaces WHERE id = ? AND host_id = ?').get(req.params.id, req.user.id);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const exception = db.prepare('SELECT id FROM host_availability_exceptions WHERE id = ? AND space_id = ?').get(req.params.exceptionId, req.params.id);
+    if (!exception) {
+      return res.status(404).json({ error: 'Excepcion no encontrada' });
+    }
+
+    db.prepare('DELETE FROM host_availability_exceptions WHERE id = ?').run(req.params.exceptionId);
+
+    logAudit(req.user.id, 'AVAILABILITY_EXCEPTION_DELETED', 'host_availability_exceptions', req.params.exceptionId, null, null, req);
+
+    res.json({ message: 'Excepcion eliminada' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar excepcion' });
+  }
+});
+
+// Obtener citas del host (calendario)
+router.get('/appointments', (req, res) => {
+  try {
+    const { status, space_id, from_date, to_date } = req.query;
+    
+    let query = `
+      SELECT a.*, s.title as space_title, s.address as space_address, s.city as space_city,
+             u.first_name as guest_first_name, u.last_name as guest_last_name, 
+             u.email as guest_email, u.phone as guest_phone
+      FROM appointments a
+      JOIN spaces s ON a.space_id = s.id
+      JOIN users u ON a.guest_id = u.id
+      WHERE a.host_id = ?
+    `;
+    const params = [req.user.id];
+
+    if (status) {
+      query += ' AND a.status = ?';
+      params.push(status);
+    }
+    if (space_id) {
+      query += ' AND a.space_id = ?';
+      params.push(space_id);
+    }
+    if (from_date) {
+      query += ' AND a.scheduled_date >= ?';
+      params.push(from_date);
+    }
+    if (to_date) {
+      query += ' AND a.scheduled_date <= ?';
+      params.push(to_date);
+    }
+
+    query += ' ORDER BY a.scheduled_date, a.scheduled_time';
+
+    const appointments = db.prepare(query).all(...params);
+    res.json(appointments);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener citas' });
+  }
+});
+
+// Host marca visita completada
+router.put('/appointments/:id/host-complete', (req, res) => {
+  try {
+    const appointment = db.prepare(`
+      SELECT a.*, r.status as reservation_status 
+      FROM appointments a
+      JOIN reservations r ON a.reservation_id = r.id
+      WHERE a.id = ? AND a.host_id = ? AND a.status = 'aceptada'
+    `).get(req.params.id, req.user.id);
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Cita no encontrada o no esta en estado valido' });
+    }
+
+    db.prepare(`
+      UPDATE appointments SET host_completed = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(req.params.id);
+
+    // Verificar si ambos marcaron como completada
+    const updated = db.prepare('SELECT host_completed, guest_completed FROM appointments WHERE id = ?').get(req.params.id);
+    
+    if (updated.host_completed && updated.guest_completed) {
+      db.prepare(`UPDATE appointments SET status = 'realizada', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(req.params.id);
+      db.prepare(`UPDATE reservations SET status = 'visit_completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(appointment.reservation_id);
+    }
+
+    logAudit(req.user.id, 'APPOINTMENT_HOST_COMPLETED', 'appointments', req.params.id, null, {
+      both_completed: updated.host_completed && updated.guest_completed
+    }, req);
+
+    res.json({ 
+      message: 'Visita marcada como completada por el host',
+      both_completed: updated.host_completed && updated.guest_completed
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al marcar visita' });
+  }
+});
+
 module.exports = router;

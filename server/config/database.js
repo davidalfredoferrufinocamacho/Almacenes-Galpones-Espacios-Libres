@@ -188,7 +188,8 @@ function initDatabase() {
         'rechazada',
         'reprogramada',
         'realizada',
-        'no_asistida'
+        'no_asistida',
+        'cancelada'
       )),
       anti_bypass_guest_accepted INTEGER DEFAULT 0,
       anti_bypass_guest_accepted_at TEXT,
@@ -482,7 +483,13 @@ function initDatabase() {
       ('tpl_contract_created', 'contract_created', 'email', 'Contrato generado - {{contract_number}}', 'Hola {{recipient_name}},\n\nSe ha generado un contrato para el espacio "{{space_title}}".\n\nNumero de contrato: {{contract_number}}\nVigencia: {{start_date}} al {{end_date}}\nMonto total: Bs. {{total_amount}}\n\nIngresa a la plataforma para revisar y firmar el contrato.\n\nSaludos,\n{{platform_name}}', 1),
       ('tpl_contract_signed', 'contract_signed', 'email', 'Contrato firmado - {{contract_number}}', 'Hola {{recipient_name}},\n\nEl {{signer_role}} ha firmado el contrato {{contract_number}} para el espacio "{{space_title}}".\n\nEstado de firmas:\n- GUEST: {{guest_signed}}\n- HOST: {{host_signed}}\n\nSaludos,\n{{platform_name}}', 1),
       ('tpl_refund_processed', 'refund_processed', 'email', 'Reembolso procesado', 'Hola {{recipient_name}},\n\nTu solicitud de reembolso ha sido procesada.\n\nEspacio: {{space_title}}\nMonto: Bs. {{amount}}\nEstado: {{status}}\n\nSaludos,\n{{platform_name}}', 1),
-      ('tpl_invoice_generated', 'invoice_generated', 'email', 'Factura generada - {{invoice_number}}', 'Hola {{recipient_name}},\n\nSe ha generado una factura para tu contrato.\n\nNumero de factura: {{invoice_number}}\nContrato: {{contract_number}}\nMonto total: Bs. {{total_amount}}\n\nPuedes descargar el PDF desde la plataforma.\n\nSaludos,\n{{platform_name}}', 1);
+      ('tpl_invoice_generated', 'invoice_generated', 'email', 'Factura generada - {{invoice_number}}', 'Hola {{recipient_name}},\n\nSe ha generado una factura para tu contrato.\n\nNumero de factura: {{invoice_number}}\nContrato: {{contract_number}}\nMonto total: Bs. {{total_amount}}\n\nPuedes descargar el PDF desde la plataforma.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_apt_reminder_24h', 'appointment_reminder_24h', 'email', 'Recordatorio: Cita manana - {{space_title}}', 'Hola {{recipient_name}},\n\nTe recordamos que manana tienes una cita agendada.\n\nEspacio: {{space_title}}\nFecha: {{scheduled_date}}\nHora: {{scheduled_time}}\nDireccion: {{address}}\n\nSi no puedes asistir, puedes cancelar la cita desde el siguiente enlace:\n{{cancel_link}}\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_apt_reminder_2h', 'appointment_reminder_2h', 'email', 'Recordatorio: Cita en 2 horas - {{space_title}}', 'Hola {{recipient_name}},\n\nTe recordamos que en 2 horas tienes una cita agendada.\n\nEspacio: {{space_title}}\nHora: {{scheduled_time}}\nDireccion: {{address}}\n\nRecuerda llevar un documento de identidad.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_apt_cancelled', 'appointment_cancelled', 'email', 'Cita cancelada - {{space_title}}', 'Hola {{recipient_name}},\n\nLa cita ha sido cancelada.\n\nEspacio: {{space_title}}\nFecha: {{scheduled_date}}\nHora: {{scheduled_time}}\nCancelada por: {{cancelled_by}}\nMotivo: {{reason}}\n\nPuedes agendar una nueva cita desde la plataforma.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_visit_completed', 'visit_completed', 'email', 'Visita completada - {{space_title}}', 'Hola {{recipient_name}},\n\nLa visita al espacio "{{space_title}}" ha sido marcada como completada por ambas partes.\n\nAhora puedes proceder con las siguientes opciones desde tu panel:\n\n1. Si el espacio te interesa: Paga el saldo restante para generar el contrato\n2. Si no te interesa: Solicita el reembolso de tu anticipo\n\nIngresa a la plataforma para continuar.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_apt_scheduled_host', 'appointment_scheduled_host', 'email', 'Nueva cita agendada - {{space_title}}', 'Hola {{recipient_name}},\n\nSe ha agendado una nueva cita para tu espacio "{{space_title}}".\n\nCliente: {{guest_name}}\nFecha: {{scheduled_date}}\nHora: {{scheduled_time}}\n\nSi necesitas cancelar o reagendar, usa el siguiente enlace:\n{{cancel_link}}\n\nO ingresa a tu panel de propietario.\n\nSaludos,\n{{platform_name}}', 1),
+      ('tpl_apt_scheduled_guest', 'appointment_scheduled_guest', 'email', 'Cita confirmada - {{space_title}}', 'Hola {{recipient_name}},\n\nTu cita ha sido agendada exitosamente.\n\nEspacio: {{space_title}}\nFecha: {{scheduled_date}}\nHora: {{scheduled_time}}\nDireccion: {{address}}\nPropietario: {{host_name}}\n\nSi necesitas cancelar, usa el siguiente enlace:\n{{cancel_link}}\n\nRecuerda llevar un documento de identidad.\n\nSaludos,\n{{platform_name}}', 1);
   `);
 
   // Crear tabla de categorias legales
@@ -1096,6 +1103,19 @@ function initDatabase() {
 
     -- Insertar configuracion por defecto de backups
     INSERT OR IGNORE INTO backup_config (id) VALUES ('default');
+
+    -- Tabla de excepciones de disponibilidad (bloqueos de fechas especificas)
+    CREATE TABLE IF NOT EXISTS host_availability_exceptions (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL,
+      exception_date TEXT NOT NULL,
+      is_blocked INTEGER DEFAULT 1,
+      reason TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (space_id) REFERENCES spaces(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_availability_exceptions_space ON host_availability_exceptions(space_id, exception_date);
   `);
 
   // Migraciones para columnas faltantes en bases de datos existentes
@@ -1128,7 +1148,21 @@ function initDatabase() {
     { table: 'users', column: 'floor', type: 'TEXT' },
     { table: 'users', column: 'is_super_admin', type: 'INTEGER DEFAULT 0' },
     { table: 'spaces', column: 'available_from', type: 'TEXT' },
-    { table: 'spaces', column: 'available_until', type: 'TEXT' }
+    { table: 'spaces', column: 'available_until', type: 'TEXT' },
+    // Migraciones para sistema de citas mejorado
+    { table: 'host_availability', column: 'slot_duration_minutes', type: 'INTEGER DEFAULT 60' },
+    { table: 'host_availability', column: 'buffer_minutes', type: 'INTEGER DEFAULT 15' },
+    { table: 'host_availability', column: 'is_active', type: 'INTEGER DEFAULT 1' },
+    { table: 'appointments', column: 'duration_minutes', type: 'INTEGER DEFAULT 60' },
+    { table: 'appointments', column: 'cancel_token', type: 'TEXT' },
+    { table: 'appointments', column: 'cancelled_by', type: 'TEXT' },
+    { table: 'appointments', column: 'cancellation_reason', type: 'TEXT' },
+    { table: 'appointments', column: 'host_completed', type: 'INTEGER DEFAULT 0' },
+    { table: 'appointments', column: 'guest_completed', type: 'INTEGER DEFAULT 0' },
+    { table: 'appointments', column: 'reminder_24h_sent', type: 'INTEGER DEFAULT 0' },
+    { table: 'appointments', column: 'reminder_2h_sent', type: 'INTEGER DEFAULT 0' },
+    { table: 'appointments', column: 'confirmation_token', type: 'TEXT' },
+    { table: 'appointments', column: 'guest_confirmed', type: 'INTEGER DEFAULT 0' }
   ];
 
   // Backfill null categories to 'legal'
