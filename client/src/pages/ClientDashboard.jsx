@@ -1488,10 +1488,27 @@ function ClientAppointments() {
   const [selectedSlot, setSelectedSlot] = useState(null)
   const [schedulingLoading, setSchedulingLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [showContractModal, setShowContractModal] = useState(false)
+  const [showSignatureModal, setShowSignatureModal] = useState(false)
+  const [selectedAppointmentForContract, setSelectedAppointmentForContract] = useState(null)
+  const [contractReservationDetails, setContractReservationDetails] = useState(null)
+  const [contractLoading, setContractLoading] = useState(false)
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
+  const [paymentMethods, setPaymentMethods] = useState([])
 
   useEffect(() => {
     loadData()
+    loadPaymentMethods()
   }, [])
+
+  const loadPaymentMethods = async () => {
+    try {
+      const res = await api.get('/public/payment-methods')
+      setPaymentMethods(res.data || [])
+    } catch (error) {
+      console.error('Error loading payment methods:', error)
+    }
+  }
 
   const loadData = async () => {
     try {
@@ -1569,6 +1586,42 @@ function ClientAppointments() {
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
     }
+  }
+
+  const handleCloseContract = (appointment) => {
+    if (!appointment.reservation_id) {
+      alert('Esta cita no tiene una reservacion asociada.')
+      return
+    }
+    setSelectedAppointmentForContract(appointment)
+    setShowContractModal(true)
+    loadReservationDetails(appointment.reservation_id)
+  }
+
+  const loadReservationDetails = async (reservationId) => {
+    try {
+      const res = await api.get(`/client/reservations/${reservationId}`)
+      setContractReservationDetails(res.data)
+    } catch (error) {
+      console.error('Error cargando detalles de reservacion:', error)
+    }
+  }
+
+  const handlePayRemaining = async () => {
+    if (!contractReservationDetails) return
+    setContractLoading(true)
+    try {
+      const res = await api.post(`/client/reservations/${contractReservationDetails.id}/pay-remaining`, {
+        payment_method: selectedPaymentMethod
+      })
+      alert(res.data.message)
+      setShowContractModal(false)
+      setShowSignatureModal(true)
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setContractLoading(false)
   }
 
   const getStatusLabel = (status) => ({
@@ -1685,7 +1738,12 @@ function ClientAppointments() {
                     {apt.status === 'aceptada' && apt.guest_completed && !apt.host_completed && (
                       <span className="text-muted">Esperando confirmacion del propietario</span>
                     )}
-                    {apt.status === 'realizada' && <span className="text-success">Visita Completada</span>}
+                    {apt.status === 'realizada' && apt.reservation_id && (
+                      <button onClick={() => handleCloseContract(apt)} className="btn btn-small btn-primary">
+                        Cerrar Contrato
+                      </button>
+                    )}
+                    {apt.status === 'realizada' && !apt.reservation_id && <span className="text-success">Visita Completada</span>}
                     {apt.status === 'rechazada' && <span className="text-danger">Rechazada por propietario</span>}
                     {apt.status === 'cancelada' && <span className="text-muted">Cancelada</span>}
                     {apt.status === 'no_asistida' && <span className="text-warning">No asististe</span>}
@@ -1751,6 +1809,66 @@ function ClientAppointments() {
               <button onClick={() => setShowScheduleModal(false)} className="btn btn-outline">Cancelar</button>
               <button onClick={handleScheduleAppointment} className="btn btn-primary" disabled={!selectedSlot || schedulingLoading}>
                 {schedulingLoading ? 'Agendando...' : 'Confirmar Cita'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showContractModal && (
+        <div className="modal-overlay" onClick={() => setShowContractModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <h2>Cerrar Contrato</h2>
+              <button className="close-btn" onClick={() => setShowContractModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              {contractReservationDetails ? (
+                <>
+                  <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f1f5f9', borderRadius: '8px' }}>
+                    <h4 style={{ marginBottom: '0.5rem' }}>{contractReservationDetails.space_title}</h4>
+                    <p><strong>Superficie:</strong> {contractReservationDetails.sqm_requested} m²</p>
+                    <p><strong>Periodo:</strong> {contractReservationDetails.period_quantity} {contractReservationDetails.period_type}</p>
+                    <p><strong>Monto Total:</strong> Bs. {contractReservationDetails.total_amount?.toFixed(2)}</p>
+                    <p><strong>Deposito Pagado (10%):</strong> Bs. {contractReservationDetails.deposit_amount?.toFixed(2)}</p>
+                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a' }}>
+                      <strong>Monto Restante (90%):</strong> Bs. {contractReservationDetails.remaining_amount?.toFixed(2)}
+                    </p>
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>Metodo de Pago</label>
+                    <select 
+                      value={selectedPaymentMethod} 
+                      onChange={e => setSelectedPaymentMethod(e.target.value)}
+                      style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                    >
+                      <option value="">Seleccione metodo de pago...</option>
+                      {paymentMethods.map(pm => (
+                        <option key={pm.id} value={pm.id}>{pm.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ marginTop: '1rem', padding: '1rem', background: '#fef3c7', borderRadius: '8px' }}>
+                    <p style={{ fontSize: '0.9rem', color: '#92400e' }}>
+                      Al completar el pago, se generara el contrato digital que debera firmar usted primero, 
+                      y luego el propietario. El alquiler comenzara segun las fechas acordadas.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="loading"><div className="spinner"></div></div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowContractModal(false)} className="btn btn-outline">Cancelar</button>
+              <button 
+                onClick={handlePayRemaining} 
+                className="btn btn-primary" 
+                disabled={!selectedPaymentMethod || contractLoading}
+              >
+                {contractLoading ? 'Procesando...' : `Pagar Bs. ${contractReservationDetails?.remaining_amount?.toFixed(2) || '0.00'}`}
               </button>
             </div>
           </div>

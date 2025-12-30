@@ -1175,18 +1175,18 @@ router.post('/reservations/:id/accept-proposed-dates', (req, res) => {
   }
 });
 
-// Cliente paga el monto restante (90%) despues de fechas confirmadas
+// Cliente paga el monto restante (90%) despues de visita completada o fechas confirmadas
 router.post('/reservations/:id/pay-remaining', (req, res) => {
   try {
     const { payment_method } = req.body;
 
     const reservation = db.prepare(`
       SELECT * FROM reservations 
-      WHERE id = ? AND guest_id = ? AND status = 'dates_confirmed'
+      WHERE id = ? AND guest_id = ? AND status IN ('dates_confirmed', 'visit_completed')
     `).get(req.params.id, req.user.id);
 
     if (!reservation) {
-      return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido para pagar' });
+      return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido para pagar. Asegurese de que la visita haya sido completada por ambas partes.' });
     }
 
     if (reservation.remaining_amount <= 0) {
