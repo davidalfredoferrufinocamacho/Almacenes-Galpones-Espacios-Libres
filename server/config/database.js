@@ -1173,6 +1173,7 @@ function initDatabase() {
     { table: 'appointments', column: 'guest_confirmed', type: 'INTEGER DEFAULT 0' },
     { table: 'appointments', column: 'host_completed_at', type: 'TEXT' },
     { table: 'appointments', column: 'guest_completed_at', type: 'TEXT' },
+    { table: 'appointments', column: 'host_accepted_at', type: 'TEXT' },
     { table: 'reservations', column: 'rental_start_date', type: 'TEXT' },
     { table: 'reservations', column: 'rental_end_date', type: 'TEXT' },
     { table: 'reservations', column: 'rental_start_time', type: 'TEXT' },

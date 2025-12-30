@@ -140,30 +140,35 @@ router.post('/:id/accept-anti-bypass', authenticateToken, requireRole('GUEST'), 
 
 router.put('/:id/accept', authenticateToken, requireRole('HOST'), (req, res) => {
   try {
+    // Permitir aceptar citas en estado 'solicitada' O 'aceptada' si el host aun no acepto
     const appointment = db.prepare(`
-      SELECT * FROM appointments WHERE id = ? AND host_id = ? AND status = 'solicitada'
+      SELECT * FROM appointments WHERE id = ? AND host_id = ? AND status IN ('solicitada', 'aceptada') AND host_accepted_at IS NULL
     `).get(req.params.id, req.user.id);
 
     if (!appointment) {
-      return res.status(404).json({ error: 'Cita no encontrada' });
+      return res.status(404).json({ error: 'Cita no encontrada o ya fue aceptada por usted' });
     }
 
     if (!appointment.anti_bypass_guest_accepted) {
-      return res.status(400).json({ error: 'El guest debe aceptar la clausula anti-bypass primero' });
+      return res.status(400).json({ error: 'El cliente debe aceptar la clausula anti-bypass primero' });
     }
 
     const oldStatus = appointment.status;
 
     db.prepare(`
-      UPDATE appointments SET status = 'aceptada', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      UPDATE appointments SET 
+        status = 'aceptada', 
+        host_accepted_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
     `).run(req.params.id);
 
     logAudit(req.user.id, 'APPOINTMENT_ACCEPTED', 'appointments', req.params.id, 
-      { status: oldStatus }, { status: 'aceptada' }, req);
+      { status: oldStatus, host_accepted_at: null }, { status: 'aceptada', host_accepted_at: 'now' }, req);
 
     notifyAppointmentAccepted(req.params.id, req);
 
-    res.json({ message: 'Cita aceptada' });
+    res.json({ message: 'Cita aceptada exitosamente' });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al aceptar cita' });

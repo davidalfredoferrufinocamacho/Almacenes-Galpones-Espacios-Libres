@@ -1280,31 +1280,41 @@ function OwnerAppointments() {
                       <td>{a.guest_first_name} {a.guest_last_name}</td>
                       <td><span className={`status-badge status-${a.status}`}>{statusLabels[a.status] || a.status}</span></td>
                       <td>
-                        <span style={{marginRight: '0.5rem'}}>Host: {a.host_completed ? '✅' : '⏳'}</span>
-                        <span>Cliente: {a.guest_completed ? '✅' : '⏳'}</span>
+                        <span style={{marginRight: '0.5rem'}}>Host: {a.host_accepted_at ? '✅' : '⏳'}</span>
+                        <span>Cliente: {a.anti_bypass_guest_accepted ? '✅' : '⏳'}</span>
                       </td>
                       <td style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
                         {a.status === 'solicitada' && (
                           <>
-                            <button onClick={() => handleAccept(a.id)} className="btn btn-small btn-success">Aceptar</button>
+                            <button onClick={() => handleAccept(a.id)} className="btn btn-small btn-success">Aceptar Cita</button>
                             <button onClick={() => openRejectModal(a.id)} className="btn btn-small btn-danger">Rechazar</button>
                             <button onClick={() => openRescheduleModal(a.id)} className="btn btn-small btn-secondary">Reprogramar</button>
                           </>
                         )}
-                        {a.status === 'aceptada' && !a.host_completed && (
+                        {a.status === 'aceptada' && !a.host_accepted_at && (
+                          <>
+                            <button onClick={() => handleAccept(a.id)} className="btn btn-small btn-success">Aceptar Cita</button>
+                            <button onClick={() => openRescheduleModal(a.id)} className="btn btn-small btn-secondary">Reprogramar</button>
+                            <button onClick={() => handleCancelByHost(a.id)} className="btn btn-small btn-danger">Cancelar</button>
+                          </>
+                        )}
+                        {a.status === 'aceptada' && a.host_accepted_at && a.anti_bypass_guest_accepted && !a.host_completed && (
                           <>
                             <button onClick={() => handleHostComplete(a.id)} className="btn btn-small btn-success">
-                              Marcar Completada
+                              Cita Realizada Fisicamente
                             </button>
                             <button onClick={() => handleNoShow(a.id)} className="btn btn-small btn-warning">No Asistio</button>
                             <button onClick={() => openRescheduleModal(a.id)} className="btn btn-small btn-secondary">Reprogramar</button>
                             <button onClick={() => handleCancelByHost(a.id)} className="btn btn-small btn-danger">Cancelar</button>
                           </>
                         )}
+                        {a.status === 'aceptada' && a.host_completed && !a.guest_completed && (
+                          <span className="text-muted">Esperando confirmacion del cliente</span>
+                        )}
                         {a.status === 'reprogramada' && (
                           <span className="text-muted">Esperando respuesta del cliente</span>
                         )}
-                        {a.status === 'realizada' && <span className="text-success">Completada</span>}
+                        {a.status === 'realizada' && <span className="text-success">Visita Completada</span>}
                         {a.status === 'rechazada' && <span className="text-danger">Rechazada</span>}
                         {a.status === 'cancelada' && <span className="text-muted">Cancelada</span>}
                         {a.status === 'no_asistida' && <span className="text-warning">No Asistio</span>}

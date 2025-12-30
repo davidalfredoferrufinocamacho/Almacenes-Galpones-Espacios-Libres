@@ -1660,11 +1660,14 @@ function ClientAppointments() {
                   <td>{apt.scheduled_time || 'N/A'}</td>
                   <td><span className={`status-badge status-${apt.status}`}>{getStatusLabel(apt.status)}</span></td>
                   <td>
-                    <span style={{marginRight: '0.5rem'}}>Host: {apt.host_completed ? '✅' : '⏳'}</span>
-                    <span>Tu: {apt.guest_completed ? '✅' : '⏳'}</span>
+                    <span style={{marginRight: '0.5rem'}}>Host: {apt.host_accepted_at ? '✅' : '⏳'}</span>
+                    <span>Tu: {apt.anti_bypass_guest_accepted ? '✅' : '⏳'}</span>
                   </td>
                   <td style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                    {apt.status === 'solicitada' && <span className="text-muted">Esperando respuesta del propietario</span>}
+                    {apt.status === 'solicitada' && <span className="text-muted">Esperando que el propietario acepte</span>}
+                    {apt.status === 'aceptada' && !apt.host_accepted_at && (
+                      <span className="text-muted">Esperando que el propietario acepte la cita</span>
+                    )}
                     {apt.status === 'reprogramada' && (
                       <>
                         <div style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>
@@ -1674,10 +1677,13 @@ function ClientAppointments() {
                         <button onClick={() => handleRejectReschedule(apt.id)} className="btn btn-small btn-danger">Rechazar</button>
                       </>
                     )}
-                    {apt.status === 'aceptada' && !apt.guest_completed && (
+                    {apt.status === 'aceptada' && apt.host_accepted_at && apt.anti_bypass_guest_accepted && !apt.guest_completed && (
                       <button onClick={() => handleGuestComplete(apt.id)} className="btn btn-small btn-success">
-                        Confirmar Visita
+                        Cita Realizada Fisicamente
                       </button>
+                    )}
+                    {apt.status === 'aceptada' && apt.guest_completed && !apt.host_completed && (
+                      <span className="text-muted">Esperando confirmacion del propietario</span>
                     )}
                     {apt.status === 'realizada' && <span className="text-success">Visita Completada</span>}
                     {apt.status === 'rechazada' && <span className="text-danger">Rechazada por propietario</span>}
