@@ -1010,7 +1010,7 @@ router.put('/appointments/:id/guest-complete', (req, res) => {
     }
 
     db.prepare(`
-      UPDATE appointments SET guest_completed = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      UPDATE appointments SET guest_completed = 1, guest_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(req.params.id);
 
     // Verificar si ambos marcaron como completada
@@ -1081,6 +1081,149 @@ router.post('/reservations/:id/reject-after-visit', (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al rechazar espacio' });
+  }
+});
+
+// Cliente propone fechas de alquiler despues de visita completada
+router.post('/reservations/:id/propose-dates', [
+  body('rental_start_date').isISO8601().withMessage('Fecha de inicio requerida'),
+  body('rental_end_date').isISO8601().withMessage('Fecha de fin requerida'),
+  body('rental_start_time').matches(/^\d{2}:\d{2}$/).withMessage('Hora de inicio requerida (formato HH:MM)')
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { rental_start_date, rental_end_date, rental_start_time } = req.body;
+
+    const reservation = db.prepare(`
+      SELECT * FROM reservations 
+      WHERE id = ? AND guest_id = ? AND status = 'visit_completed'
+    `).get(req.params.id, req.user.id);
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido para proponer fechas' });
+    }
+
+    // Validar que fecha fin sea posterior a inicio
+    if (new Date(rental_end_date) <= new Date(rental_start_date)) {
+      return res.status(400).json({ error: 'La fecha de fin debe ser posterior a la fecha de inicio' });
+    }
+
+    db.prepare(`
+      UPDATE reservations SET 
+        rental_start_date = ?,
+        rental_end_date = ?,
+        rental_start_time = ?,
+        dates_proposed_by = 'GUEST',
+        dates_proposed_at = CURRENT_TIMESTAMP,
+        status = 'dates_proposed',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(rental_start_date, rental_end_date, rental_start_time, req.params.id);
+
+    logAudit(req.user.id, 'RENTAL_DATES_PROPOSED', 'reservations', req.params.id, null, {
+      rental_start_date, rental_end_date, rental_start_time
+    }, req);
+
+    res.json({ 
+      message: 'Fechas de alquiler propuestas exitosamente. Esperando confirmacion del propietario.',
+      rental_start_date,
+      rental_end_date,
+      rental_start_time
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al proponer fechas' });
+  }
+});
+
+// Cliente acepta fechas propuestas por el Host
+router.post('/reservations/:id/accept-proposed-dates', (req, res) => {
+  try {
+    const reservation = db.prepare(`
+      SELECT * FROM reservations 
+      WHERE id = ? AND guest_id = ? AND status = 'dates_proposed' AND dates_proposed_by = 'HOST'
+    `).get(req.params.id, req.user.id);
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservacion no encontrada o no tiene propuesta del propietario' });
+    }
+
+    db.prepare(`
+      UPDATE reservations SET 
+        dates_confirmed_at = CURRENT_TIMESTAMP,
+        status = 'dates_confirmed',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(req.params.id);
+
+    logAudit(req.user.id, 'RENTAL_DATES_ACCEPTED_BY_GUEST', 'reservations', req.params.id, null, {
+      rental_start_date: reservation.rental_start_date,
+      rental_end_date: reservation.rental_end_date
+    }, req);
+
+    res.json({ 
+      message: 'Fechas aceptadas. Puede proceder con el pago.',
+      status: 'dates_confirmed'
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al aceptar fechas' });
+  }
+});
+
+// Cliente paga el monto restante (90%) despues de fechas confirmadas
+router.post('/reservations/:id/pay-remaining', (req, res) => {
+  try {
+    const { payment_method } = req.body;
+
+    const reservation = db.prepare(`
+      SELECT * FROM reservations 
+      WHERE id = ? AND guest_id = ? AND status = 'dates_confirmed'
+    `).get(req.params.id, req.user.id);
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido para pagar' });
+    }
+
+    if (reservation.remaining_amount <= 0) {
+      return res.status(400).json({ error: 'No hay monto pendiente de pago' });
+    }
+
+    // Crear registro de pago
+    const paymentId = generateId();
+    const clientInfo = getClientInfo(req);
+
+    db.prepare(`
+      INSERT INTO payments (id, reservation_id, user_id, amount, payment_type, payment_method, status, escrow_status, ip_address, user_agent)
+      VALUES (?, ?, ?, ?, 'remaining', ?, 'pending', 'held', ?, ?)
+    `).run(paymentId, req.params.id, req.user.id, reservation.remaining_amount, payment_method || 'transfer', clientInfo.ip, clientInfo.userAgent);
+
+    // Actualizar estado de reservacion
+    db.prepare(`
+      UPDATE reservations SET 
+        status = 'awaiting_full_payment',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(req.params.id);
+
+    logAudit(req.user.id, 'REMAINING_PAYMENT_INITIATED', 'payments', paymentId, null, {
+      reservation_id: req.params.id,
+      amount: reservation.remaining_amount,
+      payment_method
+    }, req);
+
+    res.json({ 
+      message: 'Pago del monto restante iniciado. Esperando confirmacion del administrador.',
+      payment_id: paymentId,
+      amount: reservation.remaining_amount
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al procesar pago' });
   }
 });
 

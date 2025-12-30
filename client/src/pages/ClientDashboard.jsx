@@ -260,13 +260,20 @@ function ClientReservations() {
     PAID_DEPOSIT_ESCROW: 'Anticipo Pagado',
     appointment_scheduled: 'Cita Agendada',
     visit_completed: 'Visita Realizada',
-    confirmed: 'Confirmado',
+    dates_proposed: 'Fechas Propuestas',
+    dates_confirmed: 'Fechas Confirmadas',
+    awaiting_full_payment: 'Esperando Pago',
+    fully_paid: 'Pago Completo',
     contract_pending: 'Contrato Pendiente',
+    confirmed: 'Confirmado',
     contract_signed: 'Contrato Firmado',
     completed: 'Completado',
     cancelled: 'Cancelado',
     refunded: 'Reembolsado'
   }
+
+  const [showDatesModal, setShowDatesModal] = useState(false)
+  const [datesForm, setDatesForm] = useState({ rental_start_date: '', rental_end_date: '', rental_start_time: '08:00' })
 
   useEffect(() => { loadReservations() }, [filter])
 
@@ -331,6 +338,48 @@ function ClientReservations() {
       const res = await api.post(`/client/reservations/${id}/reject-after-visit`)
       alert(`Espacio rechazado. Reembolso de Bs. ${res.data.refund_amount} procesado.`)
       setSelected(null)
+      loadReservations()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleProposeDates = async () => {
+    if (!datesForm.rental_start_date || !datesForm.rental_end_date || !datesForm.rental_start_time) {
+      return alert('Complete todas las fechas y hora')
+    }
+    try {
+      await api.post(`/client/reservations/${selected.id}/propose-dates`, datesForm)
+      alert('Fechas propuestas exitosamente. Esperando confirmacion del propietario.')
+      setShowDatesModal(false)
+      setDatesForm({ rental_start_date: '', rental_end_date: '', rental_start_time: '08:00' })
+      const res = await api.get(`/client/reservations/${selected.id}`)
+      setSelected(res.data)
+      loadReservations()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handlePayRemainingNew = async (id) => {
+    if (!confirm('Confirma el pago del saldo restante?')) return
+    try {
+      await api.post(`/client/reservations/${id}/pay-remaining`, { payment_method: 'transfer' })
+      alert('Pago iniciado. El administrador verificara su pago y se generara el contrato.')
+      setSelected(null)
+      loadReservations()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleAcceptDatesFromHost = async (id) => {
+    if (!confirm('Acepta las fechas propuestas por el propietario?')) return
+    try {
+      await api.post(`/client/reservations/${id}/accept-proposed-dates`)
+      alert('Fechas aceptadas. Puede proceder con el pago.')
+      const res = await api.get(`/client/reservations/${id}`)
+      setSelected(res.data)
       loadReservations()
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -499,7 +548,7 @@ function ClientReservations() {
                 <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%', marginBottom: '1rem' }}>
                   <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '8px', textAlign: 'center', flex: 1, minWidth: '200px' }}>
                     <h4 style={{ marginBottom: '0.5rem', color: '#92400e' }}>Visita Completada</h4>
-                    <p style={{ fontSize: '0.9rem', color: '#78350f', marginBottom: '1rem' }}>Elija una opcion para continuar:</p>
+                    <p style={{ fontSize: '0.9rem', color: '#78350f', marginBottom: '1rem' }}>Proponga las fechas de alquiler o rechace el espacio:</p>
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <button 
                         onClick={() => handleRejectAfterVisit(selected.id)} 
@@ -509,19 +558,113 @@ function ClientReservations() {
                         No me interesa (Reembolso)
                       </button>
                       <button 
-                        onClick={() => handlePayRemaining(selected.id)} 
+                        onClick={() => setShowDatesModal(true)} 
                         className="btn btn-primary"
                       >
-                        Pagar Saldo (Bs. {selected.remaining_amount?.toLocaleString()})
+                        Proponer Fechas de Alquiler
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+              {selected.status === 'dates_proposed' && selected.dates_proposed_by === 'GUEST' && (
+                <div style={{ background: '#dbeafe', padding: '1rem', borderRadius: '8px', textAlign: 'center', width: '100%', marginBottom: '1rem' }}>
+                  <h4 style={{ color: '#1e40af' }}>Esperando Confirmacion</h4>
+                  <p>Sus fechas propuestas estan siendo revisadas por el propietario.</p>
+                  <p><strong>Inicio:</strong> {selected.rental_start_date} a las {selected.rental_start_time}</p>
+                  <p><strong>Fin:</strong> {selected.rental_end_date}</p>
+                </div>
+              )}
+              {selected.status === 'dates_proposed' && selected.dates_proposed_by === 'HOST' && (
+                <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '8px', textAlign: 'center', width: '100%', marginBottom: '1rem' }}>
+                  <h4 style={{ color: '#92400e' }}>Propuesta del Propietario</h4>
+                  <p>El propietario ha propuesto las siguientes fechas:</p>
+                  <p><strong>Inicio:</strong> {selected.rental_start_date} a las {selected.rental_start_time}</p>
+                  <p><strong>Fin:</strong> {selected.rental_end_date}</p>
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginTop: '1rem' }}>
+                    <button onClick={() => handleAcceptDatesFromHost(selected.id)} className="btn btn-success">Aceptar Fechas</button>
+                    <button onClick={() => setShowDatesModal(true)} className="btn btn-outline">Contraproponer</button>
+                  </div>
+                </div>
+              )}
+              {selected.status === 'dates_confirmed' && (
+                <div style={{ background: '#dcfce7', padding: '1rem', borderRadius: '8px', textAlign: 'center', width: '100%', marginBottom: '1rem' }}>
+                  <h4 style={{ color: '#166534' }}>Fechas Confirmadas</h4>
+                  <p><strong>Inicio:</strong> {selected.rental_start_date} a las {selected.rental_start_time}</p>
+                  <p><strong>Fin:</strong> {selected.rental_end_date}</p>
+                  <p style={{ marginTop: '1rem' }}>Proceda con el pago del saldo restante para generar el contrato:</p>
+                  <button 
+                    onClick={() => handlePayRemainingNew(selected.id)} 
+                    className="btn btn-primary"
+                    style={{ marginTop: '0.5rem' }}
+                  >
+                    Pagar Saldo (Bs. {selected.remaining_amount?.toLocaleString()})
+                  </button>
+                </div>
+              )}
+              {selected.status === 'awaiting_full_payment' && (
+                <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '8px', textAlign: 'center', width: '100%', marginBottom: '1rem' }}>
+                  <h4 style={{ color: '#92400e' }}>Pago en Proceso</h4>
+                  <p>Su pago esta siendo verificado. El contrato se generara automaticamente cuando se confirme.</p>
                 </div>
               )}
               {['pending', 'confirmed'].includes(selected.status) && (
                 <button onClick={() => handleCancel(selected.id)} className="btn btn-danger">Cancelar Reservacion</button>
               )}
               <button onClick={() => setSelected(null)} className="btn btn-secondary">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDatesModal && selected && (
+        <div className="modal-overlay" onClick={() => setShowDatesModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Proponer Fechas de Alquiler</h2>
+              <button className="close-btn" onClick={() => setShowDatesModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '1rem' }}>Espacio: <strong>{selected.space_title}</strong></p>
+              <div className="form-group">
+                <label>Fecha de Inicio del Alquiler</label>
+                <input 
+                  type="date" 
+                  value={datesForm.rental_start_date}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={e => setDatesForm({ ...datesForm, rental_start_date: e.target.value })}
+                  className="form-control"
+                />
+              </div>
+              <div className="form-group">
+                <label>Hora de Inicio</label>
+                <input 
+                  type="time" 
+                  value={datesForm.rental_start_time}
+                  onChange={e => setDatesForm({ ...datesForm, rental_start_time: e.target.value })}
+                  className="form-control"
+                />
+              </div>
+              <div className="form-group">
+                <label>Fecha de Fin del Alquiler</label>
+                <input 
+                  type="date" 
+                  value={datesForm.rental_end_date}
+                  min={datesForm.rental_start_date || new Date().toISOString().split('T')[0]}
+                  onChange={e => setDatesForm({ ...datesForm, rental_end_date: e.target.value })}
+                  className="form-control"
+                />
+              </div>
+              <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', marginTop: '1rem' }}>
+                <p style={{ fontSize: '0.9rem', color: '#64748b' }}>
+                  El propietario revisara su propuesta. Una vez que ambos acuerden las fechas, 
+                  podra proceder con el pago del saldo restante de <strong>Bs. {selected.remaining_amount?.toLocaleString()}</strong>.
+                </p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowDatesModal(false)} className="btn btn-outline">Cancelar</button>
+              <button onClick={handleProposeDates} className="btn btn-primary">Enviar Propuesta</button>
             </div>
           </div>
         </div>

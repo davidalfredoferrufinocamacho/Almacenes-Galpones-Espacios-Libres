@@ -123,6 +123,11 @@ function initDatabase() {
         'PAID_DEPOSIT_ESCROW',
         'appointment_scheduled',
         'visit_completed',
+        'dates_proposed',
+        'dates_confirmed',
+        'awaiting_full_payment',
+        'fully_paid',
+        'contract_pending',
         'confirmed',
         'contract_signed',
         'completed',
@@ -1165,7 +1170,16 @@ function initDatabase() {
     { table: 'appointments', column: 'reminder_24h_sent', type: 'INTEGER DEFAULT 0' },
     { table: 'appointments', column: 'reminder_2h_sent', type: 'INTEGER DEFAULT 0' },
     { table: 'appointments', column: 'confirmation_token', type: 'TEXT' },
-    { table: 'appointments', column: 'guest_confirmed', type: 'INTEGER DEFAULT 0' }
+    { table: 'appointments', column: 'guest_confirmed', type: 'INTEGER DEFAULT 0' },
+    { table: 'appointments', column: 'host_completed_at', type: 'TEXT' },
+    { table: 'appointments', column: 'guest_completed_at', type: 'TEXT' },
+    { table: 'reservations', column: 'rental_start_date', type: 'TEXT' },
+    { table: 'reservations', column: 'rental_end_date', type: 'TEXT' },
+    { table: 'reservations', column: 'rental_start_time', type: 'TEXT' },
+    { table: 'reservations', column: 'dates_proposed_by', type: 'TEXT' },
+    { table: 'reservations', column: 'dates_proposed_at', type: 'TEXT' },
+    { table: 'reservations', column: 'dates_confirmed_at', type: 'TEXT' },
+    { table: 'reservations', column: 'full_payment_at', type: 'TEXT' }
   ];
 
   // Backfill null categories to 'legal'

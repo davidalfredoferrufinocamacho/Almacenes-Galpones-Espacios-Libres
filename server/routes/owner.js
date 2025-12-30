@@ -1252,7 +1252,7 @@ router.put('/appointments/:id/host-complete', (req, res) => {
     }
 
     db.prepare(`
-      UPDATE appointments SET host_completed = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      UPDATE appointments SET host_completed = 1, host_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(req.params.id);
 
     // Verificar si ambos marcaron como completada
@@ -1274,6 +1274,104 @@ router.put('/appointments/:id/host-complete', (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al marcar visita' });
+  }
+});
+
+// Host confirma fechas de alquiler propuestas por cliente
+router.put('/reservations/:id/confirm-dates', (req, res) => {
+  try {
+    const reservation = db.prepare(`
+      SELECT r.*, s.title as space_title, u.email as guest_email, u.first_name as guest_name
+      FROM reservations r
+      JOIN spaces s ON r.space_id = s.id
+      JOIN users u ON r.guest_id = u.id
+      WHERE r.id = ? AND r.host_id = ? AND r.status = 'dates_proposed'
+    `).get(req.params.id, req.user.id);
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido para confirmar fechas' });
+    }
+
+    db.prepare(`
+      UPDATE reservations SET 
+        dates_confirmed_at = CURRENT_TIMESTAMP,
+        status = 'dates_confirmed',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(req.params.id);
+
+    logAudit(req.user.id, 'RENTAL_DATES_CONFIRMED', 'reservations', req.params.id, null, {
+      rental_start_date: reservation.rental_start_date,
+      rental_end_date: reservation.rental_end_date,
+      rental_start_time: reservation.rental_start_time
+    }, req);
+
+    res.json({ 
+      message: 'Fechas de alquiler confirmadas. El cliente puede proceder con el pago del monto restante.',
+      rental_start_date: reservation.rental_start_date,
+      rental_end_date: reservation.rental_end_date,
+      rental_start_time: reservation.rental_start_time,
+      remaining_amount: reservation.remaining_amount
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al confirmar fechas' });
+  }
+});
+
+// Host rechaza fechas y propone nuevas
+router.put('/reservations/:id/counter-propose-dates', [
+  body('rental_start_date').isISO8601().withMessage('Fecha de inicio requerida'),
+  body('rental_end_date').isISO8601().withMessage('Fecha de fin requerida'),
+  body('rental_start_time').matches(/^\d{2}:\d{2}$/).withMessage('Hora de inicio requerida')
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { rental_start_date, rental_end_date, rental_start_time, reason } = req.body;
+
+    const reservation = db.prepare(`
+      SELECT * FROM reservations 
+      WHERE id = ? AND host_id = ? AND status = 'dates_proposed'
+    `).get(req.params.id, req.user.id);
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservacion no encontrada o no esta en estado valido' });
+    }
+
+    // Validar que fecha fin sea posterior a inicio
+    if (new Date(rental_end_date) <= new Date(rental_start_date)) {
+      return res.status(400).json({ error: 'La fecha de fin debe ser posterior a la fecha de inicio' });
+    }
+
+    db.prepare(`
+      UPDATE reservations SET 
+        rental_start_date = ?,
+        rental_end_date = ?,
+        rental_start_time = ?,
+        dates_proposed_by = 'HOST',
+        dates_proposed_at = CURRENT_TIMESTAMP,
+        status = 'dates_proposed',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(rental_start_date, rental_end_date, rental_start_time, req.params.id);
+
+    logAudit(req.user.id, 'RENTAL_DATES_COUNTER_PROPOSED', 'reservations', req.params.id, null, {
+      rental_start_date, rental_end_date, rental_start_time, reason
+    }, req);
+
+    res.json({ 
+      message: 'Nueva propuesta de fechas enviada al cliente.',
+      rental_start_date,
+      rental_end_date,
+      rental_start_time
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al contraproponer fechas' });
   }
 });
 

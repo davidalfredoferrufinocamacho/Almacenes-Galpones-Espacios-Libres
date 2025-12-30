@@ -680,6 +680,25 @@ function OwnerReservations() {
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('')
   const [selected, setSelected] = useState(null)
+  const [showCounterPropose, setShowCounterPropose] = useState(false)
+  const [counterDates, setCounterDates] = useState({ rental_start_date: '', rental_end_date: '', rental_start_time: '08:00' })
+
+  const statusLabels = {
+    pending: 'Pendiente',
+    PAID_DEPOSIT_ESCROW: 'Anticipo Pagado',
+    appointment_scheduled: 'Cita Agendada',
+    visit_completed: 'Visita Realizada',
+    dates_proposed: 'Fechas Propuestas',
+    dates_confirmed: 'Fechas Confirmadas',
+    awaiting_full_payment: 'Esperando Pago',
+    fully_paid: 'Pago Completo',
+    contract_pending: 'Contrato Pendiente',
+    confirmed: 'Confirmado',
+    contract_signed: 'Contrato Firmado',
+    completed: 'Completado',
+    cancelled: 'Cancelado',
+    refunded: 'Reembolsado'
+  }
 
   useEffect(() => { loadData() }, [filterStatus])
 
@@ -701,6 +720,38 @@ function OwnerReservations() {
     }
   }
 
+  const handleConfirmDates = async (id) => {
+    if (!confirm('Confirma las fechas propuestas por el cliente?')) return
+    try {
+      await api.put(`/reservations/${id}/confirm-dates`)
+      alert('Fechas confirmadas. El cliente puede proceder con el pago.')
+      loadData()
+      if (selected) {
+        const res = await api.get(`/reservations/${id}`)
+        setSelected(res.data)
+      }
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
+  const handleCounterPropose = async () => {
+    if (!counterDates.rental_start_date || !counterDates.rental_end_date || !counterDates.rental_start_time) {
+      return alert('Complete todas las fechas')
+    }
+    try {
+      await api.put(`/reservations/${selected.id}/counter-propose-dates`, counterDates)
+      alert('Contrapropuesta enviada al cliente.')
+      setShowCounterPropose(false)
+      setCounterDates({ rental_start_date: '', rental_end_date: '', rental_start_time: '08:00' })
+      loadData()
+      const res = await api.get(`/reservations/${selected.id}`)
+      setSelected(res.data)
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
@@ -711,6 +762,9 @@ function OwnerReservations() {
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">Todos los estados</option>
           <option value="pending">Pendiente</option>
+          <option value="dates_proposed">Fechas Propuestas</option>
+          <option value="dates_confirmed">Fechas Confirmadas</option>
+          <option value="awaiting_full_payment">Esperando Pago</option>
           <option value="confirmed">Confirmada</option>
           <option value="contract_pending">Contrato Pendiente</option>
           <option value="contract_signed">Contrato Firmado</option>
@@ -738,11 +792,14 @@ function OwnerReservations() {
                 <td>{r.space_title}</td>
                 <td>{r.guest_name}</td>
                 <td>{r.guest_email}</td>
-                <td>{r.start_date} - {r.end_date}</td>
+                <td>{r.rental_start_date || r.start_date} - {r.rental_end_date || r.end_date}</td>
                 <td>Bs. {r.total_amount?.toLocaleString()}</td>
-                <td><span className={`status-badge status-${r.status}`}>{r.status}</span></td>
-                <td>
+                <td><span className={`status-badge status-${r.status}`}>{statusLabels[r.status] || r.status}</span></td>
+                <td style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
                   <button onClick={() => viewDetails(r.id)} className="btn btn-small">Ver</button>
+                  {r.status === 'dates_proposed' && r.dates_proposed_by === 'GUEST' && (
+                    <button onClick={() => handleConfirmDates(r.id)} className="btn btn-small btn-success">Confirmar Fechas</button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -764,12 +821,47 @@ function OwnerReservations() {
               <div><strong>Huesped:</strong> {selected.guest_name}</div>
               <div><strong>Email:</strong> {selected.guest_email}</div>
               <div><strong>Telefono:</strong> {selected.guest_phone || 'N/A'}</div>
-              <div><strong>Fechas:</strong> {selected.start_date} - {selected.end_date}</div>
+              <div><strong>Fechas Propuestas:</strong> {selected.rental_start_date || 'N/A'} - {selected.rental_end_date || 'N/A'}</div>
+              <div><strong>Hora Inicio:</strong> {selected.rental_start_time || 'N/A'}</div>
+              <div><strong>Propuesto por:</strong> {selected.dates_proposed_by === 'GUEST' ? 'Cliente' : selected.dates_proposed_by === 'HOST' ? 'Usted' : 'N/A'}</div>
               <div><strong>Monto Total:</strong> Bs. {selected.total_amount?.toLocaleString()}</div>
-              <div><strong>Deposito:</strong> Bs. {selected.deposit_amount?.toLocaleString()}</div>
-              <div><strong>Comision:</strong> Bs. {selected.commission_amount?.toLocaleString()}</div>
-              <div><strong>Estado:</strong> <span className={`status-badge status-${selected.status}`}>{selected.status}</span></div>
+              <div><strong>Deposito Pagado:</strong> Bs. {selected.deposit_amount?.toLocaleString()}</div>
+              <div><strong>Saldo Pendiente:</strong> Bs. {selected.remaining_amount?.toLocaleString()}</div>
+              <div><strong>Estado:</strong> <span className={`status-badge status-${selected.status}`}>{statusLabels[selected.status] || selected.status}</span></div>
             </div>
+
+            {selected.status === 'dates_proposed' && selected.dates_proposed_by === 'GUEST' && (
+              <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '8px', marginTop: '1rem', textAlign: 'center' }}>
+                <h4 style={{ color: '#92400e', marginBottom: '0.5rem' }}>Cliente propuso fechas de alquiler</h4>
+                <p><strong>Inicio:</strong> {selected.rental_start_date} a las {selected.rental_start_time}</p>
+                <p><strong>Fin:</strong> {selected.rental_end_date}</p>
+                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginTop: '1rem' }}>
+                  <button onClick={() => handleConfirmDates(selected.id)} className="btn btn-success">Confirmar Fechas</button>
+                  <button onClick={() => setShowCounterPropose(true)} className="btn btn-outline">Contraproponer</button>
+                </div>
+              </div>
+            )}
+
+            {selected.status === 'dates_proposed' && selected.dates_proposed_by === 'HOST' && (
+              <div style={{ background: '#dbeafe', padding: '1rem', borderRadius: '8px', marginTop: '1rem', textAlign: 'center' }}>
+                <h4 style={{ color: '#1e40af' }}>Esperando respuesta del cliente</h4>
+                <p>Su contrapropuesta esta siendo revisada por el cliente.</p>
+              </div>
+            )}
+
+            {selected.status === 'dates_confirmed' && (
+              <div style={{ background: '#dcfce7', padding: '1rem', borderRadius: '8px', marginTop: '1rem', textAlign: 'center' }}>
+                <h4 style={{ color: '#166534' }}>Fechas Confirmadas</h4>
+                <p>Esperando que el cliente complete el pago del saldo pendiente.</p>
+              </div>
+            )}
+
+            {selected.status === 'awaiting_full_payment' && (
+              <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '8px', marginTop: '1rem', textAlign: 'center' }}>
+                <h4 style={{ color: '#92400e' }}>Pago en Proceso</h4>
+                <p>El cliente ha iniciado el pago. El administrador lo verificara.</p>
+              </div>
+            )}
             {selected.payments?.length > 0 && (
               <div style={{marginTop: '1rem'}}>
                 <h3>Pagos</h3>
@@ -792,6 +884,50 @@ function OwnerReservations() {
               </div>
             )}
             <button onClick={() => setSelected(null)} className="btn btn-secondary" style={{marginTop: '1rem'}}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      {showCounterPropose && selected && (
+        <div className="modal-overlay" onClick={() => setShowCounterPropose(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <h2>Contraproponer Fechas</h2>
+            <p style={{ marginBottom: '1rem' }}>
+              El cliente propuso: <strong>{selected.rental_start_date}</strong> - <strong>{selected.rental_end_date}</strong>
+            </p>
+            <div className="form-group">
+              <label>Nueva Fecha de Inicio</label>
+              <input 
+                type="date" 
+                value={counterDates.rental_start_date}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={e => setCounterDates({ ...counterDates, rental_start_date: e.target.value })}
+                className="form-control"
+              />
+            </div>
+            <div className="form-group">
+              <label>Hora de Inicio</label>
+              <input 
+                type="time" 
+                value={counterDates.rental_start_time}
+                onChange={e => setCounterDates({ ...counterDates, rental_start_time: e.target.value })}
+                className="form-control"
+              />
+            </div>
+            <div className="form-group">
+              <label>Nueva Fecha de Fin</label>
+              <input 
+                type="date" 
+                value={counterDates.rental_end_date}
+                min={counterDates.rental_start_date || new Date().toISOString().split('T')[0]}
+                onChange={e => setCounterDates({ ...counterDates, rental_end_date: e.target.value })}
+                className="form-control"
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
+              <button onClick={() => setShowCounterPropose(false)} className="btn btn-outline">Cancelar</button>
+              <button onClick={handleCounterPropose} className="btn btn-primary">Enviar Contrapropuesta</button>
+            </div>
           </div>
         </div>
       )}
