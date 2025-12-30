@@ -15,15 +15,6 @@ function SpaceDetail() {
   const [paymentMethod, setPaymentMethod] = useState('card')
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
-  
-  // Estados para citas
-  const [availableSlots, setAvailableSlots] = useState([])
-  const [loadingSlots, setLoadingSlots] = useState(false)
-  const [selectedSlot, setSelectedSlot] = useState(null)
-  const [appointmentNotes, setAppointmentNotes] = useState('')
-  const [requestingAppointment, setRequestingAppointment] = useState(false)
-  const [appointmentSuccess, setAppointmentSuccess] = useState(false)
-  const [showAppointmentModal, setShowAppointmentModal] = useState(false)
 
   const spaceTypes = {
     almacen: 'Almacen',
@@ -43,67 +34,12 @@ function SpaceDetail() {
     try {
       const response = await api.get(`/spaces/${id}`)
       setSpace(response.data)
-      // Si el espacio tiene calendario activo, cargar slots disponibles
-      if (response.data.is_calendar_active) {
-        loadAvailableSlots()
-      }
     } catch (error) {
       console.error('Error loading space:', error)
     } finally {
       setLoading(false)
     }
   }
-
-  const loadAvailableSlots = async () => {
-    setLoadingSlots(true)
-    try {
-      const response = await api.get(`/spaces/${id}/available-slots`)
-      setAvailableSlots(response.data.available_slots || [])
-    } catch (error) {
-      console.error('Error loading slots:', error)
-      setAvailableSlots([])
-    } finally {
-      setLoadingSlots(false)
-    }
-  }
-
-  const handleRequestAppointment = async () => {
-    if (!selectedSlot) {
-      setError('Por favor seleccione un horario')
-      return
-    }
-
-    setRequestingAppointment(true)
-    setError('')
-
-    try {
-      await api.post(`/spaces/${id}/request-appointment`, {
-        scheduled_date: selectedSlot.date,
-        scheduled_time: selectedSlot.time,
-        notes: appointmentNotes
-      })
-
-      setAppointmentSuccess(true)
-      setShowAppointmentModal(false)
-      setSelectedSlot(null)
-      setAppointmentNotes('')
-      // Recargar slots disponibles
-      loadAvailableSlots()
-    } catch (error) {
-      setError(error.response?.data?.error || 'Error al solicitar cita')
-    } finally {
-      setRequestingAppointment(false)
-    }
-  }
-
-  // Agrupar slots por fecha
-  const slotsByDate = availableSlots.reduce((acc, slot) => {
-    if (!acc[slot.date]) {
-      acc[slot.date] = { date: slot.date, day_name: slot.day_name, slots: [] }
-    }
-    acc[slot.date].slots.push(slot)
-    return acc
-  }, {})
 
   const handleReserve = async () => {
     if (!isAuthenticated) {
@@ -323,49 +259,6 @@ function SpaceDetail() {
               onCalculate={setCalculation}
             />
 
-            {/* Seccion de Citas */}
-            {space.is_calendar_active && (
-              <div className="appointments-card card">
-                <h3>Agendar Visita</h3>
-                {appointmentSuccess ? (
-                  <div className="appointment-success">
-                    <p className="success-message">Solicitud de cita enviada exitosamente. El propietario la revisara pronto.</p>
-                    <button className="btn btn-secondary" onClick={() => setAppointmentSuccess(false)}>
-                      Agendar otra cita
-                    </button>
-                  </div>
-                ) : isAuthenticated && user?.role === 'GUEST' ? (
-                  <>
-                    {loadingSlots ? (
-                      <p>Cargando horarios disponibles...</p>
-                    ) : availableSlots.length > 0 ? (
-                      <>
-                        <p className="appointment-info">Seleccione una fecha y hora para visitar el espacio:</p>
-                        <button 
-                          className="btn btn-primary" 
-                          onClick={() => setShowAppointmentModal(true)}
-                          style={{ width: '100%' }}
-                        >
-                          Ver Horarios Disponibles ({availableSlots.length})
-                        </button>
-                      </>
-                    ) : (
-                      <p className="no-slots">No hay horarios disponibles en los proximos 14 dias. El propietario debe configurar su disponibilidad.</p>
-                    )}
-                  </>
-                ) : !isAuthenticated ? (
-                  <div className="login-prompt-small">
-                    <p>Inicie sesion para agendar una visita</p>
-                    <button className="btn btn-secondary" onClick={() => navigate(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`)}>
-                      Iniciar Sesion
-                    </button>
-                  </div>
-                ) : (
-                  <p className="no-slots">Solo los clientes pueden agendar visitas</p>
-                )}
-              </div>
-            )}
-
             {isAuthenticated ? (
               <div className="reserve-card card">
                 <h3>Pagar Anticipo y Reservar</h3>
@@ -409,68 +302,6 @@ function SpaceDetail() {
           </aside>
         </div>
       </div>
-
-      {/* Modal de Seleccion de Horarios */}
-      {showAppointmentModal && (
-        <div className="modal-overlay" onClick={() => setShowAppointmentModal(false)}>
-          <div className="modal appointment-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Seleccionar Horario para Visita</h2>
-              <button className="close-btn" onClick={() => setShowAppointmentModal(false)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {error && <div className="alert alert-error">{error}</div>}
-              
-              <div className="slots-container">
-                {Object.values(slotsByDate).slice(0, 7).map(dayData => (
-                  <div key={dayData.date} className="day-slots">
-                    <h4>{dayData.day_name} - {new Date(dayData.date + 'T12:00:00').toLocaleDateString('es-BO')}</h4>
-                    <div className="slots-grid">
-                      {dayData.slots.map(slot => (
-                        <button
-                          key={`${slot.date}_${slot.time}`}
-                          className={`slot-btn ${selectedSlot?.date === slot.date && selectedSlot?.time === slot.time ? 'selected' : ''}`}
-                          onClick={() => setSelectedSlot(slot)}
-                        >
-                          {slot.time}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {selectedSlot && (
-                <div className="selected-slot-info">
-                  <p><strong>Horario seleccionado:</strong> {selectedSlot.day_name} {new Date(selectedSlot.date + 'T12:00:00').toLocaleDateString('es-BO')} a las {selectedSlot.time}</p>
-                  
-                  <div className="form-group">
-                    <label>Notas adicionales (opcional)</label>
-                    <textarea
-                      value={appointmentNotes}
-                      onChange={(e) => setAppointmentNotes(e.target.value)}
-                      placeholder="Ej: Estare acompanado de mi socio, necesito ver el area de carga..."
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowAppointmentModal(false)}>
-                Cancelar
-              </button>
-              <button 
-                className="btn btn-primary" 
-                onClick={handleRequestAppointment}
-                disabled={!selectedSlot || requestingAppointment}
-              >
-                {requestingAppointment ? 'Enviando...' : 'Solicitar Cita'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
