@@ -607,15 +607,15 @@ router.post('/contracts/:id/sign', (req, res) => {
       SELECT c.*, s.title as space_title
       FROM contracts c
       JOIN spaces s ON c.space_id = s.id
-      WHERE c.id = ? AND s.host_id = ?
+      WHERE c.id = ? AND s.host_id = ? AND c.status = 'pending'
     `).get(req.params.id, userId);
 
     if (!contract) {
-      return res.status(404).json({ error: 'Contrato no encontrado' });
+      return res.status(404).json({ error: 'Contrato no encontrado o no esta en estado pendiente de firma' });
     }
 
-    if (!contract.guest_signed) {
-      return res.status(400).json({ error: 'El cliente debe firmar primero antes de que usted pueda firmar' });
+    if (!contract.guest_signed || contract.guest_signed !== 1) {
+      return res.status(400).json({ error: 'El cliente debe firmar primero antes de que usted pueda firmar. El contrato aun no ha sido firmado por el cliente.' });
     }
 
     if (contract.host_signed) {
