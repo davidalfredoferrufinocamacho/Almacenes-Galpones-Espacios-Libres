@@ -1449,11 +1449,11 @@ function ClientAppointments() {
       <h1>Mis Citas</h1>
 
       {reservations.length > 0 && (
-        <div className="pending-reservations-section" style={{ marginBottom: '2rem' }}>
-          <h3>Reservaciones pendientes de agendar cita</h3>
+        <div className="pending-reservations-section" style={{ marginBottom: '2rem', padding: '1.5rem', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px' }}>
+          <h3 style={{ color: '#92400e', marginBottom: '1rem' }}>Reservaciones pendientes de agendar cita</h3>
           <div className="reservation-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
             {reservations.map(r => (
-              <div key={r.id} className="card" style={{ padding: '1rem' }}>
+              <div key={r.id} className="card" style={{ padding: '1rem', background: 'white' }}>
                 <h4>{r.space_title}</h4>
                 <p style={{ fontSize: '0.9rem', color: '#64748b' }}>{r.city}, {r.department}</p>
                 <p style={{ fontSize: '0.9rem' }}>{r.sqm_requested} m² - {r.period_quantity} {r.period_type}</p>
@@ -1466,7 +1466,10 @@ function ClientAppointments() {
         </div>
       )}
 
-      <div className="filter-tabs" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+      <div className="appointments-section" style={{ marginTop: '2rem' }}>
+        <h3 style={{ marginBottom: '1rem', color: '#0f172a' }}>Historial de Citas Programadas</h3>
+        
+        <div className="filter-tabs" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         <button className={`filter-btn ${statusFilter === 'all' ? 'active' : ''}`} onClick={() => setStatusFilter('all')}>
           Todas ({appointments.length})
         </button>
@@ -1544,6 +1547,7 @@ function ClientAppointments() {
           </table>
         </div>
       )}
+      </div>
 
       {showScheduleModal && (
         <div className="modal-overlay" onClick={() => setShowScheduleModal(false)}>
