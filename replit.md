@@ -23,6 +23,18 @@ The project utilizes a Node.js 20 backend with Express.js and SQLite for data pe
 *   **Contract PDF Export & Invoice Generation:** Legally compliant PDF documents are generated from platform data.
 *   **Contract Extensions/Annexes:** Extensions create separate annexes referencing the original contract without modifying it.
 *   **Anti-Bypass Clause:** Enforced for both guests and hosts to protect platform commissions.
+*   **Dual-Confirmation Appointment System:** Complete workflow for physical property visits:
+    - Client requests appointment → status 'solicitada'
+    - Client accepts anti-bypass clause → `anti_bypass_guest_accepted = 1`
+    - Host accepts appointment → `host_accepted_at` timestamp saved, status 'aceptada'
+    - Both must accept before physical visit can proceed (shown with ✅ indicators)
+    - After physical visit, both must click "Cita Realizada Físicamente" button
+    - When both confirm (`host_completed = 1` and `guest_completed = 1`) → status 'realizada'
+    - Client sees "Cerrar Contrato" button to pay remaining 90%
+    - After payment, contract is auto-generated with status 'pending'
+    - Client signs first (guest_signed = 1), then host signs (host_signed = 1)
+    - Contract status becomes 'signed' after both signatures
+    - Email notifications sent at each signature step
 *   **Email Verification System:** New user registration requires email verification for account activation.
 *   **Admin Panel:** A comprehensive interface for managing users (Clients/Hosts), spaces, reservations, contracts, payments, legal texts, notifications, and system configuration, with role-based access and audit logging.
 *   **Hierarchical Admin System:** Two-tier admin structure with Super Admin (full access to all 27 sections including config, legal texts, accounting, roles, payment methods) and Admin (limited to operational sections like users, spaces, reservations). Backend protection via `requireSuperAdmin` middleware on all sensitive endpoints.
