@@ -1495,6 +1495,10 @@ function ClientAppointments() {
   const [contractLoading, setContractLoading] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
   const [paymentMethods, setPaymentMethods] = useState([])
+  const [showAntiBypassModal, setShowAntiBypassModal] = useState(false)
+  const [antiBypassText, setAntiBypassText] = useState(null)
+  const [antiBypassAccepted, setAntiBypassAccepted] = useState(false)
+  const [loadingAntiBypass, setLoadingAntiBypass] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -1541,14 +1545,33 @@ function ClientAppointments() {
 
   const handleScheduleAppointment = async () => {
     if (!selectedSlot) return alert('Seleccione un horario')
+    setLoadingAntiBypass(true)
+    try {
+      const res = await api.get('/legal/anti-bypass/GUEST')
+      setAntiBypassText(res.data)
+      setAntiBypassAccepted(false)
+      setShowAntiBypassModal(true)
+    } catch (error) {
+      alert('Error al cargar clausula anti-bypass: ' + (error.response?.data?.error || error.message))
+    }
+    setLoadingAntiBypass(false)
+  }
+
+  const handleConfirmAppointmentWithAntiBypass = async () => {
+    if (!antiBypassAccepted) return alert('Debe aceptar la clausula anti-bypass para continuar')
     setSchedulingLoading(true)
     try {
-      await api.post(`/client/reservations/${selectedReservation.id}/appointments`, {
+      const appointmentRes = await api.post(`/client/reservations/${selectedReservation.id}/appointments`, {
         scheduled_date: selectedSlot.date,
         scheduled_time: selectedSlot.time
       })
-      alert('Cita agendada exitosamente')
+      const appointmentId = appointmentRes.data.id
+      await api.post(`/appointments/${appointmentId}/accept-anti-bypass`)
+      alert('Cita agendada exitosamente. La clausula anti-bypass ha sido aceptada.')
+      setShowAntiBypassModal(false)
       setShowScheduleModal(false)
+      setAntiBypassText(null)
+      setAntiBypassAccepted(false)
       loadData()
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -1871,6 +1894,69 @@ function ClientAppointments() {
                 disabled={!selectedPaymentMethod || contractLoading}
               >
                 {contractLoading ? 'Procesando...' : `Pagar Bs. ${contractReservationDetails?.remaining_amount?.toFixed(2) || '0.00'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAntiBypassModal && (
+        <div className="modal-overlay" onClick={() => setShowAntiBypassModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px' }}>
+            <div className="modal-header">
+              <h2>Clausula Anti-Bypass</h2>
+              <button className="close-btn" onClick={() => setShowAntiBypassModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '1rem', padding: '1rem', background: '#fef3c7', borderRadius: '8px' }}>
+                <p style={{ fontSize: '0.9rem', color: '#92400e', fontWeight: 'bold' }}>
+                  Antes de confirmar su cita, debe leer y aceptar la siguiente clausula anti-bypass.
+                </p>
+              </div>
+              
+              {antiBypassText ? (
+                <div style={{ 
+                  maxHeight: '300px', 
+                  overflowY: 'auto', 
+                  padding: '1rem', 
+                  background: '#f8fafc', 
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  marginBottom: '1rem'
+                }}>
+                  <h4 style={{ marginBottom: '0.5rem' }}>{antiBypassText.title || 'Clausula Anti-Bypass'}</h4>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: '1.6' }}>
+                    {antiBypassText.content}
+                  </div>
+                </div>
+              ) : (
+                <div className="loading"><div className="spinner"></div></div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '1rem', background: '#f1f5f9', borderRadius: '8px' }}>
+                <input 
+                  type="checkbox" 
+                  id="acceptAntiBypass"
+                  checked={antiBypassAccepted}
+                  onChange={(e) => setAntiBypassAccepted(e.target.checked)}
+                  style={{ marginTop: '4px', width: '20px', height: '20px', cursor: 'pointer' }}
+                />
+                <label htmlFor="acceptAntiBypass" style={{ cursor: 'pointer', fontSize: '0.95rem' }}>
+                  He leido y acepto la clausula anti-bypass. Entiendo que al aceptar me comprometo a realizar 
+                  cualquier transaccion relacionada con este espacio exclusivamente a traves de esta plataforma.
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => { setShowAntiBypassModal(false); setAntiBypassAccepted(false); }} className="btn btn-outline">
+                Cancelar
+              </button>
+              <button 
+                onClick={handleConfirmAppointmentWithAntiBypass} 
+                className="btn btn-primary" 
+                disabled={!antiBypassAccepted || schedulingLoading}
+              >
+                {schedulingLoading ? 'Confirmando...' : 'Aceptar y Confirmar Cita'}
               </button>
             </div>
           </div>
