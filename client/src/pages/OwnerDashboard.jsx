@@ -1512,17 +1512,36 @@ function OwnerAppointments() {
 function OwnerContracts() {
   const [contracts, setContracts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [signing, setSigning] = useState(false)
 
-  useEffect(() => {
+  const loadContracts = () => {
     api.get('/contracts').then(res => {
       setContracts(Array.isArray(res.data) ? res.data : [])
       setLoading(false)
     }).catch(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadContracts()
   }, [])
+
+  const handleSign = async (contractId) => {
+    if (!confirm('Esta por firmar digitalmente este contrato. Esta accion es legalmente vinculante. ¿Desea continuar?')) return
+    setSigning(true)
+    try {
+      const res = await api.post(`/contracts/${contractId}/sign`)
+      alert(res.data.message)
+      loadContracts()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setSigning(false)
+  }
 
   const statusLabels = {
     draft: 'Borrador',
-    pending: 'Pendiente',
+    pending: 'Pendiente Firma',
+    signed: 'Firmado',
     active: 'Activo',
     completed: 'Completado',
     cancelled: 'Cancelado'
@@ -1544,7 +1563,9 @@ function OwnerContracts() {
               <th>Inicio</th>
               <th>Fin</th>
               <th>Monto</th>
+              <th>Firmas</th>
               <th>Estado</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -1553,10 +1574,25 @@ function OwnerContracts() {
                 <td>{c.contract_number || c.id.substring(0, 8)}</td>
                 <td>{c.space_title}</td>
                 <td>{c.guest_name}</td>
-                <td>{new Date(c.start_date).toLocaleDateString()}</td>
-                <td>{new Date(c.end_date).toLocaleDateString()}</td>
-                <td>Bs. {c.total_amount?.toLocaleString()}</td>
-                <td><span className={`status-badge status-${c.status}`}>{statusLabels[c.status]}</span></td>
+                <td>{c.start_date ? new Date(c.start_date).toLocaleDateString() : 'N/A'}</td>
+                <td>{c.end_date ? new Date(c.end_date).toLocaleDateString() : 'N/A'}</td>
+                <td>Bs. {(c.rental_amount || c.total_amount || 0).toLocaleString()}</td>
+                <td>
+                  <span style={{marginRight: '0.5rem'}}>Cliente: {c.guest_signed ? '✅' : '⏳'}</span>
+                  <span>Usted: {c.host_signed ? '✅' : '⏳'}</span>
+                </td>
+                <td><span className={`status-badge status-${c.status}`}>{statusLabels[c.status] || c.status}</span></td>
+                <td>
+                  {c.status === 'pending' && c.guest_signed && !c.host_signed && (
+                    <button onClick={() => handleSign(c.id)} className="btn btn-small btn-primary" disabled={signing}>
+                      {signing ? 'Firmando...' : 'Firmar Contrato'}
+                    </button>
+                  )}
+                  {c.status === 'pending' && !c.guest_signed && (
+                    <span className="text-muted">Esperando firma del cliente</span>
+                  )}
+                  {c.status === 'signed' && <span className="text-success">Contrato Activo</span>}
+                </td>
               </tr>
             ))}
           </tbody>

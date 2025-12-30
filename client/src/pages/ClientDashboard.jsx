@@ -1614,9 +1614,11 @@ function ClientAppointments() {
       const res = await api.post(`/client/reservations/${contractReservationDetails.id}/pay-remaining`, {
         payment_method: selectedPaymentMethod
       })
-      alert(res.data.message)
+      alert(res.data.message + '\n\nSera redirigido a la seccion de Contratos para firmar.')
       setShowContractModal(false)
-      setShowSignatureModal(true)
+      setSelectedAppointmentForContract(null)
+      setContractReservationDetails(null)
+      setSelectedPaymentMethod('')
       loadData()
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))

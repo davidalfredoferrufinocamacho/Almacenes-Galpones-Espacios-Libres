@@ -4,7 +4,7 @@ const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { generateId, getClientInfo } = require('../utils/helpers');
-const { notifyRefundProcessed } = require('../utils/notificationsService');
+const { notifyRefundProcessed, notifyContractCreated, notifyContractSigned } = require('../utils/notificationsService');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
@@ -1181,8 +1181,10 @@ router.post('/reservations/:id/pay-remaining', (req, res) => {
     const { payment_method } = req.body;
 
     const reservation = db.prepare(`
-      SELECT * FROM reservations 
-      WHERE id = ? AND guest_id = ? AND status IN ('dates_confirmed', 'visit_completed')
+      SELECT r.*, s.title as space_title, s.host_id
+      FROM reservations r
+      JOIN spaces s ON r.space_id = s.id
+      WHERE r.id = ? AND r.guest_id = ? AND r.status IN ('dates_confirmed', 'visit_completed')
     `).get(req.params.id, req.user.id);
 
     if (!reservation) {
@@ -1199,27 +1201,61 @@ router.post('/reservations/:id/pay-remaining', (req, res) => {
 
     db.prepare(`
       INSERT INTO payments (id, reservation_id, user_id, amount, payment_type, payment_method, status, escrow_status, ip_address, user_agent)
-      VALUES (?, ?, ?, ?, 'remaining', ?, 'pending', 'held', ?, ?)
+      VALUES (?, ?, ?, ?, 'remaining', ?, 'completed', 'held', ?, ?)
     `).run(paymentId, req.params.id, req.user.id, reservation.remaining_amount, payment_method || 'transfer', clientInfo.ip, clientInfo.userAgent);
 
-    // Actualizar estado de reservacion
+    // Actualizar reservacion con pago completo y registrar fecha
     db.prepare(`
       UPDATE reservations SET 
-        status = 'awaiting_full_payment',
+        status = 'contract_pending',
+        remaining_amount = 0,
+        full_payment_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(req.params.id);
 
-    logAudit(req.user.id, 'REMAINING_PAYMENT_INITIATED', 'payments', paymentId, null, {
+    // Verificar si ya existe un contrato
+    let contract = db.prepare('SELECT * FROM contracts WHERE reservation_id = ?').get(req.params.id);
+    
+    if (!contract) {
+      // Generar contrato automaticamente
+      const contractId = generateId();
+      const contractNumber = 'CTR-' + Date.now();
+      
+      db.prepare(`
+        INSERT INTO contracts (id, contract_number, reservation_id, space_id, guest_id, host_id, 
+          start_date, end_date, rental_amount, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
+      `).run(
+        contractId, contractNumber, req.params.id, reservation.space_id, 
+        req.user.id, reservation.host_id,
+        reservation.rental_start_date || new Date().toISOString().split('T')[0],
+        reservation.rental_end_date || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0],
+        reservation.total_amount
+      );
+      
+      contract = { id: contractId, contract_number: contractNumber };
+      
+      logAudit(req.user.id, 'CONTRACT_CREATED_AFTER_PAYMENT', 'contracts', contractId, null, {
+        reservation_id: req.params.id
+      }, req);
+      
+      notifyContractCreated(contractId, req);
+    }
+
+    logAudit(req.user.id, 'REMAINING_PAYMENT_COMPLETED', 'payments', paymentId, null, {
       reservation_id: req.params.id,
       amount: reservation.remaining_amount,
-      payment_method
+      payment_method,
+      contract_id: contract.id
     }, req);
 
     res.json({ 
-      message: 'Pago del monto restante iniciado. Esperando confirmacion del administrador.',
+      message: 'Pago completado exitosamente. Por favor firme el contrato digital.',
       payment_id: paymentId,
-      amount: reservation.remaining_amount
+      contract_id: contract.id,
+      amount: reservation.remaining_amount,
+      next_step: 'sign_contract'
     });
   } catch (error) {
     console.error('Error:', error);

@@ -4,6 +4,7 @@ const { db } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 const { getClientInfo, generateId } = require('../utils/helpers');
+const { notifyContractSigned } = require('../utils/notificationsService');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
@@ -595,6 +596,63 @@ router.get('/contracts', (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener contratos' });
+  }
+});
+
+router.post('/contracts/:id/sign', (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const contract = db.prepare(`
+      SELECT c.*, s.title as space_title
+      FROM contracts c
+      JOIN spaces s ON c.space_id = s.id
+      WHERE c.id = ? AND s.host_id = ?
+    `).get(req.params.id, userId);
+
+    if (!contract) {
+      return res.status(404).json({ error: 'Contrato no encontrado' });
+    }
+
+    if (!contract.guest_signed) {
+      return res.status(400).json({ error: 'El cliente debe firmar primero antes de que usted pueda firmar' });
+    }
+
+    if (contract.host_signed) {
+      return res.status(400).json({ error: 'El contrato ya fue firmado por usted' });
+    }
+
+    const clientInfo = { ip: req.ip || req.headers['x-forwarded-for'] || 'unknown' };
+
+    db.prepare(`
+      UPDATE contracts SET 
+        host_signed = 1,
+        host_signed_at = CURRENT_TIMESTAMP,
+        host_signature_ip = ?,
+        status = 'signed',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(clientInfo.ip, req.params.id);
+
+    // Actualizar reservacion a contrato firmado
+    if (contract.reservation_id) {
+      db.prepare(`
+        UPDATE reservations SET 
+          status = 'contract_signed',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(contract.reservation_id);
+    }
+
+    logAudit(userId, 'CONTRACT_SIGNED_HOST', 'contracts', req.params.id,
+      { host_signed: 0 }, { host_signed: 1, ip: clientInfo.ip }, req);
+
+    notifyContractSigned(req.params.id, 'HOST', req);
+
+    res.json({ message: 'Contrato firmado exitosamente. El alquiler esta ahora activo.' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al firmar contrato' });
   }
 });
 
