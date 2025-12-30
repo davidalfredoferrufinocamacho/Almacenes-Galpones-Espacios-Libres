@@ -370,6 +370,43 @@ router.put('/:id/mark-no-show', authenticateToken, requireRole('HOST'), (req, re
   }
 });
 
+router.put('/:id/cancel-by-host', authenticateToken, requireRole('HOST'), [
+  body('reason').optional().trim()
+], (req, res) => {
+  try {
+    const appointment = db.prepare(`
+      SELECT * FROM appointments WHERE id = ? AND host_id = ? AND status IN ('aceptada', 'solicitada')
+    `).get(req.params.id, req.user.id);
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Cita no encontrada o no puede ser cancelada' });
+    }
+
+    const oldStatus = appointment.status;
+    const reason = req.body.reason || 'Cancelada por el propietario';
+
+    db.prepare(`
+      UPDATE appointments SET status = 'cancelada', notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(reason, req.params.id);
+
+    if (appointment.reservation_id) {
+      db.prepare(`
+        UPDATE reservations SET status = 'PAID_DEPOSIT_ESCROW', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).run(appointment.reservation_id);
+    }
+
+    logAudit(req.user.id, 'APPOINTMENT_CANCELLED_BY_HOST', 'appointments', req.params.id, 
+      { status: oldStatus }, { status: 'cancelada', reason }, req);
+
+    notifyAppointmentCancelledByHost(req.params.id, reason, req);
+
+    res.json({ message: 'Cita cancelada exitosamente' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al cancelar cita' });
+  }
+});
+
 router.get('/my-appointments', authenticateToken, (req, res) => {
   try {
     let query;

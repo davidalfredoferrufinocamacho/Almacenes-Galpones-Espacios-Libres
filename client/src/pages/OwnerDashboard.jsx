@@ -1004,6 +1004,18 @@ function OwnerAppointments() {
     }
   }
 
+  const handleCancelByHost = async (id) => {
+    const reason = prompt('Indique el motivo de la cancelacion:')
+    if (reason === null) return
+    try {
+      await authApi.put(`/appointments/${id}/cancel-by-host`, { reason })
+      alert('Cita cancelada. Se ha notificado al cliente.')
+      loadData()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+  }
+
   const openRejectModal = (id) => {
     setRejectData({ id, reason: '' })
     setShowRejectModal(true)
@@ -1149,7 +1161,12 @@ function OwnerAppointments() {
                               Marcar Completada
                             </button>
                             <button onClick={() => handleNoShow(a.id)} className="btn btn-small btn-warning">No Asistio</button>
+                            <button onClick={() => openRescheduleModal(a.id)} className="btn btn-small btn-secondary">Reprogramar</button>
+                            <button onClick={() => handleCancelByHost(a.id)} className="btn btn-small btn-danger">Cancelar</button>
                           </>
+                        )}
+                        {a.status === 'reprogramada' && (
+                          <span className="text-muted">Esperando respuesta del cliente</span>
                         )}
                         {a.status === 'realizada' && <span className="text-success">Completada</span>}
                         {a.status === 'rechazada' && <span className="text-danger">Rechazada</span>}
