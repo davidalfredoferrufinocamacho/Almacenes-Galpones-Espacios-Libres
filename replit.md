@@ -88,3 +88,39 @@ The UI/UX emphasizes a responsive and interactive user experience through React,
 *   **Authentication:** JSON Web Tokens (JWT)
 *   **Email Service:** Gmail integration via Google APIs
 *   **Map Libraries:** Leaflet and react-leaflet
+
+## Deployment & Environment Variables
+
+### Required Environment Variables
+When deploying this application outside of Replit, configure the following environment variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `PORT` | Server port (default: 5000) | Optional |
+| `JWT_SECRET` | Secret key for JWT token signing | **Required** |
+| `APP_NAME` | Application name | Optional |
+| `APP_ENV` | Environment (development/production) | Optional |
+
+### Email Service (Gmail Integration)
+The email service uses Replit's Gmail integration. For external deployment, you'll need to configure:
+- Google OAuth credentials (Client ID, Client Secret)
+- Gmail API access
+
+### Files Excluded from Repository (.gitignore)
+- `node_modules/` - Dependencies (run `npm install` after cloning)
+- `.env` - Environment variables
+- `*.sqlite`, `*.db` - Database files
+- `backups/` - Backup files
+- `uploads/` - User uploaded files
+- `.replit`, `replit.nix` - Replit configuration
+
+### Setup Instructions for New Environment
+1. Clone the repository
+2. Run `npm install` in root directory
+3. Run `npm install` in `client/` directory
+4. Run `npm run build` in `client/` directory
+5. Configure environment variables
+6. Run `node server/index.js` to start the server
+
+### Database
+The application uses SQLite. The database file (`almacenes.sqlite`) is auto-created on first run with all required tables and initial data (admin user, legal texts, etc.)

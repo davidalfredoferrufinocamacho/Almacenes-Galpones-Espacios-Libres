@@ -20,6 +20,9 @@ build/
 # Backups
 backups/
 
+# Uploads (user files)
+uploads/
+
 # Replit
 .replit
 replit.nix
