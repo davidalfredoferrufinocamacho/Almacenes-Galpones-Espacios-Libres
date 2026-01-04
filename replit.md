@@ -16,25 +16,23 @@ I want the agent to use a formal and professional tone. When making significant 
 ## System Architecture
 The project utilizes a Node.js 20 backend with Express.js and SQLite for data persistence, while the frontend is built with React and Vite. Key architectural decisions and features include:
 
-*   **Immutable Contractual Data:** Contract details are frozen post-deposit to ensure legal and financial integrity.
+*   **Immutable Contractual Data:** Contract details are frozen at payment time to ensure legal and financial integrity.
 *   **Dynamic Legal Text Management:** All legal texts are database-managed with version control, ensuring contracts and invoices reflect active legal terms at creation.
 *   **Centralized Notification System:** Official platform communications are handled via parameterized templates, preventing direct host-guest contact.
 *   **Audit Logging:** Critical events are comprehensively logged for security and compliance.
-*   **Contract PDF Export & Invoice Generation:** Legally compliant PDF documents are generated from platform data.
+*   **Contract PDF Export & Invoice Generation:** Legally compliant PDF documents are generated from platform data, including host company logo.
 *   **Contract Extensions/Annexes:** Extensions create separate annexes referencing the original contract without modifying it.
 *   **Anti-Bypass Clause:** Enforced for both guests and hosts to protect platform commissions.
-*   **Dual-Confirmation Appointment System:** Complete workflow for physical property visits:
-    - Client requests appointment → status 'solicitada'
-    - Client accepts anti-bypass clause → `anti_bypass_guest_accepted = 1`
-    - Host accepts appointment → `host_accepted_at` timestamp saved, status 'aceptada'
-    - Both must accept before physical visit can proceed (shown with ✅ indicators)
-    - After physical visit, both must click "Cita Realizada Físicamente" button
-    - When both confirm (`host_completed = 1` and `guest_completed = 1`) → status 'realizada'
-    - Client sees "Cerrar Contrato" button to pay remaining 90%
-    - After payment, contract is auto-generated with status 'pending'
+*   **100% Full Payment System (Updated January 2026):** Simplified payment flow without deposits or advances:
+    - Client views space details → Three options presented: "Agendar Cita", "Pagar 100%", "No me interesa"
+    - If scheduling appointment: Dual-confirmation workflow (client requests → host accepts → physical visit)
+    - If paying 100%: Full amount charged directly via POST /payments/full endpoint
+    - Commission distribution: Platform commission (configurable %) automatically deducted, remainder paid to host
+    - Contract auto-generated after full payment with status 'pending'
     - Client signs first (guest_signed = 1), then host signs (host_signed = 1)
     - Contract status becomes 'signed' after both signatures
     - Email notifications sent at each signature step
+*   **Host Company Logo:** Hosts can upload company logos via Owner Portal → Profile section. Logo appears in generated contract PDFs.
 *   **Email Verification System:** New user registration requires email verification for account activation.
 *   **Admin Panel:** A comprehensive interface for managing users (Clients/Hosts), spaces, reservations, contracts, payments, legal texts, notifications, and system configuration, with role-based access and audit logging.
 *   **Hierarchical Admin System:** Two-tier admin structure with Super Admin (full access to all 27 sections including config, legal texts, accounting, roles, payment methods) and Admin (limited to operational sections like users, spaces, reservations). Backend protection via `requireSuperAdmin` middleware on all sensitive endpoints.
