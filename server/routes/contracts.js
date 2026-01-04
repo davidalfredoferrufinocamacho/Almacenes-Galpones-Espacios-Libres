@@ -95,7 +95,7 @@ router.post('/propose', authenticateToken, requireRole('GUEST'), [
     const endDate = calculateEndDate(start_date, period_type, period_quantity);
 
     // Obtener configuracion de comision
-    const config = db.prepare("SELECT value FROM site_config WHERE key = 'commission_percentage'").get();
+    const config = db.prepare("SELECT value FROM system_config WHERE key = 'commission_percentage'").get();
     const commissionPercentage = config ? parseFloat(config.value) : 10;
     const commissionAmount = totalAmount * (commissionPercentage / 100);
     const hostPayoutAmount = totalAmount - commissionAmount;
