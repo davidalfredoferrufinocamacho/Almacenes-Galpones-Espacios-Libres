@@ -578,10 +578,12 @@ router.get('/:id/pdf', authenticateToken, (req, res) => {
       SELECT c.*, 
              ug.first_name as guest_first_name, ug.last_name as guest_last_name, 
              ug.company_name as guest_company, ug.ci as guest_ci, ug.nit as guest_nit,
-             ug.address as guest_address, ug.city as guest_city, ug.person_type as guest_person_type,
+             ug.address as guest_address, ug.city as guest_city, ug.department as guest_department,
+             ug.phone as guest_phone, ug.person_type as guest_person_type,
              uh.first_name as host_first_name, uh.last_name as host_last_name,
              uh.company_name as host_company, uh.ci as host_ci, uh.nit as host_nit,
-             uh.address as host_address, uh.city as host_city, uh.person_type as host_person_type
+             uh.address as host_address, uh.city as host_city, uh.department as host_department,
+             uh.phone as host_phone, uh.person_type as host_person_type, uh.logo_url as host_logo
       FROM contracts c
       JOIN users ug ON c.guest_id = ug.id
       JOIN users uh ON c.host_id = uh.id
@@ -622,110 +624,143 @@ router.get('/:id/pdf', authenticateToken, (req, res) => {
     const writeStream = fs.createWriteStream(pdfPath);
     doc.pipe(writeStream);
 
-    doc.fontSize(18).text('CONTRATO DE ALQUILER TEMPORAL', { align: 'center' });
-    doc.fontSize(10).text('Almacenes, Galpones, Espacios Libres', { align: 'center' });
-    doc.moveDown();
-    doc.fontSize(12).text(`Contrato No: ${contract.contract_number}`, { align: 'center' });
-    doc.text(`Fecha de creacion: ${contract.created_at}`, { align: 'center' });
+    if (contract.host_logo && fs.existsSync(contract.host_logo)) {
+      try {
+        doc.image(contract.host_logo, 50, 45, { width: 80 });
+      } catch (e) {
+        console.log('Error cargando logo:', e.message);
+      }
+    }
+
+    doc.fontSize(18).text('CONTRATO DE ALQUILER TEMPORAL', 150, 50, { align: 'center', width: 350 });
+    doc.fontSize(10).text('Plataforma: Almacenes, Galpones, Espacios Libres', 150, 75, { align: 'center', width: 350 });
+    doc.moveDown(4);
+    
+    doc.y = 120;
+    doc.fontSize(11).text(`Contrato No: ${contract.contract_number}`, { align: 'center' });
+    doc.text(`Fecha de emision: ${new Date(contract.created_at).toLocaleDateString('es-BO')}`, { align: 'center' });
     doc.moveDown(2);
 
-    doc.fontSize(14).text('PARTES DEL CONTRATO', { underline: true });
+    doc.fontSize(14).fillColor('#1a56db').text('PRIMERA: PARTES CONTRATANTES', { underline: true });
+    doc.fillColor('black');
     doc.moveDown(0.5);
-    doc.fontSize(11);
+    doc.fontSize(10);
     
     const guestName = contract.guest_person_type === 'juridica' ? contract.guest_company : `${contract.guest_first_name} ${contract.guest_last_name}`;
-    doc.text(`ARRENDATARIO (GUEST): ${guestName}`);
-    doc.text(`  CI/NIT: ${contract.guest_ci || contract.guest_nit || 'N/A'}`);
-    doc.text(`  Direccion: ${contract.guest_address || 'N/A'}, ${contract.guest_city || ''}`);
+    doc.text('EL ARRENDATARIO:', { continued: true, underline: true });
+    doc.text(` ${guestName}`, { underline: false });
+    doc.text(`  Documento de Identidad: ${contract.guest_person_type === 'juridica' ? 'NIT' : 'CI'} ${contract.guest_ci || contract.guest_nit || 'N/A'}`);
+    doc.text(`  Domicilio: ${contract.guest_address || ''}, ${contract.guest_city || ''}, ${contract.guest_department || 'Bolivia'}`);
+    doc.text(`  Telefono: ${contract.guest_phone || 'N/A'}`);
     doc.moveDown(0.5);
 
     const hostName = contract.host_person_type === 'juridica' ? contract.host_company : `${contract.host_first_name} ${contract.host_last_name}`;
-    doc.text(`ARRENDADOR (HOST): ${hostName}`);
-    doc.text(`  CI/NIT: ${contract.host_ci || contract.host_nit || 'N/A'}`);
-    doc.text(`  Direccion: ${contract.host_address || 'N/A'}, ${contract.host_city || ''}`);
-    doc.moveDown(2);
+    doc.text('EL ARRENDADOR:', { continued: true, underline: true });
+    doc.text(` ${hostName}`, { underline: false });
+    doc.text(`  Documento de Identidad: ${contract.host_person_type === 'juridica' ? 'NIT' : 'CI'} ${contract.host_ci || contract.host_nit || 'N/A'}`);
+    doc.text(`  Domicilio: ${contract.host_address || ''}, ${contract.host_city || ''}, ${contract.host_department || 'Bolivia'}`);
+    doc.text(`  Telefono: ${contract.host_phone || 'N/A'}`);
+    doc.moveDown(1.5);
 
-    doc.fontSize(14).text('OBJETO DEL CONTRATO', { underline: true });
+    doc.fontSize(14).fillColor('#1a56db').text('SEGUNDA: OBJETO DEL CONTRATO', { underline: true });
+    doc.fillColor('black');
     doc.moveDown(0.5);
-    doc.fontSize(11);
-    doc.text(`Espacio: ${frozenSpace.title || 'N/A'}`);
-    doc.text(`Tipo: ${frozenSpace.space_type || 'N/A'}`);
-    doc.text(`Direccion: ${frozenSpace.address || 'N/A'}, ${frozenSpace.city || ''}`);
-    doc.text(`Descripcion: ${contract.frozen_description || frozenSpace.description || 'N/A'}`);
-    doc.moveDown(2);
+    doc.fontSize(10);
+    doc.text(`El ARRENDADOR cede en alquiler temporal al ARRENDATARIO el siguiente espacio:`);
+    doc.moveDown(0.3);
+    doc.text(`  Denominacion: ${frozenSpace.title || 'N/A'}`);
+    doc.text(`  Tipo de espacio: ${frozenSpace.space_type || 'N/A'}`);
+    doc.text(`  Ubicacion: ${frozenSpace.address || 'N/A'}, ${frozenSpace.city || ''}, ${frozenSpace.department || 'Bolivia'}`);
+    doc.text(`  Descripcion: ${(contract.frozen_description || frozenSpace.description || 'N/A').substring(0, 200)}`);
+    doc.moveDown(1.5);
 
-    doc.fontSize(14).text('CONDICIONES DEL ALQUILER', { underline: true });
+    doc.fontSize(14).fillColor('#1a56db').text('TERCERA: CONDICIONES ECONOMICAS', { underline: true });
+    doc.fillColor('black');
     doc.moveDown(0.5);
-    doc.fontSize(11);
-    doc.text(`Superficie: ${contract.sqm} m2`);
-    doc.text(`Periodo: ${contract.period_quantity} ${contract.period_type}(s)`);
-    doc.text(`Fecha de inicio: ${contract.start_date}`);
-    doc.text(`Fecha de fin: ${contract.end_date}`);
-    doc.text(`Precio por m2 aplicado: Bs. ${contract.frozen_price_per_sqm_applied || 'N/A'}`);
-    doc.text(`Monto total: Bs. ${contract.total_amount}`);
-    doc.text(`Anticipo pagado: Bs. ${contract.deposit_amount} (${contract.frozen_deposit_percentage || 10}%)`);
-    doc.text(`Comision plataforma: Bs. ${contract.commission_amount} (${contract.frozen_commission_percentage || 10}%)`);
-    doc.text(`Pago neto al HOST: Bs. ${contract.host_payout_amount}`);
-    doc.moveDown(2);
+    doc.fontSize(10);
+    doc.text(`Las partes acuerdan las siguientes condiciones economicas:`);
+    doc.moveDown(0.3);
+    doc.text(`  Superficie alquilada: ${contract.sqm} metros cuadrados (m2)`);
+    doc.text(`  Periodo de alquiler: ${contract.period_quantity} ${contract.period_type}(s)`);
+    doc.text(`  Fecha de inicio: ${new Date(contract.start_date).toLocaleDateString('es-BO')}`);
+    doc.text(`  Fecha de finalizacion: ${new Date(contract.end_date).toLocaleDateString('es-BO')}`);
+    doc.text(`  Precio por m2 aplicado: Bs. ${Number(contract.frozen_price_per_sqm_applied || 0).toFixed(2)}`);
+    doc.moveDown(0.3);
+    doc.text(`  MONTO TOTAL DEL ALQUILER: Bs. ${Number(contract.total_amount).toFixed(2)}`, { bold: true });
+    doc.text(`  Pago recibido: Bs. ${Number(contract.total_amount).toFixed(2)} (100%)`);
+    doc.moveDown(1.5);
 
     if (contract.frozen_video_url) {
-      doc.fontSize(14).text('VIDEO DE REFERENCIA', { underline: true });
+      doc.fontSize(14).fillColor('#1a56db').text('CUARTA: DOCUMENTACION VISUAL', { underline: true });
+      doc.fillColor('black');
       doc.moveDown(0.5);
-      doc.fontSize(11);
-      doc.text(`URL: ${contract.frozen_video_url}`);
-      doc.text(`Duracion validada: ${contract.frozen_video_duration || 'N/A'} segundos`);
-      doc.moveDown(2);
+      doc.fontSize(10);
+      doc.text(`Se adjunta referencia visual del espacio:`);
+      doc.text(`  Video de referencia: ${contract.frozen_video_url}`);
+      doc.text(`  Duracion del video: ${contract.frozen_video_duration || 'N/A'} segundos`);
+      doc.moveDown(1.5);
     }
 
     doc.addPage();
-    doc.fontSize(14).text('CLAUSULAS LEGALES', { underline: true });
+    doc.fontSize(14).fillColor('#1a56db').text('QUINTA: CLAUSULAS LEGALES Y CONDICIONES GENERALES', { underline: true });
+    doc.fillColor('black');
     doc.moveDown(0.5);
     doc.fontSize(9);
     
     const legalClauses = getLegalClausesForContract();
     
-    doc.text(`LIMITACION DE RESPONSABILIDAD (v${legalClauses.liability_limitation_version}):`, { continued: false });
+    doc.text(`5.1 LIMITACION DE RESPONSABILIDAD:`, { underline: true });
     doc.text(legalClauses.liability_limitation, { align: 'justify' });
-    doc.moveDown();
-    doc.text(`LEY APLICABLE (v${legalClauses.applicable_law_version}):`, { continued: false });
+    doc.moveDown(0.5);
+    doc.text(`5.2 LEY APLICABLE Y JURISDICCION:`, { underline: true });
     doc.text(legalClauses.applicable_law, { align: 'justify' });
-    doc.moveDown();
-    doc.text(`INTERMEDIACION TECNOLOGICA (v${legalClauses.intermediary_version}):`, { continued: false });
+    doc.moveDown(0.5);
+    doc.text(`5.3 INTERMEDIACION TECNOLOGICA:`, { underline: true });
     doc.text(legalClauses.intermediary, { align: 'justify' });
-    doc.moveDown();
-    doc.text(`CLAUSULA ANTI-BYPASS GUEST (v${legalClauses.anti_bypass_guest_version}):`, { continued: false });
+    doc.moveDown(0.5);
+    doc.text(`5.4 CLAUSULA DE EXCLUSIVIDAD (ARRENDATARIO):`, { underline: true });
     doc.text(legalClauses.anti_bypass_guest, { align: 'justify' });
-    doc.moveDown();
-    doc.text(`CLAUSULA ANTI-BYPASS HOST (v${legalClauses.anti_bypass_host_version}):`, { continued: false });
+    doc.moveDown(0.5);
+    doc.text(`5.5 CLAUSULA DE EXCLUSIVIDAD (ARRENDADOR):`, { underline: true });
     doc.text(legalClauses.anti_bypass_host, { align: 'justify' });
     doc.moveDown(2);
 
-    doc.fontSize(14).text('FIRMAS', { underline: true });
-    doc.moveDown();
-    doc.fontSize(11);
-    
+    doc.fontSize(14).fillColor('#1a56db').text('SEXTA: FIRMAS ELECTRONICAS', { underline: true });
+    doc.fillColor('black');
+    doc.moveDown(0.5);
+    doc.fontSize(10);
+    doc.text('Las partes manifiestan su conformidad con el presente contrato mediante firma electronica:');
+    doc.moveDown(0.5);
+
+    doc.rect(50, doc.y, 230, 80).stroke();
+    doc.text('EL ARRENDATARIO:', 60, doc.y + 10);
     if (contract.guest_signed) {
-      doc.text(`GUEST firmado: SI`);
-      doc.text(`  Fecha: ${contract.guest_signed_at}`);
-      doc.text(`  IP: ${contract.guest_sign_ip}`);
+      doc.text(`Firmado digitalmente`, 60, doc.y + 5);
+      doc.text(`Fecha: ${new Date(contract.guest_signed_at).toLocaleString('es-BO')}`, 60, doc.y + 5);
+      doc.text(`IP: ${contract.guest_sign_ip}`, 60, doc.y + 5);
     } else {
-      doc.text(`GUEST firmado: PENDIENTE`);
+      doc.text(`Estado: PENDIENTE DE FIRMA`, 60, doc.y + 20);
     }
-    doc.moveDown();
-    
+
+    const rightBoxY = doc.y - (contract.guest_signed ? 55 : 40);
+    doc.rect(300, rightBoxY, 230, 80).stroke();
+    doc.text('EL ARRENDADOR:', 310, rightBoxY + 10);
     if (contract.host_signed) {
-      doc.text(`HOST firmado: SI`);
-      doc.text(`  Fecha: ${contract.host_signed_at}`);
-      doc.text(`  IP: ${contract.host_sign_ip}`);
+      doc.text(`Firmado digitalmente`, 310, rightBoxY + 25);
+      doc.text(`Fecha: ${new Date(contract.host_signed_at).toLocaleString('es-BO')}`, 310, rightBoxY + 40);
+      doc.text(`IP: ${contract.host_sign_ip}`, 310, rightBoxY + 55);
     } else {
-      doc.text(`HOST firmado: PENDIENTE`);
+      doc.text(`Estado: PENDIENTE DE FIRMA`, 310, rightBoxY + 30);
     }
+
+    doc.y = rightBoxY + 100;
     doc.moveDown(2);
 
     const signatureDisclaimer = getActiveLegalText('disclaimer_firma');
-    doc.fontSize(8).text(`${signatureDisclaimer.content} (v${signatureDisclaimer.version})`, { align: 'center' });
+    doc.fontSize(8).text(`${signatureDisclaimer.content}`, { align: 'center' });
     doc.moveDown();
-    doc.text(`Snapshot congelado: ${contract.frozen_snapshot_created_at || 'N/A'}`, { align: 'center' });
+    doc.text(`Documento generado electronicamente el ${new Date().toLocaleString('es-BO')}`, { align: 'center' });
+    doc.text(`Identificador de contrato: ${contract.id}`, { align: 'center' });
 
     doc.end();
 

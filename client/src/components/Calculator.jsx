@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import './Calculator.css'
 
-function Calculator({ space, depositPercentage, onCalculate }) {
+function Calculator({ space, onCalculate }) {
   const [sqm, setSqm] = useState(10)
   const [periodType, setPeriodType] = useState('mes')
   const [quantity, setQuantity] = useState(1)
@@ -38,18 +38,13 @@ function Calculator({ space, depositPercentage, onCalculate }) {
     }
 
     const total = pricePerSqm * sqm * quantity
-    const deposit = (total * depositPercentage) / 100
-    const remaining = total - deposit
 
     const result = {
       sqm,
       periodType,
       quantity,
       pricePerSqm,
-      total,
-      depositPercentage,
-      deposit,
-      remaining
+      total
     }
 
     setCalculation(result)
@@ -113,12 +108,8 @@ function Calculator({ space, depositPercentage, onCalculate }) {
           </div>
           <hr />
           <div className="result-row highlight">
-            <span>Anticipo ({calculation.depositPercentage}%):</span>
-            <span className="deposit">Bs. {calculation.deposit.toFixed(2)}</span>
-          </div>
-          <div className="result-row">
-            <span>Saldo restante:</span>
-            <span>Bs. {calculation.remaining.toFixed(2)}</span>
+            <span>Total a Pagar:</span>
+            <span className="deposit">Bs. {calculation.total.toFixed(2)}</span>
           </div>
         </div>
       )}

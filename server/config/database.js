@@ -1180,7 +1180,8 @@ function initDatabase() {
     { table: 'reservations', column: 'dates_proposed_by', type: 'TEXT' },
     { table: 'reservations', column: 'dates_proposed_at', type: 'TEXT' },
     { table: 'reservations', column: 'dates_confirmed_at', type: 'TEXT' },
-    { table: 'reservations', column: 'full_payment_at', type: 'TEXT' }
+    { table: 'reservations', column: 'full_payment_at', type: 'TEXT' },
+    { table: 'users', column: 'logo_url', type: 'TEXT' }
   ];
 
   // Backfill null categories to 'legal'

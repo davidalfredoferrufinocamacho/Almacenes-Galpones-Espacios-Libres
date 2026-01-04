@@ -1686,6 +1686,7 @@ function OwnerProfile() {
   const [passwordForm, setPasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
   const [changingPassword, setChangingPassword] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [resendingVerification, setResendingVerification] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
@@ -1757,6 +1758,40 @@ function OwnerProfile() {
       setProfile({ ...profile, profile_photo: null })
     } catch (error) {
       alert('Error al eliminar foto')
+    }
+  }
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('El logo no debe superar 2MB')
+      return
+    }
+
+    setUploadingLogo(true)
+    const formData = new FormData()
+    formData.append('logo', file)
+
+    try {
+      const res = await api.post('/profile/logo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setProfile({ ...profile, logo_url: res.data.logo_url })
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setUploadingLogo(false)
+  }
+
+  const handleDeleteLogo = async () => {
+    if (!confirm('Eliminar logo de empresa?')) return
+    try {
+      await api.delete('/profile/logo')
+      setProfile({ ...profile, logo_url: null })
+    } catch (error) {
+      alert('Error al eliminar logo')
     }
   }
 
@@ -1839,6 +1874,26 @@ function OwnerProfile() {
               <button onClick={handleDeletePhoto} className="btn btn-sm btn-danger">Eliminar</button>
             )}
           </div>
+        </div>
+        <div className="logo-section" style={{ marginLeft: '2rem' }}>
+          <h4 style={{ marginBottom: '0.5rem' }}>Logo de Empresa (para contratos)</h4>
+          {profile.logo_url ? (
+            <img src={`/${profile.logo_url}`} alt="Logo de empresa" style={{ maxWidth: '150px', maxHeight: '100px', objectFit: 'contain', border: '1px solid #ddd', borderRadius: '8px', padding: '0.5rem' }} />
+          ) : (
+            <div style={{ width: '150px', height: '100px', border: '2px dashed #ddd', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
+              Sin logo
+            </div>
+          )}
+          <div className="photo-actions" style={{ marginTop: '0.5rem' }}>
+            <label className="btn btn-sm">
+              {uploadingLogo ? 'Subiendo...' : 'Subir Logo'}
+              <input type="file" accept="image/jpeg,image/png" onChange={handleLogoUpload} hidden />
+            </label>
+            {profile.logo_url && (
+              <button onClick={handleDeleteLogo} className="btn btn-sm btn-danger">Eliminar</button>
+            )}
+          </div>
+          <small style={{ color: '#666', display: 'block', marginTop: '0.5rem' }}>El logo aparecera en sus contratos de alquiler</small>
         </div>
         <div className="profile-status">
           <div className={`verification-badge ${profile.is_verified ? 'verified' : ''}`}>

@@ -738,7 +738,7 @@ router.get('/profile', (req, res) => {
     const user = db.prepare(`
       SELECT id, email, role, person_type, first_name, last_name, company_name,
              ci, nit, phone, address, city, department, street, street_number, floor, country,
-             profile_photo, email_notifications, newsletter,
+             profile_photo, logo_url, email_notifications, newsletter,
              is_verified, anti_bypass_accepted, anti_bypass_accepted_at, created_at
       FROM users WHERE id = ?
     `).get(userId);
@@ -875,6 +875,53 @@ router.delete('/profile/photo', (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al eliminar foto' });
+  }
+});
+
+router.post('/profile/logo', upload.single('logo'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se proporciono imagen de logo' });
+    }
+
+    const user = db.prepare('SELECT logo_url FROM users WHERE id = ?').get(req.user.id);
+    
+    if (user.logo_url && fs.existsSync(user.logo_url)) {
+      fs.unlinkSync(user.logo_url);
+    }
+
+    const logoPath = req.file.path;
+    db.prepare('UPDATE users SET logo_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(logoPath, req.user.id);
+
+    logAudit(req.user.id, 'LOGO_UPDATED', 'users', req.user.id, 
+      { old_logo: user.logo_url }, { new_logo: logoPath }, req);
+
+    res.json({ message: 'Logo actualizado', logo_url: logoPath });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al subir logo' });
+  }
+});
+
+router.delete('/profile/logo', (req, res) => {
+  try {
+    const user = db.prepare('SELECT logo_url FROM users WHERE id = ?').get(req.user.id);
+
+    if (user.logo_url && fs.existsSync(user.logo_url)) {
+      fs.unlinkSync(user.logo_url);
+    }
+
+    db.prepare('UPDATE users SET logo_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(req.user.id);
+
+    logAudit(req.user.id, 'LOGO_DELETED', 'users', req.user.id, 
+      { logo: user.logo_url }, null, req);
+
+    res.json({ message: 'Logo eliminado' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al eliminar logo' });
   }
 });
 

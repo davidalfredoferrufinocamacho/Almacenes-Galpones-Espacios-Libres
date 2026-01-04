@@ -257,19 +257,21 @@ function ClientReservations() {
 
   const statusLabels = {
     pending: 'Pendiente',
-    PAID_DEPOSIT_ESCROW: 'Anticipo Pagado',
+    PAID_DEPOSIT_ESCROW: 'Reservado',
     appointment_scheduled: 'Cita Agendada',
+    appointment_confirmed: 'Cita Confirmada',
     visit_completed: 'Visita Realizada',
     dates_proposed: 'Fechas Propuestas',
     dates_confirmed: 'Fechas Confirmadas',
     awaiting_full_payment: 'Esperando Pago',
+    full_paid: 'Pago Completo',
     fully_paid: 'Pago Completo',
     contract_pending: 'Contrato Pendiente',
     confirmed: 'Confirmado',
     contract_signed: 'Contrato Firmado',
     completed: 'Completado',
     cancelled: 'Cancelado',
-    refunded: 'Reembolsado'
+    refunded: 'Cancelado'
   }
 
   const [showDatesModal, setShowDatesModal] = useState(false)
@@ -322,21 +324,21 @@ function ClientReservations() {
     }
   }
 
-  const handleRefund = async (id) => {
-    if (!confirm('Esta seguro de solicitar el reembolso? Esta accion no se puede deshacer.')) return
+  const handleNotInterested = async (id) => {
+    if (!confirm('Esta seguro de cancelar? Esta accion no se puede deshacer.')) return
     try {
-      await api.post(`/payments/refund/${id}`)
+      await api.post(`/client/reservations/${id}/cancel`)
       loadReservations()
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al procesar reembolso')
+      alert(error.response?.data?.error || 'Error al cancelar')
     }
   }
 
   const handleRejectAfterVisit = async (id) => {
-    if (!confirm('Rechazar el espacio despues de la visita? Se procesara el reembolso de su anticipo.')) return
+    if (!confirm('Rechazar el espacio despues de la visita?')) return
     try {
-      const res = await api.post(`/client/reservations/${id}/reject-after-visit`)
-      alert(`Espacio rechazado. Reembolso de Bs. ${res.data.refund_amount} procesado.`)
+      await api.post(`/client/reservations/${id}/reject-after-visit`)
+      alert('Espacio rechazado.')
       setSelected(null)
       loadReservations()
     } catch (error) {
@@ -395,15 +397,14 @@ function ClientReservations() {
         <select value={filter.status} onChange={e => setFilter({ ...filter, status: e.target.value })}>
           <option value="">Todos los estados</option>
           <option value="pending">Pendiente</option>
-          <option value="PAID_DEPOSIT_ESCROW">Anticipo Pagado</option>
           <option value="appointment_scheduled">Cita Agendada</option>
+          <option value="appointment_confirmed">Cita Confirmada</option>
           <option value="visit_completed">Visita Realizada</option>
-          <option value="confirmed">Confirmada</option>
+          <option value="full_paid">Pago Completo</option>
           <option value="contract_pending">Contrato Pendiente</option>
           <option value="contract_signed">Contrato Firmado</option>
           <option value="completed">Completada</option>
           <option value="cancelled">Cancelada</option>
-          <option value="refunded">Reembolsada</option>
         </select>
         <select value={filter.period} onChange={e => setFilter({ ...filter, period: e.target.value })}>
           <option value="">Todo el tiempo</option>
@@ -440,28 +441,27 @@ function ClientReservations() {
                   <span className="label">Total:</span>
                   <span className="amount">Bs. {r.total_amount?.toFixed(2)}</span>
                 </div>
-                <div className="detail">
-                  <span className="label">Anticipo:</span>
-                  <span className="deposit">Bs. {r.deposit_amount?.toFixed(2)}</span>
-                </div>
-                <div className="detail">
-                  <span className="label">Saldo:</span>
-                  <span>Bs. {r.remaining_amount?.toFixed(2)}</span>
-                </div>
               </div>
               <div className="reservation-actions">
-                {r.status === 'PAID_DEPOSIT_ESCROW' && (
+                {r.status === 'appointment_scheduled' && (
+                  <button onClick={() => viewDetail(r.id)} className="btn btn-secondary">
+                    Ver Estado de Cita
+                  </button>
+                )}
+                {r.status === 'visit_completed' && (
                   <>
-                    <button onClick={() => window.location.href = `/citas?reservation=${r.id}`} className="btn btn-secondary">
-                      Agendar Cita
+                    <button onClick={() => viewDetail(r.id)} className="btn btn-primary">
+                      Pagar 100%
                     </button>
-                    <button onClick={() => handlePayRemaining(r.id)} className="btn btn-primary">
-                      Pagar Saldo (Sin Visita)
-                    </button>
-                    <button onClick={() => handleRefund(r.id)} className="btn btn-outline-danger">
-                      No me interesa (Reembolso)
+                    <button onClick={() => handleNotInterested(r.id)} className="btn btn-outline">
+                      No me interesa
                     </button>
                   </>
+                )}
+                {r.status === 'full_paid' && (
+                  <button onClick={() => viewDetail(r.id)} className="btn btn-primary">
+                    Generar Contrato
+                  </button>
                 )}
                 {['pending', 'confirmed'].includes(r.status) && (
                   <button onClick={() => handleCancel(r.id)} className="btn btn-danger">Cancelar</button>
@@ -506,8 +506,8 @@ function ClientReservations() {
                     <p>Bs. {selected.total_amount?.toLocaleString()}</p>
                   </div>
                   <div>
-                    <h4>Saldo Pendiente</h4>
-                    <p>Bs. {selected.remaining_amount?.toLocaleString()}</p>
+                    <h4>Estado Pago</h4>
+                    <p>{selected.status === 'full_paid' ? 'Pagado 100%' : 'Pendiente'}</p>
                   </div>
                 </div>
                 <div className="detail-section">
@@ -548,20 +548,20 @@ function ClientReservations() {
                 <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%', marginBottom: '1rem' }}>
                   <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '8px', textAlign: 'center', flex: 1, minWidth: '200px' }}>
                     <h4 style={{ marginBottom: '0.5rem', color: '#92400e' }}>Visita Completada</h4>
-                    <p style={{ fontSize: '0.9rem', color: '#78350f', marginBottom: '1rem' }}>Proponga las fechas de alquiler o rechace el espacio:</p>
+                    <p style={{ fontSize: '0.9rem', color: '#78350f', marginBottom: '1rem' }}>Pague el 100% para cerrar el contrato o rechace el espacio:</p>
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <button 
                         onClick={() => handleRejectAfterVisit(selected.id)} 
                         className="btn btn-outline"
                         style={{ borderColor: '#dc2626', color: '#dc2626' }}
                       >
-                        No me interesa (Reembolso)
+                        No me interesa
                       </button>
                       <button 
-                        onClick={() => setShowDatesModal(true)} 
+                        onClick={() => handlePayRemaining(selected.id)} 
                         className="btn btn-primary"
                       >
-                        Proponer Fechas de Alquiler
+                        Pagar 100% - Bs. {selected.total_amount?.toLocaleString()}
                       </button>
                     </div>
                   </div>
@@ -592,13 +592,26 @@ function ClientReservations() {
                   <h4 style={{ color: '#166534' }}>Fechas Confirmadas</h4>
                   <p><strong>Inicio:</strong> {selected.rental_start_date} a las {selected.rental_start_time}</p>
                   <p><strong>Fin:</strong> {selected.rental_end_date}</p>
-                  <p style={{ marginTop: '1rem' }}>Proceda con el pago del saldo restante para generar el contrato:</p>
+                  <p style={{ marginTop: '1rem' }}>Proceda con el pago del 100% para generar el contrato:</p>
                   <button 
-                    onClick={() => handlePayRemainingNew(selected.id)} 
+                    onClick={() => handlePayRemaining(selected.id)} 
                     className="btn btn-primary"
                     style={{ marginTop: '0.5rem' }}
                   >
-                    Pagar Saldo (Bs. {selected.remaining_amount?.toLocaleString()})
+                    Pagar 100% - Bs. {selected.total_amount?.toLocaleString()}
+                  </button>
+                </div>
+              )}
+              {selected.status === 'full_paid' && (
+                <div style={{ background: '#dcfce7', padding: '1rem', borderRadius: '8px', textAlign: 'center', width: '100%', marginBottom: '1rem' }}>
+                  <h4 style={{ color: '#166534' }}>Pago Completo Realizado</h4>
+                  <p style={{ marginTop: '0.5rem' }}>Su pago ha sido procesado exitosamente.</p>
+                  <button 
+                    onClick={() => window.location.href = `/mis-contratos?generate=${selected.id}`}
+                    className="btn btn-primary"
+                    style={{ marginTop: '0.5rem' }}
+                  >
+                    Generar Contrato
                   </button>
                 </div>
               )}
@@ -835,7 +848,17 @@ function ClientContracts() {
                 </button>
               )}
               {selected.guest_signed && selected.host_signed && (
-                <button onClick={() => downloadPDF(selected.id)} className="btn btn-secondary">Descargar PDF</button>
+                <>
+                  <button onClick={() => downloadPDF(selected.id)} className="btn btn-secondary">
+                    <span style={{ marginRight: '0.5rem' }}>📄</span>Guardar PDF
+                  </button>
+                  <button onClick={() => {
+                    const pdfWindow = window.open(`/api/contracts/${selected.id}/pdf`, '_blank')
+                    pdfWindow.onload = () => pdfWindow.print()
+                  }} className="btn btn-outline">
+                    <span style={{ marginRight: '0.5rem' }}>🖨️</span>Imprimir
+                  </button>
+                </>
               )}
               <button onClick={() => setSelected(null)} className="btn btn-light">Cerrar</button>
             </div>
@@ -878,15 +901,15 @@ function ClientPayments() {
           <div className="stat-value">Bs. {(summary.total_paid || 0).toLocaleString()}</div>
         </div>
         <div className="stat-card">
-          <h3>Depositos</h3>
-          <div className="stat-value">Bs. {(summary.total_deposits || 0).toLocaleString()}</div>
+          <h3>Pagos Completados</h3>
+          <div className="stat-value">{summary.completed_count || 0}</div>
         </div>
         <div className="stat-card">
-          <h3>Reembolsos</h3>
-          <div className="stat-value">Bs. {(summary.total_refunds || 0).toLocaleString()}</div>
+          <h3>Pagos Pendientes</h3>
+          <div className="stat-value">{summary.pending_count || 0}</div>
         </div>
         <div className="stat-card stat-warning">
-          <h3>Pendiente</h3>
+          <h3>Monto Pendiente</h3>
           <div className="stat-value">Bs. {(summary.pending_amount || 0).toLocaleString()}</div>
         </div>
       </div>
@@ -894,10 +917,9 @@ function ClientPayments() {
       <div className="filters-bar">
         <select value={filter.type} onChange={e => setFilter({ ...filter, type: e.target.value })}>
           <option value="">Todos los tipos</option>
-          <option value="deposit">Deposito</option>
-          <option value="partial">Pago Parcial</option>
           <option value="full">Pago Completo</option>
-          <option value="refund">Reembolso</option>
+          <option value="partial">Pago Parcial</option>
+          <option value="extension">Extension</option>
         </select>
         <select value={filter.status} onChange={e => setFilter({ ...filter, status: e.target.value })}>
           <option value="">Todos los estados</option>
@@ -917,11 +939,9 @@ function ClientPayments() {
               <tr key={p.id}>
                 <td>{new Date(p.created_at).toLocaleDateString()}</td>
                 <td>{p.space_title}</td>
-                <td>{p.payment_type}</td>
+                <td>{p.payment_type === 'full' ? 'Pago Completo' : p.payment_type === 'extension' ? 'Extension' : p.payment_type}</td>
                 <td>{p.payment_method}</td>
-                <td className={p.payment_type === 'refund' ? 'amount-negative' : ''}>
-                  {p.payment_type === 'refund' ? '-' : ''}Bs. {Math.abs(p.amount || 0).toLocaleString()}
-                </td>
+                <td>Bs. {(p.amount || 0).toLocaleString()}</td>
                 <td><span className={`status-badge status-${p.status}`}>{p.status}</span></td>
               </tr>
             ))}

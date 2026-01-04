@@ -15,6 +15,11 @@ function SpaceDetail() {
   const [paymentMethod, setPaymentMethod] = useState('card')
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
+  const [showAppointmentModal, setShowAppointmentModal] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [appointmentData, setAppointmentData] = useState({ date: '', time: '', notes: '' })
+  const [antiBypassAccepted, setAntiBypassAccepted] = useState(false)
+  const [antiBypassText, setAntiBypassText] = useState('')
 
   const spaceTypes = {
     almacen: 'Almacen',
@@ -41,19 +46,38 @@ function SpaceDetail() {
     }
   }
 
-  const handleReserve = async () => {
-    if (!isAuthenticated) {
-      navigate('/login')
-      return
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadAntiBypassText()
     }
+  }, [isAuthenticated])
 
-    if (user.role !== 'GUEST') {
-      setError('Solo los usuarios GUEST pueden reservar espacios')
-      return
+  const loadAntiBypassText = async () => {
+    try {
+      const response = await api.get('/legal/by-type/anti_bypass_guest')
+      if (response.data) {
+        setAntiBypassText(response.data.content)
+      }
+    } catch (err) {
+      console.error('Error loading anti-bypass text:', err)
     }
+  }
 
+  const handleScheduleAppointment = async () => {
     if (!calculation) {
       setError('Por favor use la calculadora para calcular el monto')
+      return
+    }
+    setShowAppointmentModal(true)
+  }
+
+  const handleSubmitAppointment = async () => {
+    if (!antiBypassAccepted) {
+      setError('Debe aceptar la clausula anti-bypass para continuar')
+      return
+    }
+    if (!appointmentData.date || !appointmentData.time) {
+      setError('Debe seleccionar fecha y hora para la cita')
       return
     }
 
@@ -61,7 +85,40 @@ function SpaceDetail() {
     setError('')
 
     try {
-      const response = await api.post('/payments/deposit', {
+      await api.post('/appointments', {
+        space_id: id,
+        proposed_date: appointmentData.date,
+        proposed_time: appointmentData.time,
+        notes: appointmentData.notes,
+        sqm_requested: calculation.sqm,
+        period_type: calculation.periodType,
+        period_quantity: calculation.quantity
+      })
+
+      alert('Cita solicitada exitosamente. El propietario debe confirmarla.')
+      setShowAppointmentModal(false)
+      navigate('/mis-citas')
+    } catch (error) {
+      setError(error.response?.data?.error || 'Error al agendar cita')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const handlePay100 = async () => {
+    if (!calculation) {
+      setError('Por favor use la calculadora para calcular el monto')
+      return
+    }
+    setShowPaymentModal(true)
+  }
+
+  const handleSubmitPayment = async () => {
+    setProcessing(true)
+    setError('')
+
+    try {
+      const response = await api.post('/payments/full', {
         space_id: id,
         sqm_requested: calculation.sqm,
         period_type: calculation.periodType,
@@ -69,12 +126,18 @@ function SpaceDetail() {
         payment_method: paymentMethod
       })
 
+      alert('Pago realizado exitosamente. Ahora puede generar su contrato.')
+      setShowPaymentModal(false)
       navigate(`/mis-reservaciones?new=${response.data.reservation_id}`)
     } catch (error) {
       setError(error.response?.data?.error || 'Error al procesar el pago')
     } finally {
       setProcessing(false)
     }
+  }
+
+  const handleNotInterested = () => {
+    navigate('/')
   }
 
   if (loading) {
@@ -255,35 +318,39 @@ function SpaceDetail() {
 
             <Calculator 
               space={space} 
-              depositPercentage={space.deposit_percentage}
               onCalculate={setCalculation}
             />
 
             {isAuthenticated ? (
               <div className="reserve-card card">
-                <h3>Pagar Anticipo y Reservar</h3>
-                <p className="reserve-info">
-                  El anticipo ({space.deposit_percentage}%) queda en escrow hasta confirmar el contrato.
-                  Reembolso 100% si no confirma.
-                </p>
-
-                <div className="form-group">
-                  <label>Metodo de Pago</label>
-                  <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                    <option value="card">Tarjeta</option>
-                    <option value="qr">QR</option>
-                  </select>
-                </div>
-
+                <h3>Opciones de Reserva</h3>
+                
                 {error && <div className="alert alert-error">{error}</div>}
 
-                <button 
-                  className="btn btn-primary reserve-btn" 
-                  onClick={handleReserve}
-                  disabled={processing || !calculation}
-                >
-                  {processing ? 'Procesando...' : `Pagar Anticipo Bs. ${calculation?.deposit?.toFixed(2) || '0.00'}`}
-                </button>
+                <div className="reserve-options">
+                  <button 
+                    className="btn btn-secondary reserve-btn" 
+                    onClick={handleScheduleAppointment}
+                    disabled={processing || !calculation}
+                  >
+                    Agendar Cita
+                  </button>
+
+                  <button 
+                    className="btn btn-primary reserve-btn" 
+                    onClick={handlePay100}
+                    disabled={processing || !calculation}
+                  >
+                    {processing ? 'Procesando...' : `Pagar 100% - Bs. ${calculation?.total?.toFixed(2) || '0.00'}`}
+                  </button>
+
+                  <button 
+                    className="btn btn-outline reserve-btn" 
+                    onClick={handleNotInterested}
+                  >
+                    No me interesa
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="login-prompt card">
@@ -300,6 +367,123 @@ function SpaceDetail() {
               </div>
             )}
           </aside>
+
+          {showAppointmentModal && (
+            <div className="modal-overlay" onClick={() => setShowAppointmentModal(false)}>
+              <div className="modal" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2>Agendar Cita</h2>
+                  <button className="close-btn" onClick={() => setShowAppointmentModal(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div className="form-group">
+                    <label>Fecha de la Cita</label>
+                    <input 
+                      type="date" 
+                      value={appointmentData.date}
+                      min={new Date().toISOString().split('T')[0]}
+                      onChange={e => setAppointmentData({ ...appointmentData, date: e.target.value })}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Hora de la Cita</label>
+                    <input 
+                      type="time" 
+                      value={appointmentData.time}
+                      onChange={e => setAppointmentData({ ...appointmentData, time: e.target.value })}
+                      className="form-control"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Notas (opcional)</label>
+                    <textarea
+                      value={appointmentData.notes}
+                      onChange={e => setAppointmentData({ ...appointmentData, notes: e.target.value })}
+                      className="form-control"
+                      placeholder="Informacion adicional para el propietario..."
+                    />
+                  </div>
+
+                  <div className="anti-bypass-section" style={{ marginTop: '1rem', padding: '1rem', background: '#fef3c7', borderRadius: '8px' }}>
+                    <h4 style={{ color: '#92400e', marginBottom: '0.5rem' }}>Clausula Anti-Bypass</h4>
+                    <div style={{ maxHeight: '150px', overflow: 'auto', background: 'white', padding: '0.5rem', borderRadius: '4px', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                      {antiBypassText || 'Cargando clausula...'}
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={antiBypassAccepted}
+                        onChange={e => setAntiBypassAccepted(e.target.checked)}
+                      />
+                      Acepto la clausula anti-bypass
+                    </label>
+                  </div>
+
+                  {error && <div className="alert alert-error" style={{ marginTop: '1rem' }}>{error}</div>}
+                </div>
+                <div className="modal-footer">
+                  <button onClick={() => setShowAppointmentModal(false)} className="btn btn-secondary">Cancelar</button>
+                  <button 
+                    onClick={handleSubmitAppointment} 
+                    className="btn btn-primary"
+                    disabled={processing || !antiBypassAccepted}
+                  >
+                    {processing ? 'Enviando...' : 'Solicitar Cita'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showPaymentModal && (
+            <div className="modal-overlay" onClick={() => setShowPaymentModal(false)}>
+              <div className="modal" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2>Pagar Alquiler Completo</h2>
+                  <button className="close-btn" onClick={() => setShowPaymentModal(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div style={{ background: '#f3f4f6', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                    <h4>{space.title}</h4>
+                    <p>{calculation?.sqm} m² x {calculation?.quantity} {calculation?.periodType}</p>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#059669' }}>
+                      Total: Bs. {calculation?.total?.toFixed(2)}
+                    </p>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Metodo de Pago</label>
+                    <select 
+                      value={paymentMethod} 
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="form-control"
+                    >
+                      <option value="card">Tarjeta</option>
+                      <option value="qr">QR</option>
+                      <option value="transfer">Transferencia</option>
+                    </select>
+                  </div>
+
+                  <p style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '1rem' }}>
+                    Al completar el pago, podra generar su contrato de alquiler.
+                  </p>
+
+                  {error && <div className="alert alert-error" style={{ marginTop: '1rem' }}>{error}</div>}
+                </div>
+                <div className="modal-footer">
+                  <button onClick={() => setShowPaymentModal(false)} className="btn btn-secondary">Cancelar</button>
+                  <button 
+                    onClick={handleSubmitPayment} 
+                    className="btn btn-primary"
+                    disabled={processing}
+                  >
+                    {processing ? 'Procesando...' : `Pagar Bs. ${calculation?.total?.toFixed(2)}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
