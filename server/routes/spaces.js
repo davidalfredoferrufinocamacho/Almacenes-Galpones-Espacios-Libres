@@ -579,8 +579,13 @@ router.get('/:id/availability', (req, res) => {
     }
 
     const availability = db.prepare(`
-      SELECT * FROM host_availability 
-      WHERE space_id = ? AND is_blocked = 0
+      SELECT id, space_id, day_of_week, specific_date, start_time, end_time, 
+             COALESCE(is_active, 1) as is_active, 
+             COALESCE(slot_duration_minutes, 60) as slot_duration_minutes, 
+             COALESCE(buffer_minutes, 15) as buffer_minutes,
+             is_blocked, created_at
+      FROM host_availability 
+      WHERE space_id = ?
       ORDER BY day_of_week, specific_date, start_time
     `).all(req.params.id);
 
@@ -606,31 +611,102 @@ router.post('/:id/availability', authenticateToken, requireRole('HOST'), (req, r
       return res.status(400).json({ error: 'Solo se puede gestionar disponibilidad de espacios publicados' });
     }
 
-    const { day_of_week, specific_date, start_time, end_time, is_blocked } = req.body;
+    const { day_of_week, specific_date, start_time, end_time, is_blocked, is_active, slot_duration_minutes, buffer_minutes } = req.body;
 
+    const clientInfo = getClientInfo(req);
+    const isActiveValue = is_active !== undefined ? (is_active ? 1 : 0) : 1;
+    const isBlockedValue = is_blocked ? 1 : 0;
+
+    // Si es una fecha específica (bloqueo de día completo)
+    if (specific_date) {
+      // Para fechas específicas bloqueadas, start_time y end_time son opcionales (día completo)
+      const blockStartTime = start_time || '00:00';
+      const blockEndTime = end_time || '23:59';
+
+      // Verificar si ya existe una entrada para esta fecha específica
+      const existingSpecific = db.prepare(`
+        SELECT id FROM host_availability WHERE space_id = ? AND specific_date = ?
+      `).get(req.params.id, specific_date);
+
+      if (existingSpecific) {
+        // Actualizar registro de fecha específica existente
+        db.prepare(`
+          UPDATE host_availability 
+          SET start_time = ?, end_time = ?, is_blocked = ?, is_active = ?,
+              slot_duration_minutes = ?, buffer_minutes = ?
+          WHERE id = ?
+        `).run(blockStartTime, blockEndTime, isBlockedValue, isActiveValue, 
+               slot_duration_minutes || 60, buffer_minutes || 15, existingSpecific.id);
+
+        res.json({ id: existingSpecific.id, message: 'Disponibilidad de fecha actualizada' });
+      } else {
+        // Crear nuevo registro para fecha específica
+        const availId = generateId();
+        db.prepare(`
+          INSERT INTO host_availability (id, space_id, day_of_week, specific_date, start_time, end_time, is_blocked, is_active, slot_duration_minutes, buffer_minutes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(availId, req.params.id, null, specific_date, blockStartTime, blockEndTime, isBlockedValue, isActiveValue, slot_duration_minutes || 60, buffer_minutes || 15);
+
+        res.json({ id: availId, message: 'Disponibilidad de fecha creada' });
+      }
+      return;
+    }
+
+    // Para días de semana, start_time y end_time son obligatorios
     if (!start_time || !end_time) {
       return res.status(400).json({ error: 'Horario de inicio y fin son obligatorios' });
     }
 
-    const availId = generateId();
-    const clientInfo = getClientInfo(req);
+    // Es un día de la semana (weekly schedule)
+    // Verificar si ya existe una entrada para este día de la semana
+    const existing = db.prepare(`
+      SELECT id FROM host_availability WHERE space_id = ? AND day_of_week = ? AND specific_date IS NULL
+    `).get(req.params.id, day_of_week);
 
-    db.prepare(`
-      INSERT INTO host_availability (id, space_id, day_of_week, specific_date, start_time, end_time, is_blocked)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(availId, req.params.id, day_of_week, specific_date, start_time, end_time, is_blocked ? 1 : 0);
+    if (existing) {
+      // Actualizar registro existente del día de semana
+      db.prepare(`
+        UPDATE host_availability 
+        SET start_time = ?, end_time = ?, is_blocked = ?, is_active = ?,
+            slot_duration_minutes = ?, buffer_minutes = ?
+        WHERE id = ?
+      `).run(start_time, end_time, isBlockedValue, isActiveValue, 
+             slot_duration_minutes || 60, buffer_minutes || 15, existing.id);
 
-    logAudit(req.user.id, 'AVAILABILITY_CREATED', 'host_availability', availId, null, {
-      space_id: req.params.id,
-      day_of_week,
-      specific_date,
-      start_time,
-      end_time,
-      is_blocked: is_blocked ? 1 : 0,
-      ...clientInfo
-    }, req);
+      logAudit(req.user.id, 'AVAILABILITY_UPDATED', 'host_availability', existing.id, null, {
+        space_id: req.params.id,
+        day_of_week,
+        start_time,
+        end_time,
+        is_active: isActiveValue,
+        slot_duration_minutes,
+        buffer_minutes,
+        ...clientInfo
+      }, req);
 
-    res.json({ id: availId, message: 'Disponibilidad creada' });
+      res.json({ id: existing.id, message: 'Disponibilidad actualizada' });
+    } else {
+      // Crear nuevo registro para día de semana
+      const availId = generateId();
+
+      db.prepare(`
+        INSERT INTO host_availability (id, space_id, day_of_week, specific_date, start_time, end_time, is_blocked, is_active, slot_duration_minutes, buffer_minutes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(availId, req.params.id, day_of_week, null, start_time, end_time, isBlockedValue, isActiveValue, slot_duration_minutes || 60, buffer_minutes || 15);
+
+      logAudit(req.user.id, 'AVAILABILITY_CREATED', 'host_availability', availId, null, {
+        space_id: req.params.id,
+        day_of_week,
+        start_time,
+        end_time,
+        is_active: isActiveValue,
+        slot_duration_minutes,
+        buffer_minutes,
+        ...clientInfo
+      }, req);
+
+      res.json({ id: availId, message: 'Disponibilidad creada' });
+    }
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Error al crear disponibilidad' });
@@ -769,19 +845,31 @@ router.get('/:id/available-slots', optionalAuth, (req, res) => {
       return res.status(404).json({ error: 'Espacio no encontrado o sin calendario activo' });
     }
     
-    // Obtener disponibilidad semanal del host
+    // Obtener disponibilidad semanal del host (solo días activos)
     const availability = db.prepare(`
-      SELECT day_of_week, start_time, end_time, slot_duration_minutes, buffer_minutes, is_active
+      SELECT day_of_week, start_time, end_time, 
+             COALESCE(slot_duration_minutes, 60) as slot_duration_minutes, 
+             COALESCE(buffer_minutes, 15) as buffer_minutes
       FROM host_availability
-      WHERE space_id = ? AND is_active = 1
+      WHERE space_id = ? 
+        AND specific_date IS NULL 
+        AND is_blocked = 0 
+        AND is_active = 1
       ORDER BY day_of_week
     `).all(id);
     
-    // Obtener excepciones (fechas bloqueadas)
-    const exceptions = db.prepare(`
+    // Obtener excepciones de la tabla host_availability_exceptions (legacy)
+    const legacyExceptions = db.prepare(`
       SELECT exception_date, reason
       FROM host_availability_exceptions
       WHERE space_id = ? AND is_blocked = 1
+    `).all(id);
+    
+    // Obtener fechas bloqueadas de la tabla host_availability (nuevo sistema)
+    const blockedSpecificDates = db.prepare(`
+      SELECT specific_date
+      FROM host_availability
+      WHERE space_id = ? AND specific_date IS NOT NULL AND is_blocked = 1
     `).all(id);
     
     // Obtener citas ya agendadas para evitar conflictos
@@ -796,7 +884,11 @@ router.get('/:id/available-slots', optionalAuth, (req, res) => {
     const startDate = date ? new Date(date) : new Date();
     const endDate = to_date ? new Date(to_date) : new Date(startDate.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 días por defecto
     
-    const blockedDates = new Set(exceptions.map(e => e.exception_date));
+    // Combinar ambas fuentes de fechas bloqueadas
+    const blockedDates = new Set([
+      ...legacyExceptions.map(e => e.exception_date),
+      ...blockedSpecificDates.map(b => b.specific_date)
+    ]);
     const bookedSlots = new Set(existingAppointments.map(a => `${a.scheduled_date}_${a.scheduled_time}`));
     
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
@@ -895,20 +987,25 @@ router.post('/:id/request-appointment', authenticateToken, [
     const dayOfWeek = new Date(scheduled_date).getDay();
     const dayAvailability = db.prepare(`
       SELECT * FROM host_availability 
-      WHERE space_id = ? AND day_of_week = ? AND is_active = 1
+      WHERE space_id = ? AND day_of_week = ? AND specific_date IS NULL AND is_blocked = 0 AND is_active = 1
     `).get(spaceId, dayOfWeek);
     
     if (!dayAvailability) {
       return res.status(400).json({ error: 'El host no tiene disponibilidad para este día' });
     }
     
-    // Verificar que la fecha no está bloqueada
-    const exception = db.prepare(`
+    // Verificar que la fecha no está bloqueada (ambas tablas)
+    const legacyException = db.prepare(`
       SELECT id FROM host_availability_exceptions 
       WHERE space_id = ? AND exception_date = ? AND is_blocked = 1
     `).get(spaceId, scheduled_date);
     
-    if (exception) {
+    const specificDateBlock = db.prepare(`
+      SELECT id FROM host_availability 
+      WHERE space_id = ? AND specific_date = ? AND is_blocked = 1
+    `).get(spaceId, scheduled_date);
+    
+    if (legacyException || specificDateBlock) {
       return res.status(400).json({ error: 'Esta fecha está bloqueada por el propietario' });
     }
     

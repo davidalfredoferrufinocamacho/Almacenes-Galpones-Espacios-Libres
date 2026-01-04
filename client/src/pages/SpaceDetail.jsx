@@ -20,6 +20,9 @@ function SpaceDetail() {
   const [appointmentData, setAppointmentData] = useState({ date: '', time: '', notes: '' })
   const [antiBypassAccepted, setAntiBypassAccepted] = useState(false)
   const [antiBypassText, setAntiBypassText] = useState('')
+  const [availableSlots, setAvailableSlots] = useState([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [selectedSlot, setSelectedSlot] = useState(null)
 
   const spaceTypes = {
     almacen: 'Almacen',
@@ -63,12 +66,35 @@ function SpaceDetail() {
     }
   }
 
+  const loadAvailableSlots = async () => {
+    setLoadingSlots(true)
+    try {
+      const response = await api.get(`/spaces/${id}/available-slots`)
+      setAvailableSlots(response.data.available_slots || [])
+      if (response.data.available_slots?.length === 0) {
+        setError('El propietario aun no ha configurado su disponibilidad para este espacio')
+      }
+    } catch (err) {
+      console.error('Error loading slots:', err)
+      if (err.response?.status === 404) {
+        setError('El propietario aun no ha configurado su disponibilidad para este espacio')
+      } else {
+        setError('Error al cargar horarios disponibles')
+      }
+    } finally {
+      setLoadingSlots(false)
+    }
+  }
+
   const handleScheduleAppointment = async () => {
     if (!calculation) {
       setError('Por favor use la calculadora para calcular el monto')
       return
     }
+    setError('')
+    setSelectedSlot(null)
     setShowAppointmentModal(true)
+    loadAvailableSlots()
   }
 
   const handleSubmitAppointment = async () => {
@@ -76,8 +102,8 @@ function SpaceDetail() {
       setError('Debe aceptar la clausula anti-bypass para continuar')
       return
     }
-    if (!appointmentData.date || !appointmentData.time) {
-      setError('Debe seleccionar fecha y hora para la cita')
+    if (!selectedSlot) {
+      setError('Debe seleccionar un horario disponible')
       return
     }
 
@@ -85,19 +111,15 @@ function SpaceDetail() {
     setError('')
 
     try {
-      await api.post('/appointments', {
-        space_id: id,
-        proposed_date: appointmentData.date,
-        proposed_time: appointmentData.time,
-        notes: appointmentData.notes,
-        sqm_requested: calculation.sqm,
-        period_type: calculation.periodType,
-        period_quantity: calculation.quantity
+      await api.post(`/spaces/${id}/request-appointment`, {
+        scheduled_date: selectedSlot.date,
+        scheduled_time: selectedSlot.time,
+        notes: appointmentData.notes
       })
 
       alert('Cita solicitada exitosamente. El propietario debe confirmarla.')
       setShowAppointmentModal(false)
-      navigate('/mis-citas')
+      navigate('/cliente')
     } catch (error) {
       setError(error.response?.data?.error || 'Error al agendar cita')
     } finally {
@@ -370,31 +392,76 @@ function SpaceDetail() {
 
           {showAppointmentModal && (
             <div className="modal-overlay" onClick={() => setShowAppointmentModal(false)}>
-              <div className="modal" onClick={e => e.stopPropagation()}>
+              <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
                 <div className="modal-header">
-                  <h2>Agendar Cita</h2>
+                  <h2>Agendar Visita</h2>
                   <button className="close-btn" onClick={() => setShowAppointmentModal(false)}>×</button>
                 </div>
                 <div className="modal-body">
+                  <p style={{ marginBottom: '1rem', color: '#6b7280' }}>
+                    <strong>{space.title}</strong>
+                  </p>
+
                   <div className="form-group">
-                    <label>Fecha de la Cita</label>
-                    <input 
-                      type="date" 
-                      value={appointmentData.date}
-                      min={new Date().toISOString().split('T')[0]}
-                      onChange={e => setAppointmentData({ ...appointmentData, date: e.target.value })}
-                      className="form-control"
-                    />
+                    <label><strong>Seleccione un horario disponible</strong></label>
+                    {loadingSlots ? (
+                      <div style={{ textAlign: 'center', padding: '2rem' }}>
+                        <div className="spinner"></div>
+                        <p>Cargando horarios...</p>
+                      </div>
+                    ) : availableSlots.length > 0 ? (
+                      <div style={{ maxHeight: '250px', overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '0.5rem' }}>
+                        {(() => {
+                          const slotsByDate = availableSlots.reduce((acc, slot) => {
+                            if (!acc[slot.date]) acc[slot.date] = []
+                            acc[slot.date].push(slot)
+                            return acc
+                          }, {})
+                          return Object.entries(slotsByDate).map(([date, slots]) => (
+                            <div key={date} style={{ marginBottom: '1rem' }}>
+                              <div style={{ fontWeight: 'bold', color: '#374151', marginBottom: '0.5rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '0.25rem' }}>
+                                {slots[0].day_name} - {new Date(date + 'T12:00:00').toLocaleDateString('es-BO', { day: 'numeric', month: 'long', year: 'numeric' })}
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                {slots.map((slot, idx) => (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setSelectedSlot(slot)}
+                                    style={{
+                                      padding: '0.5rem 1rem',
+                                      border: selectedSlot?.date === slot.date && selectedSlot?.time === slot.time 
+                                        ? '2px solid #3b82f6' 
+                                        : '1px solid #d1d5db',
+                                      borderRadius: '6px',
+                                      background: selectedSlot?.date === slot.date && selectedSlot?.time === slot.time 
+                                        ? '#dbeafe' 
+                                        : 'white',
+                                      cursor: 'pointer',
+                                      fontSize: '0.9rem'
+                                    }}
+                                  >
+                                    {slot.time}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        })()}
+                      </div>
+                    ) : (
+                      <div style={{ padding: '1rem', background: '#fef3c7', borderRadius: '8px', color: '#92400e' }}>
+                        El propietario aun no ha configurado su disponibilidad para este espacio.
+                      </div>
+                    )}
                   </div>
-                  <div className="form-group">
-                    <label>Hora de la Cita</label>
-                    <input 
-                      type="time" 
-                      value={appointmentData.time}
-                      onChange={e => setAppointmentData({ ...appointmentData, time: e.target.value })}
-                      className="form-control"
-                    />
-                  </div>
+
+                  {selectedSlot && (
+                    <div style={{ padding: '1rem', background: '#d1fae5', borderRadius: '8px', marginBottom: '1rem' }}>
+                      <strong>Horario seleccionado:</strong> {selectedSlot.day_name}, {new Date(selectedSlot.date + 'T12:00:00').toLocaleDateString('es-BO')} a las {selectedSlot.time}
+                    </div>
+                  )}
+
                   <div className="form-group">
                     <label>Notas (opcional)</label>
                     <textarea
@@ -402,12 +469,13 @@ function SpaceDetail() {
                       onChange={e => setAppointmentData({ ...appointmentData, notes: e.target.value })}
                       className="form-control"
                       placeholder="Informacion adicional para el propietario..."
+                      rows={2}
                     />
                   </div>
 
                   <div className="anti-bypass-section" style={{ marginTop: '1rem', padding: '1rem', background: '#fef3c7', borderRadius: '8px' }}>
                     <h4 style={{ color: '#92400e', marginBottom: '0.5rem' }}>Clausula Anti-Bypass</h4>
-                    <div style={{ maxHeight: '150px', overflow: 'auto', background: 'white', padding: '0.5rem', borderRadius: '4px', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                    <div style={{ maxHeight: '120px', overflow: 'auto', background: 'white', padding: '0.5rem', borderRadius: '4px', fontSize: '0.85rem', marginBottom: '1rem' }}>
                       {antiBypassText || 'Cargando clausula...'}
                     </div>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
@@ -427,9 +495,9 @@ function SpaceDetail() {
                   <button 
                     onClick={handleSubmitAppointment} 
                     className="btn btn-primary"
-                    disabled={processing || !antiBypassAccepted}
+                    disabled={processing || !antiBypassAccepted || !selectedSlot || availableSlots.length === 0}
                   >
-                    {processing ? 'Enviando...' : 'Solicitar Cita'}
+                    {processing ? 'Agendando...' : 'Solicitar Cita'}
                   </button>
                 </div>
               </div>
