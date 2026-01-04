@@ -21,6 +21,371 @@ function validateLegalIdentity(user) {
 
 const router = express.Router();
 
+// =====================================================================
+// NUEVO FLUJO: Propuesta de contrato con doble confirmacion
+// 1. Cliente propone contrato (sin pago)
+// 2. Propietario aprueba o rechaza
+// 3. Si aprueba, cliente puede pagar
+// =====================================================================
+
+// Endpoint para que el cliente proponga un contrato (despues de cita confirmada)
+router.post('/propose', authenticateToken, requireRole('GUEST'), [
+  body('appointment_id').notEmpty().withMessage('ID de cita requerido'),
+  body('sqm').isFloat({ min: 1 }).withMessage('Superficie debe ser mayor a 0'),
+  body('period_type').isIn(['dia', 'semana', 'mes', 'trimestre', 'semestre', 'ano']).withMessage('Tipo de periodo invalido'),
+  body('period_quantity').isInt({ min: 1 }).withMessage('Cantidad de periodos debe ser mayor a 0'),
+  body('start_date').isISO8601().withMessage('Fecha de inicio invalida')
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { appointment_id, sqm, period_type, period_quantity, start_date } = req.body;
+
+    // Verificar que la cita existe y esta confirmada por ambas partes
+    const appointment = db.prepare(`
+      SELECT a.*, s.host_id, s.title as space_title,
+        s.price_per_sqm_day, s.price_per_sqm_week, s.price_per_sqm_month,
+        s.price_per_sqm_quarter, s.price_per_sqm_semester, s.price_per_sqm_year,
+        s.total_sqm, s.available_sqm, s.space_type, s.description, s.address, s.city, s.department,
+        s.has_roof, s.rain_protected, s.dust_protected, s.has_security, s.access_type
+      FROM appointments a
+      JOIN spaces s ON a.space_id = s.id
+      WHERE a.id = ? AND a.guest_id = ? AND a.status = 'realizada'
+    `).get(appointment_id, req.user.id);
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Cita no encontrada o no esta marcada como realizada' });
+    }
+
+    // Verificar que no existe ya un contrato propuesto para esta cita
+    const existingContract = db.prepare(`
+      SELECT id, status FROM contracts WHERE space_id = ? AND guest_id = ? 
+      AND status IN ('guest_proposed', 'host_approved', 'pending', 'signed')
+    `).get(appointment.space_id, req.user.id);
+
+    if (existingContract) {
+      return res.status(400).json({ error: 'Ya existe un contrato en proceso para este espacio' });
+    }
+
+    // Validar superficie solicitada
+    if (sqm > appointment.available_sqm) {
+      return res.status(400).json({ error: `Superficie solicitada (${sqm} m²) excede la disponible (${appointment.available_sqm} m²)` });
+    }
+
+    // Obtener precio por m2 segun tipo de periodo
+    let pricePerSqm = 0;
+    switch (period_type) {
+      case 'dia': pricePerSqm = appointment.price_per_sqm_day || 0; break;
+      case 'semana': pricePerSqm = appointment.price_per_sqm_week || 0; break;
+      case 'mes': pricePerSqm = appointment.price_per_sqm_month || 0; break;
+      case 'trimestre': pricePerSqm = appointment.price_per_sqm_quarter || 0; break;
+      case 'semestre': pricePerSqm = appointment.price_per_sqm_semester || 0; break;
+      case 'ano': pricePerSqm = appointment.price_per_sqm_year || 0; break;
+    }
+
+    if (pricePerSqm <= 0) {
+      return res.status(400).json({ error: `No hay precio configurado para el periodo tipo: ${period_type}` });
+    }
+
+    // Calcular montos
+    const totalAmount = sqm * pricePerSqm * period_quantity;
+    const endDate = calculateEndDate(start_date, period_type, period_quantity);
+
+    // Obtener configuracion de comision
+    const config = db.prepare("SELECT value FROM site_config WHERE key = 'commission_percentage'").get();
+    const commissionPercentage = config ? parseFloat(config.value) : 10;
+    const commissionAmount = totalAmount * (commissionPercentage / 100);
+    const hostPayoutAmount = totalAmount - commissionAmount;
+
+    // Obtener datos del guest y host
+    const guest = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    const host = db.prepare('SELECT * FROM users WHERE id = ?').get(appointment.host_id);
+
+    // Validar identidad legal
+    const guestIdentity = validateLegalIdentity(guest);
+    if (!guestIdentity.valid) {
+      return res.status(400).json({ 
+        error: `Complete su perfil: falta ${guestIdentity.missing}`,
+        incomplete_profile: true
+      });
+    }
+
+    const clientInfo = getClientInfo(req);
+    const contractId = generateId();
+    const contractNumber = generateContractNumber();
+
+    // Crear datos FROZEN del espacio
+    const frozenSpaceData = JSON.stringify({
+      id: appointment.space_id,
+      title: appointment.space_title,
+      space_type: appointment.space_type,
+      total_sqm: appointment.total_sqm,
+      available_sqm: appointment.available_sqm,
+      address: appointment.address,
+      city: appointment.city,
+      department: appointment.department,
+      has_roof: appointment.has_roof,
+      rain_protected: appointment.rain_protected,
+      dust_protected: appointment.dust_protected,
+      has_security: appointment.has_security,
+      access_type: appointment.access_type
+    });
+
+    const frozenPricing = JSON.stringify({
+      price_per_sqm_day: appointment.price_per_sqm_day,
+      price_per_sqm_week: appointment.price_per_sqm_week,
+      price_per_sqm_month: appointment.price_per_sqm_month,
+      price_per_sqm_quarter: appointment.price_per_sqm_quarter,
+      price_per_sqm_semester: appointment.price_per_sqm_semester,
+      price_per_sqm_year: appointment.price_per_sqm_year
+    });
+
+    const contractData = JSON.stringify({
+      parties: {
+        guest: {
+          id: guest.id,
+          name: guest.person_type === 'juridica' ? guest.company_name : `${guest.first_name} ${guest.last_name}`,
+          person_type: guest.person_type,
+          ci: guest.ci,
+          nit: guest.nit,
+          address: guest.address,
+          city: guest.city
+        },
+        host: {
+          id: host.id,
+          name: host.person_type === 'juridica' ? host.company_name : `${host.first_name} ${host.last_name}`,
+          person_type: host.person_type,
+          ci: host.ci,
+          nit: host.nit,
+          address: host.address,
+          city: host.city
+        }
+      },
+      space: JSON.parse(frozenSpaceData),
+      pricing_snapshot: JSON.parse(frozenPricing),
+      rental: {
+        sqm: sqm,
+        period_type: period_type,
+        period_quantity: period_quantity,
+        start_date: start_date,
+        end_date: endDate,
+        total_amount: totalAmount,
+        commission_percentage: commissionPercentage,
+        commission_amount: commissionAmount,
+        price_per_sqm_applied: pricePerSqm,
+        host_payout: hostPayoutAmount
+      },
+      legal: getLegalClausesForContract()
+    });
+
+    const contractHash = generateContractHash(contractData);
+
+    // Insertar contrato con status 'guest_proposed'
+    db.prepare(`
+      INSERT INTO contracts (
+        id, reservation_id, space_id, guest_id, host_id, contract_number,
+        contract_data, contract_hash,
+        frozen_space_data, frozen_description,
+        frozen_pricing, frozen_commission_percentage,
+        frozen_price_per_sqm_applied, frozen_snapshot_created_at,
+        sqm, period_type, period_quantity, start_date, end_date,
+        total_amount, deposit_amount, commission_amount, host_payout_amount,
+        status, guest_proposed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'guest_proposed', ?)
+    `).run(
+      contractId, appointment_id, appointment.space_id, req.user.id, appointment.host_id,
+      contractNumber, contractData, contractHash,
+      frozenSpaceData, appointment.description,
+      frozenPricing, commissionPercentage,
+      pricePerSqm, clientInfo.timestamp,
+      sqm, period_type, period_quantity, start_date, endDate,
+      totalAmount, 0, commissionAmount, hostPayoutAmount,
+      clientInfo.timestamp
+    );
+
+    // Registrar en audit log
+    logAudit(req.user.id, 'CONTRACT_PROPOSED', 'contracts', contractId, null, {
+      contract_number: contractNumber,
+      appointment_id: appointment_id,
+      sqm: sqm,
+      period_type: period_type,
+      period_quantity: period_quantity,
+      total_amount: totalAmount,
+      ...clientInfo
+    }, req);
+
+    // Notificar al propietario
+    try {
+      const { notifyContractProposed } = require('../utils/notificationsService');
+      notifyContractProposed(contractId, req);
+    } catch (e) {
+      console.log('Error enviando notificacion de propuesta:', e.message);
+    }
+
+    res.status(201).json({
+      contract_id: contractId,
+      contract_number: contractNumber,
+      status: 'guest_proposed',
+      message: 'Propuesta de contrato enviada. Esperando aprobacion del propietario.',
+      summary: {
+        space_title: appointment.space_title,
+        sqm: sqm,
+        period_type: period_type,
+        period_quantity: period_quantity,
+        start_date: start_date,
+        end_date: endDate,
+        total_amount: totalAmount
+      }
+    });
+  } catch (error) {
+    console.error('Error al proponer contrato:', error);
+    res.status(500).json({ error: 'Error al crear propuesta de contrato' });
+  }
+});
+
+// Endpoint para que el propietario apruebe un contrato
+router.put('/:id/approve', authenticateToken, requireRole('HOST'), (req, res) => {
+  try {
+    const contract = db.prepare(`
+      SELECT * FROM contracts WHERE id = ? AND host_id = ? AND status = 'guest_proposed'
+    `).get(req.params.id, req.user.id);
+
+    if (!contract) {
+      return res.status(404).json({ error: 'Contrato no encontrado o no esta pendiente de aprobacion' });
+    }
+
+    const clientInfo = getClientInfo(req);
+
+    db.prepare(`
+      UPDATE contracts SET
+        status = 'host_approved',
+        host_approved_at = ?,
+        payment_requested_at = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(clientInfo.timestamp, clientInfo.timestamp, req.params.id);
+
+    logAudit(req.user.id, 'CONTRACT_APPROVED', 'contracts', req.params.id, null, {
+      contract_number: contract.contract_number,
+      ...clientInfo
+    }, req);
+
+    // Notificar al cliente que puede pagar
+    try {
+      const { notifyContractApproved } = require('../utils/notificationsService');
+      notifyContractApproved(req.params.id, req);
+    } catch (e) {
+      console.log('Error enviando notificacion de aprobacion:', e.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Contrato aprobado. El cliente ha sido notificado para proceder con el pago.',
+      contract_id: req.params.id,
+      status: 'host_approved'
+    });
+  } catch (error) {
+    console.error('Error al aprobar contrato:', error);
+    res.status(500).json({ error: 'Error al aprobar contrato' });
+  }
+});
+
+// Endpoint para que el propietario rechace un contrato
+router.put('/:id/reject', authenticateToken, requireRole('HOST'), [
+  body('reason').optional().isString()
+], (req, res) => {
+  try {
+    const contract = db.prepare(`
+      SELECT * FROM contracts WHERE id = ? AND host_id = ? AND status = 'guest_proposed'
+    `).get(req.params.id, req.user.id);
+
+    if (!contract) {
+      return res.status(404).json({ error: 'Contrato no encontrado o no esta pendiente de aprobacion' });
+    }
+
+    const { reason } = req.body;
+    const clientInfo = getClientInfo(req);
+
+    db.prepare(`
+      UPDATE contracts SET
+        status = 'host_rejected',
+        host_rejected_at = ?,
+        host_rejection_reason = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(clientInfo.timestamp, reason || null, req.params.id);
+
+    logAudit(req.user.id, 'CONTRACT_REJECTED', 'contracts', req.params.id, null, {
+      contract_number: contract.contract_number,
+      rejection_reason: reason,
+      ...clientInfo
+    }, req);
+
+    // Notificar al cliente del rechazo
+    try {
+      const { notifyContractRejected } = require('../utils/notificationsService');
+      notifyContractRejected(req.params.id, reason, req);
+    } catch (e) {
+      console.log('Error enviando notificacion de rechazo:', e.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Contrato rechazado. El cliente ha sido notificado.',
+      contract_id: req.params.id,
+      status: 'host_rejected'
+    });
+  } catch (error) {
+    console.error('Error al rechazar contrato:', error);
+    res.status(500).json({ error: 'Error al rechazar contrato' });
+  }
+});
+
+// Endpoint para obtener propuestas de contrato pendientes (para el propietario)
+router.get('/pending-proposals', authenticateToken, requireRole('HOST'), (req, res) => {
+  try {
+    const proposals = db.prepare(`
+      SELECT c.*, 
+        u.first_name as guest_first_name, u.last_name as guest_last_name, u.email as guest_email,
+        s.title as space_title
+      FROM contracts c
+      JOIN users u ON c.guest_id = u.id
+      JOIN spaces s ON c.space_id = s.id
+      WHERE c.host_id = ? AND c.status = 'guest_proposed'
+      ORDER BY c.created_at DESC
+    `).all(req.user.id);
+
+    res.json(proposals);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener propuestas' });
+  }
+});
+
+// Endpoint para obtener contratos del cliente con sus estados
+router.get('/my-contracts', authenticateToken, (req, res) => {
+  try {
+    const contracts = db.prepare(`
+      SELECT c.*, 
+        s.title as space_title,
+        h.first_name as host_first_name, h.last_name as host_last_name, h.company_name as host_company
+      FROM contracts c
+      JOIN spaces s ON c.space_id = s.id
+      JOIN users h ON c.host_id = h.id
+      WHERE c.guest_id = ?
+      ORDER BY c.created_at DESC
+    `).all(req.user.id);
+
+    res.json(contracts);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error al obtener contratos' });
+  }
+});
+
 router.post('/create/:reservation_id', authenticateToken, requireRole('GUEST'), (req, res) => {
   try {
     const reservation = db.prepare(`

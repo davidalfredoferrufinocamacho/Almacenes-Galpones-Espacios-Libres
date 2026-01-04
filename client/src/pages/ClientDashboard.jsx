@@ -692,16 +692,29 @@ function ClientContracts() {
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState(null)
   const [signing, setSigning] = useState(false)
+  const [paymentMethods, setPaymentMethods] = useState([])
+  const [showPayModal, setShowPayModal] = useState(false)
+  const [payingContract, setPayingContract] = useState(null)
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
+  const [paying, setPaying] = useState(false)
 
-  useEffect(() => { loadContracts() }, [filter])
+  useEffect(() => { 
+    loadContracts()
+    loadPaymentMethods()
+  }, [filter])
 
   const loadContracts = () => {
     setLoading(true)
-    const params = filter ? `?status=${filter}` : ''
-    api.get(`/client/contracts${params}`).then(res => {
-      setContracts(res.data)
+    api.get('/contracts/my-contracts').then(res => {
+      setContracts(res.data || [])
       setLoading(false)
     }).catch(() => setLoading(false))
+  }
+
+  const loadPaymentMethods = () => {
+    api.get('/spaces/payment-methods').then(res => {
+      setPaymentMethods(res.data || [])
+    }).catch(() => {})
   }
 
   const viewContract = async (id) => {
@@ -727,18 +740,203 @@ function ClientContracts() {
     setSigning(false)
   }
 
+  const openPayModal = (contract) => {
+    setPayingContract(contract)
+    setSelectedPaymentMethod('')
+    setShowPayModal(true)
+  }
+
+  const handlePayContract = async () => {
+    if (!payingContract || !selectedPaymentMethod) return
+    setPaying(true)
+    try {
+      const res = await api.post(`/payments/contract/${payingContract.id}`, {
+        payment_method: selectedPaymentMethod
+      })
+      alert('Pago completado exitosamente.\n\n' + res.data.message)
+      setShowPayModal(false)
+      setPayingContract(null)
+      loadContracts()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setPaying(false)
+  }
+
   const downloadPDF = (id) => {
     window.open(`/api/contracts/${id}/pdf`, '_blank')
   }
+
+  const statusLabels = {
+    guest_proposed: 'Propuesta Enviada',
+    host_approved: 'Aprobado - Pendiente Pago',
+    host_rejected: 'Rechazado',
+    pending: 'Pendiente Firma',
+    signed: 'Firmado',
+    active: 'Activo',
+    completed: 'Completado',
+    cancelled: 'Cancelado'
+  }
+
+  const periodLabels = {
+    dia: 'dia(s)', semana: 'semana(s)', mes: 'mes(es)',
+    trimestre: 'trimestre(s)', semestre: 'semestre(s)', ano: 'ano(s)'
+  }
+
+  // Separar contratos por categoria
+  const proposedContracts = contracts.filter(c => c.status === 'guest_proposed')
+  const approvedContracts = contracts.filter(c => c.status === 'host_approved')
+  const rejectedContracts = contracts.filter(c => c.status === 'host_rejected')
+  const activeContracts = contracts.filter(c => ['pending', 'signed', 'active', 'completed'].includes(c.status))
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
       <h1>Mis Contratos</h1>
+
+      {/* Contratos Aprobados - Listos para Pagar */}
+      {approvedContracts.length > 0 && (
+        <div style={{ marginBottom: '2rem', padding: '1.5rem', background: '#d1fae5', border: '2px solid #10b981', borderRadius: '12px' }}>
+          <h2 style={{ color: '#065f46', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>💰</span> Contratos Aprobados - Listos para Pagar ({approvedContracts.length})
+          </h2>
+          <p style={{ marginBottom: '1rem', color: '#047857', fontSize: '0.9rem' }}>
+            El propietario ha aprobado las siguientes propuestas. Complete el pago para activar el contrato.
+          </p>
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {approvedContracts.map(c => (
+              <div key={c.id} style={{ background: 'white', padding: '1.25rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                    <h4 style={{ marginBottom: '0.5rem' }}>{c.space_title}</h4>
+                    <p style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                      <strong>Superficie:</strong> {c.sqm} m² | <strong>Periodo:</strong> {c.period_quantity} {periodLabels[c.period_type] || c.period_type}
+                    </p>
+                    <p style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                      <strong>Fechas:</strong> {new Date(c.start_date).toLocaleDateString()} - {new Date(c.end_date).toLocaleDateString()}
+                    </p>
+                    <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#0369a1' }}>
+                      Total a Pagar: Bs. {(c.total_amount || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <button 
+                      onClick={() => openPayModal(c)} 
+                      className="btn btn-primary"
+                      style={{ padding: '0.75rem 2rem', fontSize: '1rem' }}
+                    >
+                      💳 Pagar Ahora
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Propuestas Pendientes de Aprobacion */}
+      {proposedContracts.length > 0 && (
+        <div style={{ marginBottom: '2rem', padding: '1.5rem', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '12px' }}>
+          <h2 style={{ color: '#92400e', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>⏳</span> Propuestas Pendientes de Aprobacion ({proposedContracts.length})
+          </h2>
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {proposedContracts.map(c => (
+              <div key={c.id} style={{ background: 'white', padding: '1rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                <h4>{c.space_title}</h4>
+                <p style={{ fontSize: '0.9rem' }}>
+                  {c.sqm} m² - {c.period_quantity} {periodLabels[c.period_type] || c.period_type} - Bs. {(c.total_amount || 0).toLocaleString()}
+                </p>
+                <p style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                  Esperando que el propietario apruebe su propuesta...
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Propuestas Rechazadas */}
+      {rejectedContracts.length > 0 && (
+        <div style={{ marginBottom: '2rem', padding: '1.5rem', background: '#fee2e2', border: '1px solid #ef4444', borderRadius: '12px' }}>
+          <h2 style={{ color: '#b91c1c', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>❌</span> Propuestas Rechazadas ({rejectedContracts.length})
+          </h2>
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {rejectedContracts.map(c => (
+              <div key={c.id} style={{ background: 'white', padding: '1rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                <h4>{c.space_title}</h4>
+                <p style={{ fontSize: '0.9rem' }}>Monto: Bs. {(c.total_amount || 0).toLocaleString()}</p>
+                {c.host_rejection_reason && (
+                  <p style={{ fontSize: '0.85rem', color: '#b91c1c', marginTop: '0.5rem' }}>
+                    <strong>Motivo:</strong> {c.host_rejection_reason}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Pago */}
+      {showPayModal && payingContract && (
+        <div className="modal-overlay" onClick={() => setShowPayModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Completar Pago</h2>
+              <button className="close-btn" onClick={() => setShowPayModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
+                <h4>{payingContract.space_title}</h4>
+                <p style={{ fontSize: '0.9rem' }}>
+                  {payingContract.sqm} m² - {payingContract.period_quantity} {periodLabels[payingContract.period_type] || payingContract.period_type}
+                </p>
+                <p style={{ fontSize: '0.9rem' }}>
+                  {new Date(payingContract.start_date).toLocaleDateString()} - {new Date(payingContract.end_date).toLocaleDateString()}
+                </p>
+              </div>
+
+              <div style={{ padding: '1rem', background: '#e0f2fe', borderRadius: '8px', marginBottom: '1rem', textAlign: 'center' }}>
+                <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#0369a1' }}>
+                  Bs. {(payingContract.total_amount || 0).toLocaleString()}
+                </p>
+              </div>
+
+              <div className="form-group">
+                <label>Metodo de Pago</label>
+                <select 
+                  value={selectedPaymentMethod} 
+                  onChange={e => setSelectedPaymentMethod(e.target.value)}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                >
+                  <option value="">Seleccione metodo de pago...</option>
+                  {paymentMethods.map(pm => (
+                    <option key={pm.code} value={pm.code}>{pm.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowPayModal(false)} className="btn btn-outline">Cancelar</button>
+              <button 
+                onClick={handlePayContract} 
+                className="btn btn-primary" 
+                disabled={!selectedPaymentMethod || paying}
+              >
+                {paying ? 'Procesando...' : 'Confirmar Pago'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filtro para contratos activos */}
       <div className="filters-bar">
         <select value={filter} onChange={e => setFilter(e.target.value)}>
-          <option value="">Todos</option>
+          <option value="">Todos los Contratos Activos</option>
           <option value="pending">Pendientes de Firma</option>
           <option value="signed">Firmados</option>
         </select>
@@ -1674,8 +1872,8 @@ function ClientAppointments() {
     return sqm * pricePerSqm * qty
   }
 
-  const handlePayFullContract = async () => {
-    if (!spaceDetails || !selectedPaymentMethod) return
+  const handleProposeContract = async () => {
+    if (!spaceDetails) return
     const total = calculateRentalTotal()
     if (total <= 0) {
       alert('El monto total debe ser mayor a 0. Verifique la configuracion.')
@@ -1685,22 +1883,23 @@ function ClientAppointments() {
       alert('Debe seleccionar una fecha de inicio.')
       return
     }
+    if (!selectedAppointmentForContract?.id) {
+      alert('No se encontro la cita asociada.')
+      return
+    }
     setContractLoading(true)
     try {
-      const res = await api.post('/payments/full', {
-        space_id: spaceDetails.id,
-        sqm_requested: parseFloat(rentalConfig.sqm),
+      const res = await api.post('/contracts/propose', {
+        appointment_id: selectedAppointmentForContract.id,
+        sqm: parseFloat(rentalConfig.sqm),
         period_type: rentalConfig.periodType,
         period_quantity: parseInt(rentalConfig.periodQty),
-        start_date: rentalConfig.startDate,
-        payment_method: selectedPaymentMethod,
-        appointment_id: selectedAppointmentForContract?.id
+        start_date: rentalConfig.startDate
       })
-      alert(res.data.message + '\n\nSera redirigido a la seccion de Contratos para firmar.')
+      alert('Propuesta de contrato enviada exitosamente.\n\n' + res.data.message + '\n\nRecibira una notificacion cuando el propietario apruebe su propuesta.')
       setShowContractModal(false)
       setSelectedAppointmentForContract(null)
       setSpaceDetails(null)
-      setSelectedPaymentMethod('')
       loadData()
     } catch (error) {
       alert('Error: ' + (error.response?.data?.error || error.message))
@@ -1902,7 +2101,7 @@ function ClientAppointments() {
         <div className="modal-overlay" onClick={() => setShowContractModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
-              <h2>Cerrar Contrato - Pago 100%</h2>
+              <h2>Proponer Contrato</h2>
               <button className="close-btn" onClick={() => setShowContractModal(false)}>×</button>
             </div>
             <div className="modal-body">
@@ -1992,22 +2191,8 @@ function ClientAppointments() {
                     </div>
                   )}
 
-                  <div className="form-group" style={{ marginBottom: '1rem' }}>
-                    <label>Metodo de Pago</label>
-                    <select 
-                      value={selectedPaymentMethod} 
-                      onChange={e => setSelectedPaymentMethod(e.target.value)}
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
-                    >
-                      <option value="">Seleccione metodo de pago...</option>
-                      {paymentMethods && paymentMethods.map(pm => (
-                        <option key={pm.code} value={pm.code}>{pm.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
                   <div style={{ padding: '1.25rem', background: '#e0f2fe', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #0284c7' }}>
-                    <h4 style={{ marginBottom: '0.75rem', color: '#0369a1' }}>Resumen del Contrato</h4>
+                    <h4 style={{ marginBottom: '0.75rem', color: '#0369a1' }}>Resumen de la Propuesta</h4>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.95rem' }}>
                       <p><strong>Espacio:</strong></p><p>{spaceDetails.title}</p>
                       <p><strong>Superficie:</strong></p><p>{rentalConfig.sqm || 0} m²</p>
@@ -2023,11 +2208,10 @@ function ClientAppointments() {
                           default: return 0
                         }
                       })().toFixed(2)}</p>
-                      <p><strong>Metodo de Pago:</strong></p><p>{paymentMethods.find(pm => pm.code === selectedPaymentMethod)?.name || 'No seleccionado'}</p>
                     </div>
                     <hr style={{ margin: '0.75rem 0', borderColor: '#0284c7' }} />
                     <p style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#0369a1', textAlign: 'center' }}>
-                      TOTAL A PAGAR: Bs. {calculateRentalTotal().toFixed(2)}
+                      MONTO TOTAL: Bs. {calculateRentalTotal().toFixed(2)}
                     </p>
                   </div>
 
@@ -2040,11 +2224,16 @@ function ClientAppointments() {
                     </div>
                   )}
 
-                  <div style={{ padding: '1rem', background: '#fef3c7', borderRadius: '8px' }}>
-                    <p style={{ fontSize: '0.9rem', color: '#92400e' }}>
-                      Al completar el pago, se generara el contrato digital que debera firmar usted primero, 
-                      y luego el propietario. El alquiler comenzara en la fecha seleccionada.
+                  <div style={{ padding: '1rem', background: '#dbeafe', borderRadius: '8px', border: '1px solid #3b82f6' }}>
+                    <p style={{ fontSize: '0.9rem', color: '#1e40af', marginBottom: '0.5rem' }}>
+                      <strong>Flujo de contratacion:</strong>
                     </p>
+                    <ol style={{ fontSize: '0.85rem', color: '#1e40af', paddingLeft: '1.25rem', margin: 0 }}>
+                      <li>Usted envia esta propuesta al propietario</li>
+                      <li>El propietario revisa y aprueba o rechaza</li>
+                      <li>Si aprueba, recibira notificacion para realizar el pago</li>
+                      <li>Despues del pago, ambos firman el contrato digitalmente</li>
+                    </ol>
                   </div>
                 </>
               ) : (
@@ -2054,11 +2243,11 @@ function ClientAppointments() {
             <div className="modal-footer">
               <button onClick={() => setShowContractModal(false)} className="btn btn-outline">Cancelar</button>
               <button 
-                onClick={handlePayFullContract} 
+                onClick={handleProposeContract} 
                 className="btn btn-primary" 
-                disabled={!selectedPaymentMethod || contractLoading || calculateRentalTotal() <= 0}
+                disabled={contractLoading || calculateRentalTotal() <= 0 || !rentalConfig.startDate}
               >
-                {contractLoading ? 'Procesando...' : `Pagar Bs. ${calculateRentalTotal().toFixed(2)}`}
+                {contractLoading ? 'Enviando...' : 'Enviar Propuesta al Propietario'}
               </button>
             </div>
           </div>

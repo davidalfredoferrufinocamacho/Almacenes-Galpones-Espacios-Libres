@@ -163,6 +163,107 @@ router.post('/full', authenticateToken, requireRole('GUEST'), [
   }
 });
 
+// =====================================================================
+// NUEVO FLUJO: Pago de contrato aprobado por el propietario
+// Solo acepta contratos con status 'host_approved'
+// =====================================================================
+router.post('/contract/:contract_id', authenticateToken, requireRole('GUEST'), [
+  body('payment_method').notEmpty().withMessage('Metodo de pago requerido')
+], (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { payment_method } = req.body;
+    const { contract_id } = req.params;
+
+    // Verificar que el contrato existe y esta aprobado por el propietario
+    const contract = db.prepare(`
+      SELECT c.*, s.title as space_title
+      FROM contracts c
+      JOIN spaces s ON c.space_id = s.id
+      WHERE c.id = ? AND c.guest_id = ? AND c.status = 'host_approved'
+    `).get(contract_id, req.user.id);
+
+    if (!contract) {
+      return res.status(404).json({ error: 'Contrato no encontrado o no esta aprobado para pago' });
+    }
+
+    // Verificar metodo de pago valido
+    const validMethod = db.prepare('SELECT code FROM payment_methods WHERE code = ? AND is_active = 1').get(payment_method);
+    if (!validMethod) {
+      return res.status(400).json({ error: 'Metodo de pago no valido o no disponible' });
+    }
+
+    const paymentId = generateId();
+    const clientInfo = getClientInfo(req);
+
+    // Crear pago del cliente
+    db.prepare(`
+      INSERT INTO payments (
+        id, reservation_id, user_id, amount, payment_type, payment_method,
+        status, escrow_status, ip_address, user_agent
+      ) VALUES (?, ?, ?, ?, 'full', ?, 'completed', 'released', ?, ?)
+    `).run(paymentId, contract.reservation_id, req.user.id, contract.total_amount, payment_method, clientInfo.ip, clientInfo.userAgent);
+
+    // Crear registro de comision de la plataforma
+    db.prepare(`
+      INSERT INTO payments (
+        id, reservation_id, user_id, amount, payment_type, payment_method,
+        status, escrow_status, ip_address, user_agent, notes
+      ) VALUES (?, ?, ?, ?, 'commission', 'platform', 'completed', 'released', ?, ?, 'Comision automatica de la plataforma')
+    `).run(generateId(), contract.reservation_id, contract.host_id, contract.commission_amount, clientInfo.ip, clientInfo.userAgent);
+
+    // Crear registro de pago pendiente al propietario
+    db.prepare(`
+      INSERT INTO payments (
+        id, reservation_id, user_id, amount, payment_type, payment_method,
+        status, escrow_status, ip_address, user_agent, notes
+      ) VALUES (?, ?, ?, ?, 'host_payout', 'platform', 'pending', 'pending', ?, ?, 'Pago pendiente al propietario')
+    `).run(generateId(), contract.reservation_id, contract.host_id, contract.host_payout_amount, clientInfo.ip, clientInfo.userAgent);
+
+    // Actualizar contrato a status 'pending' (listo para firmas)
+    db.prepare(`
+      UPDATE contracts SET
+        status = 'pending',
+        payment_id = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(paymentId, contract_id);
+
+    logAudit(req.user.id, 'CONTRACT_PAYMENT_COMPLETED', 'payments', paymentId, null, {
+      contract_id: contract_id,
+      contract_number: contract.contract_number,
+      total_amount: contract.total_amount,
+      commission_amount: contract.commission_amount,
+      host_payout_amount: contract.host_payout_amount,
+      payment_method,
+      ...clientInfo
+    }, req);
+
+    // Notificar que el contrato esta listo para firmas
+    try {
+      notifyContractCreated(contract_id, req);
+    } catch (e) {
+      console.log('Error enviando notificacion de contrato:', e.message);
+    }
+
+    res.status(201).json({
+      payment_id: paymentId,
+      contract_id: contract_id,
+      contract_number: contract.contract_number,
+      total_amount: contract.total_amount,
+      status: 'pending',
+      message: 'Pago completado. El contrato esta listo para ser firmado.'
+    });
+  } catch (error) {
+    console.error('Error pago de contrato:', error);
+    res.status(500).json({ error: 'Error al procesar pago del contrato' });
+  }
+});
+
 router.get('/my-payments', authenticateToken, (req, res) => {
   try {
     const payments = db.prepare(`

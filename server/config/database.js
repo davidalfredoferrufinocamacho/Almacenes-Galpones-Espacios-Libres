@@ -254,14 +254,21 @@ function initDatabase() {
       host_sign_user_agent TEXT,
       host_sign_certificate TEXT,
       contract_hash TEXT,
-      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'signed', 'active', 'completed', 'cancelled', 'extended')),
+      status TEXT DEFAULT 'guest_proposed' CHECK(status IN ('guest_proposed', 'host_approved', 'host_rejected', 'pending', 'signed', 'active', 'completed', 'cancelled', 'extended')),
+      guest_proposed_at TEXT,
+      host_approved_at TEXT,
+      host_rejected_at TEXT,
+      host_rejection_reason TEXT,
+      payment_requested_at TEXT,
+      payment_id TEXT,
       pdf_url TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (reservation_id) REFERENCES reservations(id),
       FOREIGN KEY (space_id) REFERENCES spaces(id),
       FOREIGN KEY (guest_id) REFERENCES users(id),
-      FOREIGN KEY (host_id) REFERENCES users(id)
+      FOREIGN KEY (host_id) REFERENCES users(id),
+      FOREIGN KEY (payment_id) REFERENCES payments(id)
     );
 
     -- Tabla de extensiones de contrato
@@ -1181,7 +1188,14 @@ function initDatabase() {
     { table: 'reservations', column: 'dates_proposed_at', type: 'TEXT' },
     { table: 'reservations', column: 'dates_confirmed_at', type: 'TEXT' },
     { table: 'reservations', column: 'full_payment_at', type: 'TEXT' },
-    { table: 'users', column: 'logo_url', type: 'TEXT' }
+    { table: 'users', column: 'logo_url', type: 'TEXT' },
+    // Migraciones para flujo de propuesta de contrato con doble confirmacion
+    { table: 'contracts', column: 'guest_proposed_at', type: 'TEXT' },
+    { table: 'contracts', column: 'host_approved_at', type: 'TEXT' },
+    { table: 'contracts', column: 'host_rejected_at', type: 'TEXT' },
+    { table: 'contracts', column: 'host_rejection_reason', type: 'TEXT' },
+    { table: 'contracts', column: 'payment_requested_at', type: 'TEXT' },
+    { table: 'contracts', column: 'payment_id', type: 'TEXT' }
   ];
 
   // Backfill null categories to 'legal'

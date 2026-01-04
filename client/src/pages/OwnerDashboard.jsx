@@ -1511,12 +1511,21 @@ function OwnerAppointments() {
 
 function OwnerContracts() {
   const [contracts, setContracts] = useState([])
+  const [proposals, setProposals] = useState([])
   const [loading, setLoading] = useState(true)
   const [signing, setSigning] = useState(false)
+  const [approving, setApproving] = useState(false)
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [rejectingContract, setRejectingContract] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
 
   const loadContracts = () => {
-    api.get('/contracts').then(res => {
-      setContracts(Array.isArray(res.data) ? res.data : [])
+    Promise.all([
+      api.get('/contracts'),
+      api.get('/contracts/pending-proposals')
+    ]).then(([contractsRes, proposalsRes]) => {
+      setContracts(Array.isArray(contractsRes.data) ? contractsRes.data : [])
+      setProposals(Array.isArray(proposalsRes.data) ? proposalsRes.data : [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }
@@ -1538,8 +1547,45 @@ function OwnerContracts() {
     setSigning(false)
   }
 
+  const handleApprove = async (contractId) => {
+    if (!confirm('¿Aprobar esta propuesta de contrato? El cliente sera notificado para proceder con el pago.')) return
+    setApproving(true)
+    try {
+      await api.put(`/contracts/${contractId}/approve`)
+      alert('Propuesta aprobada. El cliente ha sido notificado para realizar el pago.')
+      loadContracts()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setApproving(false)
+  }
+
+  const openRejectModal = (contract) => {
+    setRejectingContract(contract)
+    setRejectReason('')
+    setShowRejectModal(true)
+  }
+
+  const handleReject = async () => {
+    if (!rejectingContract) return
+    setApproving(true)
+    try {
+      await api.put(`/contracts/${rejectingContract.id}/reject`, { reason: rejectReason })
+      alert('Propuesta rechazada. El cliente ha sido notificado.')
+      setShowRejectModal(false)
+      setRejectingContract(null)
+      loadContracts()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.error || error.message))
+    }
+    setApproving(false)
+  }
+
   const statusLabels = {
     draft: 'Borrador',
+    guest_proposed: 'Propuesta Recibida',
+    host_approved: 'Aprobado - Esperando Pago',
+    host_rejected: 'Rechazado',
     pending: 'Pendiente Firma',
     signed: 'Firmado',
     active: 'Activo',
@@ -1547,11 +1593,106 @@ function OwnerContracts() {
     cancelled: 'Cancelado'
   }
 
+  const periodLabels = {
+    dia: 'dia(s)', semana: 'semana(s)', mes: 'mes(es)',
+    trimestre: 'trimestre(s)', semestre: 'semestre(s)', ano: 'ano(s)'
+  }
+
   if (loading) return <div className="loading"><div className="spinner"></div></div>
 
   return (
     <div>
       <h1>Contratos</h1>
+
+      {/* Seccion de Propuestas Pendientes */}
+      {proposals.length > 0 && (
+        <div style={{ marginBottom: '2rem', padding: '1.5rem', background: '#fef3c7', border: '2px solid #f59e0b', borderRadius: '12px' }}>
+          <h2 style={{ color: '#92400e', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>📋</span> Propuestas de Contrato Pendientes ({proposals.length})
+          </h2>
+          <p style={{ marginBottom: '1rem', color: '#78350f', fontSize: '0.9rem' }}>
+            Los siguientes clientes han enviado propuestas de contrato despues de realizar una visita. Revise y apruebe o rechace cada propuesta.
+          </p>
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {proposals.map(p => (
+              <div key={p.id} style={{ background: 'white', padding: '1.25rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                    <h4 style={{ marginBottom: '0.5rem' }}>{p.space_title}</h4>
+                    <p style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '0.25rem' }}>
+                      <strong>Cliente:</strong> {p.guest_first_name} {p.guest_last_name} ({p.guest_email})
+                    </p>
+                    <p style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                      <strong>Superficie:</strong> {p.sqm} m² | <strong>Periodo:</strong> {p.period_quantity} {periodLabels[p.period_type] || p.period_type}
+                    </p>
+                    <p style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                      <strong>Fechas:</strong> {new Date(p.start_date).toLocaleDateString()} - {new Date(p.end_date).toLocaleDateString()}
+                    </p>
+                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#0369a1' }}>
+                      Monto Total: Bs. {(p.total_amount || 0).toLocaleString()}
+                    </p>
+                    <p style={{ fontSize: '0.85rem', color: '#16a34a' }}>
+                      Usted recibira: Bs. {(p.host_payout_amount || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <button 
+                      onClick={() => handleApprove(p.id)} 
+                      className="btn btn-success"
+                      disabled={approving}
+                      style={{ padding: '0.75rem 1.5rem' }}
+                    >
+                      {approving ? 'Procesando...' : '✓ Aprobar'}
+                    </button>
+                    <button 
+                      onClick={() => openRejectModal(p)} 
+                      className="btn btn-danger"
+                      disabled={approving}
+                      style={{ padding: '0.75rem 1.5rem' }}
+                    >
+                      ✗ Rechazar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Rechazo */}
+      {showRejectModal && (
+        <div className="modal-overlay" onClick={() => setShowRejectModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Rechazar Propuesta</h2>
+              <button className="close-btn" onClick={() => setShowRejectModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '1rem' }}>
+                ¿Esta seguro que desea rechazar la propuesta de contrato para <strong>{rejectingContract?.space_title}</strong>?
+              </p>
+              <div className="form-group">
+                <label>Motivo del rechazo (opcional):</label>
+                <textarea
+                  value={rejectReason}
+                  onChange={e => setRejectReason(e.target.value)}
+                  rows={3}
+                  className="form-control"
+                  placeholder="Explique el motivo del rechazo..."
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowRejectModal(false)} className="btn btn-outline">Cancelar</button>
+              <button onClick={handleReject} className="btn btn-danger" disabled={approving}>
+                {approving ? 'Rechazando...' : 'Confirmar Rechazo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {contracts.length > 0 ? (
         <table className="owner-table">

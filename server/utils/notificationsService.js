@@ -464,6 +464,120 @@ function notifyInvoiceGenerated(invoiceId, req) {
   });
 }
 
+// =====================================================================
+// NUEVO FLUJO: Notificaciones para propuesta de contrato
+// =====================================================================
+
+function notifyContractProposed(contractId, req) {
+  const contract = db.prepare(`
+    SELECT c.*, 
+      g.first_name as guest_first_name, g.last_name as guest_last_name, g.email as guest_email,
+      h.first_name as host_first_name, h.last_name as host_last_name, h.email as host_email,
+      s.title as space_title
+    FROM contracts c
+    JOIN users g ON c.guest_id = g.id
+    JOIN users h ON c.host_id = h.id
+    JOIN spaces s ON c.space_id = s.id
+    WHERE c.id = ?
+  `).get(contractId);
+
+  if (!contract) return;
+
+  const guestName = `${contract.guest_first_name} ${contract.guest_last_name}`;
+  const periodLabel = {
+    'dia': 'dia(s)',
+    'semana': 'semana(s)',
+    'mes': 'mes(es)',
+    'trimestre': 'trimestre(s)',
+    'semestre': 'semestre(s)',
+    'ano': 'ano(s)'
+  }[contract.period_type] || contract.period_type;
+
+  sendNotification({
+    eventType: 'contract_proposed',
+    recipientId: contract.host_id,
+    channel: 'email',
+    payload: {
+      host_name: `${contract.host_first_name} ${contract.host_last_name}`,
+      guest_name: guestName,
+      space_title: contract.space_title,
+      contract_number: contract.contract_number,
+      sqm: contract.sqm,
+      period: `${contract.period_quantity} ${periodLabel}`,
+      start_date: contract.start_date,
+      end_date: contract.end_date,
+      total_amount: contract.total_amount.toFixed(2)
+    },
+    req
+  });
+}
+
+function notifyContractApproved(contractId, req) {
+  const contract = db.prepare(`
+    SELECT c.*, 
+      g.first_name as guest_first_name, g.last_name as guest_last_name, g.email as guest_email,
+      h.first_name as host_first_name, h.last_name as host_last_name,
+      s.title as space_title
+    FROM contracts c
+    JOIN users g ON c.guest_id = g.id
+    JOIN users h ON c.host_id = h.id
+    JOIN spaces s ON c.space_id = s.id
+    WHERE c.id = ?
+  `).get(contractId);
+
+  if (!contract) return;
+
+  const hostName = `${contract.host_first_name} ${contract.host_last_name}`;
+
+  sendNotification({
+    eventType: 'contract_approved',
+    recipientId: contract.guest_id,
+    channel: 'email',
+    payload: {
+      guest_name: `${contract.guest_first_name} ${contract.guest_last_name}`,
+      host_name: hostName,
+      space_title: contract.space_title,
+      contract_number: contract.contract_number,
+      total_amount: contract.total_amount.toFixed(2),
+      message: 'El propietario ha aprobado su propuesta de contrato. Proceda con el pago para finalizar.'
+    },
+    req
+  });
+}
+
+function notifyContractRejected(contractId, reason, req) {
+  const contract = db.prepare(`
+    SELECT c.*, 
+      g.first_name as guest_first_name, g.last_name as guest_last_name, g.email as guest_email,
+      h.first_name as host_first_name, h.last_name as host_last_name,
+      s.title as space_title
+    FROM contracts c
+    JOIN users g ON c.guest_id = g.id
+    JOIN users h ON c.host_id = h.id
+    JOIN spaces s ON c.space_id = s.id
+    WHERE c.id = ?
+  `).get(contractId);
+
+  if (!contract) return;
+
+  const hostName = `${contract.host_first_name} ${contract.host_last_name}`;
+
+  sendNotification({
+    eventType: 'contract_rejected',
+    recipientId: contract.guest_id,
+    channel: 'email',
+    payload: {
+      guest_name: `${contract.guest_first_name} ${contract.guest_last_name}`,
+      host_name: hostName,
+      space_title: contract.space_title,
+      contract_number: contract.contract_number,
+      rejection_reason: reason || 'No especificada',
+      message: 'Lamentablemente, el propietario ha rechazado su propuesta de contrato.'
+    },
+    req
+  });
+}
+
 module.exports = {
   sendNotification,
   getTemplate,
@@ -480,5 +594,8 @@ module.exports = {
   notifyContractCreated,
   notifyContractSigned,
   notifyRefundProcessed,
-  notifyInvoiceGenerated
+  notifyInvoiceGenerated,
+  notifyContractProposed,
+  notifyContractApproved,
+  notifyContractRejected
 };
