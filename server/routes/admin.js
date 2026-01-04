@@ -734,22 +734,27 @@ router.delete('/spaces/:id/force', requireSuperAdmin, (req, res) => {
     db.prepare("UPDATE contracts SET status = 'cancelled' WHERE space_id = ?").run(spaceId);
     db.prepare("UPDATE reservations SET status = 'cancelled' WHERE space_id = ?").run(spaceId);
 
-    db.prepare('DELETE FROM contract_extensions WHERE contract_id IN (SELECT id FROM contracts WHERE space_id = ?)').run(spaceId);
-    
     const contractIds = db.prepare('SELECT id FROM contracts WHERE space_id = ?').all(spaceId);
+    const reservationIds = db.prepare('SELECT id FROM reservations WHERE space_id = ?').all(spaceId);
+
     contractIds.forEach(c => {
       try { db.prepare('DELETE FROM invoices WHERE contract_id = ?').run(c.id); } catch(e) {}
+      try { db.prepare('DELETE FROM contract_extensions WHERE contract_id = ?').run(c.id); } catch(e) {}
+      try { db.prepare('DELETE FROM security_deposits WHERE contract_id = ?').run(c.id); } catch(e) {}
+      try { db.prepare('DELETE FROM host_statement_details WHERE contract_id = ?').run(c.id); } catch(e) {}
+      try { db.prepare('UPDATE disputes SET contract_id = NULL WHERE contract_id = ?').run(c.id); } catch(e) {}
+    });
+
+    reservationIds.forEach(r => {
+      try { db.prepare('DELETE FROM payments WHERE reservation_id = ?').run(r.id); } catch(e) {}
+      try { db.prepare('DELETE FROM security_deposits WHERE reservation_id = ?').run(r.id); } catch(e) {}
+      try { db.prepare('DELETE FROM host_statement_details WHERE reservation_id = ?').run(r.id); } catch(e) {}
+      try { db.prepare('UPDATE disputes SET reservation_id = NULL WHERE reservation_id = ?').run(r.id); } catch(e) {}
+      try { db.prepare('UPDATE appointments SET reservation_id = NULL WHERE reservation_id = ?').run(r.id); } catch(e) {}
     });
     
     db.prepare('DELETE FROM contracts WHERE space_id = ?').run(spaceId);
-    
-    const reservationIds = db.prepare('SELECT id FROM reservations WHERE space_id = ?').all(spaceId);
-    reservationIds.forEach(r => {
-      try { db.prepare('DELETE FROM payments WHERE reservation_id = ?').run(r.id); } catch(e) {}
-    });
-    
     db.prepare('DELETE FROM reservations WHERE space_id = ?').run(spaceId);
-    
     db.prepare('DELETE FROM appointments WHERE space_id = ?').run(spaceId);
     
     try { db.prepare('DELETE FROM host_availability WHERE space_id = ?').run(spaceId); } catch(e) {}
