@@ -207,6 +207,21 @@ router.get('/map', [
   }
 });
 
+router.get('/payment-methods', (req, res) => {
+  try {
+    const methods = db.prepare(`
+      SELECT code, name, instructions 
+      FROM payment_methods 
+      WHERE is_active = 1 
+      ORDER BY name
+    `).all();
+    res.json(methods);
+  } catch (error) {
+    console.error('Error fetching payment methods:', error);
+    res.status(500).json({ error: 'Error al obtener metodos de pago' });
+  }
+});
+
 router.get('/:id', optionalAuth, (req, res) => {
   try {
     const space = db.prepare(`
@@ -1075,21 +1090,6 @@ router.post('/:id/request-appointment', authenticateToken, [
   } catch (error) {
     console.error('Error requesting appointment:', error);
     res.status(500).json({ error: 'Error al solicitar cita' });
-  }
-});
-
-router.get('/payment-methods', (req, res) => {
-  try {
-    const methods = db.prepare(`
-      SELECT code, name, instructions 
-      FROM payment_methods 
-      WHERE is_active = 1 
-      ORDER BY name
-    `).all();
-    res.json(methods);
-  } catch (error) {
-    console.error('Error fetching payment methods:', error);
-    res.status(500).json({ error: 'Error al obtener metodos de pago' });
   }
 });
 

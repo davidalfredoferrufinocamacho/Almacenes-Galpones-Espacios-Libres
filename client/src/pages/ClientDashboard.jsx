@@ -1900,7 +1900,7 @@ function ClientAppointments() {
 
       {showContractModal && (
         <div className="modal-overlay" onClick={() => setShowContractModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px' }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
               <h2>Cerrar Contrato - Pago 100%</h2>
               <button className="close-btn" onClick={() => setShowContractModal(false)}>×</button>
@@ -1927,6 +1927,34 @@ function ClientAppointments() {
                       />
                     </div>
                     <div className="form-group">
+                      <label>Tipo de Periodo</label>
+                      <select 
+                        value={rentalConfig.periodType}
+                        onChange={e => setRentalConfig(prev => ({ ...prev, periodType: e.target.value }))}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                      >
+                        <option value="dia">Dia {spaceDetails.price_per_day_sqm > 0 ? `(Bs. ${spaceDetails.price_per_day_sqm}/m²)` : '(Sin precio)'}</option>
+                        <option value="semana">Semana {spaceDetails.price_per_week_sqm > 0 ? `(Bs. ${spaceDetails.price_per_week_sqm}/m²)` : '(Sin precio)'}</option>
+                        <option value="mes">Mes {spaceDetails.price_per_month_sqm > 0 ? `(Bs. ${spaceDetails.price_per_month_sqm}/m²)` : '(Sin precio)'}</option>
+                        <option value="trimestre">Trimestre {spaceDetails.price_per_quarter_sqm > 0 ? `(Bs. ${spaceDetails.price_per_quarter_sqm}/m²)` : '(Sin precio)'}</option>
+                        <option value="semestre">Semestre {spaceDetails.price_per_semester_sqm > 0 ? `(Bs. ${spaceDetails.price_per_semester_sqm}/m²)` : '(Sin precio)'}</option>
+                        <option value="ano">Ano {spaceDetails.price_per_year_sqm > 0 ? `(Bs. ${spaceDetails.price_per_year_sqm}/m²)` : '(Sin precio)'}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                    <div className="form-group">
+                      <label>Cantidad de Periodos</label>
+                      <input 
+                        type="number" 
+                        value={rentalConfig.periodQty}
+                        onChange={e => setRentalConfig(prev => ({ ...prev, periodQty: e.target.value }))}
+                        min="1"
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                      />
+                    </div>
+                    <div className="form-group">
                       <label>Fecha de Inicio</label>
                       <input 
                         type="date" 
@@ -1938,41 +1966,33 @@ function ClientAppointments() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                    <div className="form-group">
-                      <label>Tipo de Periodo</label>
-                      <select 
-                        value={rentalConfig.periodType}
-                        onChange={e => setRentalConfig(prev => ({ ...prev, periodType: e.target.value }))}
-                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
-                      >
-                        {spaceDetails.price_per_day_sqm > 0 && <option value="dia">Dia</option>}
-                        {spaceDetails.price_per_week_sqm > 0 && <option value="semana">Semana</option>}
-                        {spaceDetails.price_per_month_sqm > 0 && <option value="mes">Mes</option>}
-                        {spaceDetails.price_per_quarter_sqm > 0 && <option value="trimestre">Trimestre</option>}
-                        {spaceDetails.price_per_semester_sqm > 0 && <option value="semestre">Semestre</option>}
-                        {spaceDetails.price_per_year_sqm > 0 && <option value="ano">Ano</option>}
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label>Cantidad de Periodos</label>
+                  {rentalConfig.startDate && rentalConfig.periodQty > 0 && (
+                    <div className="form-group" style={{ marginBottom: '1rem' }}>
+                      <label>Fecha de Vencimiento (calculada)</label>
                       <input 
-                        type="number" 
-                        value={rentalConfig.periodQty}
-                        onChange={e => setRentalConfig(prev => ({ ...prev, periodQty: e.target.value }))}
-                        min="1"
-                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                        type="text" 
+                        readOnly
+                        value={(() => {
+                          const start = new Date(rentalConfig.startDate)
+                          const qty = parseInt(rentalConfig.periodQty) || 1
+                          let end = new Date(start)
+                          switch (rentalConfig.periodType) {
+                            case 'dia': end.setDate(end.getDate() + qty); break
+                            case 'semana': end.setDate(end.getDate() + (qty * 7)); break
+                            case 'mes': end.setMonth(end.getMonth() + qty); break
+                            case 'trimestre': end.setMonth(end.getMonth() + (qty * 3)); break
+                            case 'semestre': end.setMonth(end.getMonth() + (qty * 6)); break
+                            case 'ano': end.setFullYear(end.getFullYear() + qty); break
+                            default: end.setMonth(end.getMonth() + qty)
+                          }
+                          return end.toLocaleDateString('es-BO')
+                        })()}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db', background: '#f3f4f6' }}
                       />
                     </div>
-                  </div>
+                  )}
 
-                  <div style={{ padding: '1rem', background: '#dbeafe', borderRadius: '8px', marginBottom: '1rem' }}>
-                    <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#1e3a8a', textAlign: 'center' }}>
-                      Total a Pagar: Bs. {calculateRentalTotal().toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div className="form-group">
+                  <div className="form-group" style={{ marginBottom: '1rem' }}>
                     <label>Metodo de Pago</label>
                     <select 
                       value={selectedPaymentMethod} 
@@ -1986,7 +2006,41 @@ function ClientAppointments() {
                     </select>
                   </div>
 
-                  <div style={{ marginTop: '1rem', padding: '1rem', background: '#fef3c7', borderRadius: '8px' }}>
+                  <div style={{ padding: '1.25rem', background: '#e0f2fe', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #0284c7' }}>
+                    <h4 style={{ marginBottom: '0.75rem', color: '#0369a1' }}>Resumen del Contrato</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.95rem' }}>
+                      <p><strong>Espacio:</strong></p><p>{spaceDetails.title}</p>
+                      <p><strong>Superficie:</strong></p><p>{rentalConfig.sqm || 0} m²</p>
+                      <p><strong>Periodo:</strong></p><p>{rentalConfig.periodQty} {rentalConfig.periodType === 'dia' ? 'dia(s)' : rentalConfig.periodType === 'semana' ? 'semana(s)' : rentalConfig.periodType === 'mes' ? 'mes(es)' : rentalConfig.periodType === 'trimestre' ? 'trimestre(s)' : rentalConfig.periodType === 'semestre' ? 'semestre(s)' : 'ano(s)'}</p>
+                      <p><strong>Precio por m²:</strong></p><p>Bs. {(() => {
+                        switch (rentalConfig.periodType) {
+                          case 'dia': return spaceDetails.price_per_day_sqm || 0
+                          case 'semana': return spaceDetails.price_per_week_sqm || 0
+                          case 'mes': return spaceDetails.price_per_month_sqm || 0
+                          case 'trimestre': return spaceDetails.price_per_quarter_sqm || 0
+                          case 'semestre': return spaceDetails.price_per_semester_sqm || 0
+                          case 'ano': return spaceDetails.price_per_year_sqm || 0
+                          default: return 0
+                        }
+                      })().toFixed(2)}</p>
+                      <p><strong>Metodo de Pago:</strong></p><p>{paymentMethods.find(pm => pm.code === selectedPaymentMethod)?.name || 'No seleccionado'}</p>
+                    </div>
+                    <hr style={{ margin: '0.75rem 0', borderColor: '#0284c7' }} />
+                    <p style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#0369a1', textAlign: 'center' }}>
+                      TOTAL A PAGAR: Bs. {calculateRentalTotal().toFixed(2)}
+                    </p>
+                  </div>
+
+                  {calculateRentalTotal() <= 0 && (
+                    <div style={{ padding: '1rem', background: '#fef2f2', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #dc2626' }}>
+                      <p style={{ fontSize: '0.9rem', color: '#dc2626' }}>
+                        El espacio no tiene precio configurado para el tipo de periodo seleccionado. 
+                        Por favor seleccione otro tipo de periodo o contacte al propietario.
+                      </p>
+                    </div>
+                  )}
+
+                  <div style={{ padding: '1rem', background: '#fef3c7', borderRadius: '8px' }}>
                     <p style={{ fontSize: '0.9rem', color: '#92400e' }}>
                       Al completar el pago, se generara el contrato digital que debera firmar usted primero, 
                       y luego el propietario. El alquiler comenzara en la fecha seleccionada.
