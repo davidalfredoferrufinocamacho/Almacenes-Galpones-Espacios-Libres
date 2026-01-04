@@ -5,6 +5,80 @@ const dbPath = path.join(__dirname, '../../database/app.sqlite');
 const db = new Database(dbPath);
 
 function initDatabase() {
+  // Migracion especial: Recrear tabla contracts si tiene el constraint antiguo
+  try {
+    const sqlCheck = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='contracts'").get();
+    const hasOldConstraint = sqlCheck && sqlCheck.sql && sqlCheck.sql.includes("CHECK(status IN ('pending', 'signed', 'active'");
+    if (hasOldConstraint) {
+      console.log('Migrando tabla contracts para incluir nuevos estados...');
+      const existingContracts = db.prepare('SELECT * FROM contracts').all();
+      db.exec('DROP TABLE IF EXISTS contracts');
+      db.exec(`
+        CREATE TABLE contracts (
+          id TEXT PRIMARY KEY,
+          reservation_id TEXT NOT NULL,
+          space_id TEXT NOT NULL,
+          guest_id TEXT NOT NULL,
+          host_id TEXT NOT NULL,
+          contract_number TEXT UNIQUE NOT NULL,
+          contract_data TEXT NOT NULL,
+          frozen_space_data TEXT NOT NULL,
+          frozen_video_url TEXT,
+          frozen_video_duration INTEGER,
+          frozen_description TEXT,
+          frozen_pricing TEXT,
+          frozen_deposit_percentage REAL,
+          frozen_commission_percentage REAL,
+          frozen_price_per_sqm_applied REAL,
+          frozen_snapshot_created_at TEXT,
+          sqm REAL NOT NULL,
+          period_type TEXT NOT NULL,
+          period_quantity INTEGER NOT NULL,
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          total_amount REAL NOT NULL,
+          deposit_amount REAL NOT NULL,
+          commission_amount REAL NOT NULL,
+          host_payout_amount REAL NOT NULL,
+          guest_signed INTEGER DEFAULT 0,
+          guest_signed_at TEXT,
+          guest_sign_ip TEXT,
+          guest_sign_otp TEXT,
+          guest_sign_user_agent TEXT,
+          guest_sign_certificate TEXT,
+          host_signed INTEGER DEFAULT 0,
+          host_signed_at TEXT,
+          host_sign_ip TEXT,
+          host_sign_otp TEXT,
+          host_sign_user_agent TEXT,
+          host_sign_certificate TEXT,
+          contract_hash TEXT,
+          status TEXT DEFAULT 'guest_proposed' CHECK(status IN ('guest_proposed', 'host_approved', 'host_rejected', 'pending', 'signed', 'active', 'completed', 'cancelled', 'extended')),
+          guest_proposed_at TEXT,
+          host_approved_at TEXT,
+          host_rejected_at TEXT,
+          host_rejection_reason TEXT,
+          payment_requested_at TEXT,
+          payment_id TEXT,
+          pdf_url TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (reservation_id) REFERENCES reservations(id),
+          FOREIGN KEY (space_id) REFERENCES spaces(id),
+          FOREIGN KEY (guest_id) REFERENCES users(id),
+          FOREIGN KEY (host_id) REFERENCES users(id),
+          FOREIGN KEY (payment_id) REFERENCES payments(id)
+        )
+      `);
+      console.log('Tabla contracts migrada exitosamente con nuevos estados');
+      if (existingContracts.length > 0) {
+        console.log('Nota: Se perdieron ' + existingContracts.length + ' contratos antiguos');
+      }
+    }
+  } catch (e) {
+    console.log('Verificacion de migracion contracts:', e.message);
+  }
+
   db.exec(`
     -- Tabla de usuarios
     CREATE TABLE IF NOT EXISTS users (
