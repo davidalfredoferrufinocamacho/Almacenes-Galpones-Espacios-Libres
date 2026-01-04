@@ -104,7 +104,7 @@ function AdminDashboard() {
       case 'host-verifications': return <AdminHostVerifications />
       case 'users': return <AdminUsers isSuperAdmin={isSuperAdmin} />
       case 'admin-roles': return <AdminRoles />
-      case 'spaces': return <AdminSpaces />
+      case 'spaces': return <AdminSpaces isSuperAdmin={isSuperAdmin} />
       case 'reservations': return <AdminReservations />
       case 'contracts': return <AdminContracts />
       case 'disputes': return <AdminDisputes />
@@ -1473,7 +1473,7 @@ function AdminUsers({ isSuperAdmin }) {
   )
 }
 
-function AdminSpaces() {
+function AdminSpaces({ isSuperAdmin }) {
   const [spaces, setSpaces] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState({ status: '', city: '', occupancy: '' })
@@ -1507,6 +1507,28 @@ function AdminSpaces() {
       alert('Espacio eliminado')
     } catch (error) {
       alert(error.response?.data?.error || 'Error al eliminar espacio')
+    }
+  }
+
+  const forceDeleteSpace = async (spaceId, title) => {
+    const firstConfirm = confirm(`⚠️ ELIMINAR DEFINITIVAMENTE "${title}" Y TODO SU HISTORIAL?\n\nEsto eliminará:\n- Todos los contratos\n- Todas las reservaciones\n- Todas las citas\n- Todos los pagos asociados\n\nEsta acción NO se puede deshacer.`)
+    if (!firstConfirm) return
+    
+    const secondConfirm = confirm(`¿Está COMPLETAMENTE SEGURO?\n\nEscribir "ELIMINAR" en el siguiente prompt para confirmar.`)
+    if (!secondConfirm) return
+    
+    const finalConfirm = prompt('Escriba "ELIMINAR" para confirmar la eliminación definitiva:')
+    if (finalConfirm !== 'ELIMINAR') {
+      alert('Eliminación cancelada. Debe escribir exactamente "ELIMINAR".')
+      return
+    }
+    
+    try {
+      const res = await api.delete(`/admin/spaces/${spaceId}/force`)
+      loadSpaces()
+      alert(`Espacio eliminado definitivamente.\n\nRegistros eliminados:\n- Contratos: ${res.data.deleted?.contracts || 0}\n- Reservaciones: ${res.data.deleted?.reservations || 0}\n- Citas: ${res.data.deleted?.appointments || 0}`)
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar espacio definitivamente')
     }
   }
 
@@ -1723,6 +1745,16 @@ function AdminSpaces() {
                     {space.is_featured ? '★' : '☆'}
                   </button>
                   <button onClick={() => deleteSpace(space.id, space.title)} className="btn btn-sm btn-danger">Eliminar</button>
+                                  {isSuperAdmin && (
+                                    <button 
+                                      onClick={() => forceDeleteSpace(space.id, space.title)} 
+                                      className="btn btn-sm"
+                                      style={{background: '#6f1d1d', color: '#fff', fontSize: '0.7rem'}}
+                                      title="Eliminar espacio y todo su historial (solo Super Admin)"
+                                    >
+                                      Eliminar Todo
+                                    </button>
+                                  )}
                 </div>
               </td>
             </tr>

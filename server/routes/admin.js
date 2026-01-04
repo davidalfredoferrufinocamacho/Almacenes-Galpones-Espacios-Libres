@@ -711,6 +711,69 @@ router.delete('/spaces/:id', (req, res) => {
   }
 });
 
+router.delete('/spaces/:id/force', requireSuperAdmin, (req, res) => {
+  try {
+    const spaceId = req.params.id;
+    const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(spaceId);
+    if (!space) {
+      return res.status(404).json({ error: 'Espacio no encontrado' });
+    }
+
+    const contractCount = db.prepare('SELECT COUNT(*) as count FROM contracts WHERE space_id = ?').get(spaceId).count;
+    const reservationCount = db.prepare('SELECT COUNT(*) as count FROM reservations WHERE space_id = ?').get(spaceId).count;
+    const appointmentCount = db.prepare('SELECT COUNT(*) as count FROM appointments WHERE space_id = ?').get(spaceId).count;
+
+    const deletedData = {
+      space: space,
+      contracts_deleted: contractCount,
+      reservations_deleted: reservationCount,
+      appointments_deleted: appointmentCount
+    };
+
+    db.prepare('DELETE FROM contract_extensions WHERE contract_id IN (SELECT id FROM contracts WHERE space_id = ?)').run(spaceId);
+    
+    const contractIds = db.prepare('SELECT id FROM contracts WHERE space_id = ?').all(spaceId);
+    contractIds.forEach(c => {
+      db.prepare('DELETE FROM invoices WHERE contract_id = ?').run(c.id);
+    });
+    
+    db.prepare('DELETE FROM contracts WHERE space_id = ?').run(spaceId);
+    
+    const reservationIds = db.prepare('SELECT id FROM reservations WHERE space_id = ?').all(spaceId);
+    reservationIds.forEach(r => {
+      db.prepare('DELETE FROM payments WHERE reservation_id = ?').run(r.id);
+    });
+    
+    db.prepare('DELETE FROM reservations WHERE space_id = ?').run(spaceId);
+    
+    db.prepare('DELETE FROM appointments WHERE space_id = ?').run(spaceId);
+    
+    db.prepare('DELETE FROM host_availability WHERE space_id = ?').run(spaceId);
+    
+    db.prepare('DELETE FROM space_photos WHERE space_id = ?').run(spaceId);
+    
+    try {
+      db.prepare('DELETE FROM favorites WHERE space_id = ?').run(spaceId);
+    } catch (e) {}
+    
+    db.prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);
+
+    logAudit(req.user.id, 'SPACE_FORCE_DELETED', 'spaces', spaceId, deletedData, null, req);
+
+    res.json({ 
+      message: 'Espacio y todo su historial eliminado definitivamente',
+      deleted: {
+        contracts: contractCount,
+        reservations: reservationCount,
+        appointments: appointmentCount
+      }
+    });
+  } catch (error) {
+    console.error('Error eliminacion forzada:', error);
+    res.status(500).json({ error: 'Error al eliminar espacio definitivamente: ' + error.message });
+  }
+});
+
 router.put('/spaces/:id/featured', (req, res) => {
   try {
     const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get(req.params.id);
