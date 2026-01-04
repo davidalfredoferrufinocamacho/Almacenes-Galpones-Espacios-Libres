@@ -1515,6 +1515,8 @@ function ClientAppointments() {
   const [contractLoading, setContractLoading] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
   const [paymentMethods, setPaymentMethods] = useState([])
+  const [spaceDetails, setSpaceDetails] = useState(null)
+  const [rentalConfig, setRentalConfig] = useState({ sqm: '', periodType: 'mes', periodQty: 1, startDate: '' })
   const [showAntiBypassModal, setShowAntiBypassModal] = useState(false)
   const [antiBypassText, setAntiBypassText] = useState(null)
   const [antiBypassAccepted, setAntiBypassAccepted] = useState(false)
@@ -1527,10 +1529,11 @@ function ClientAppointments() {
 
   const loadPaymentMethods = async () => {
     try {
-      const res = await api.get('/public/payment-methods')
+      const res = await api.get('/spaces/payment-methods')
       setPaymentMethods(res.data || [])
     } catch (error) {
       console.error('Error loading payment methods:', error)
+      setPaymentMethods([])
     }
   }
 
@@ -1631,36 +1634,72 @@ function ClientAppointments() {
     }
   }
 
-  const handleCloseContract = (appointment) => {
-    if (!appointment.reservation_id) {
-      alert('Esta cita no tiene una reservacion asociada.')
+  const handleCloseContract = async (appointment) => {
+    setSelectedAppointmentForContract(appointment)
+    setSpaceDetails(null)
+    setRentalConfig({ sqm: '', periodType: 'mes', periodQty: 1, startDate: '' })
+    setSelectedPaymentMethod('')
+    setShowContractModal(true)
+    try {
+      const res = await api.get(`/spaces/${appointment.space_id}`)
+      setSpaceDetails(res.data)
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      setRentalConfig(prev => ({ 
+        ...prev, 
+        sqm: res.data.total_sqm || '',
+        startDate: tomorrow.toISOString().split('T')[0]
+      }))
+    } catch (error) {
+      console.error('Error cargando detalles del espacio:', error)
+      alert('Error al cargar detalles del espacio')
+      setShowContractModal(false)
+    }
+  }
+
+  const calculateRentalTotal = () => {
+    if (!spaceDetails || !rentalConfig.sqm || !rentalConfig.periodQty) return 0
+    const sqm = parseFloat(rentalConfig.sqm) || 0
+    const qty = parseInt(rentalConfig.periodQty) || 1
+    let pricePerSqm = 0
+    switch (rentalConfig.periodType) {
+      case 'dia': pricePerSqm = spaceDetails.price_per_day_sqm || 0; break
+      case 'semana': pricePerSqm = spaceDetails.price_per_week_sqm || 0; break
+      case 'mes': pricePerSqm = spaceDetails.price_per_month_sqm || 0; break
+      case 'trimestre': pricePerSqm = spaceDetails.price_per_quarter_sqm || 0; break
+      case 'semestre': pricePerSqm = spaceDetails.price_per_semester_sqm || 0; break
+      case 'ano': pricePerSqm = spaceDetails.price_per_year_sqm || 0; break
+      default: pricePerSqm = spaceDetails.price_per_month_sqm || 0
+    }
+    return sqm * pricePerSqm * qty
+  }
+
+  const handlePayFullContract = async () => {
+    if (!spaceDetails || !selectedPaymentMethod) return
+    const total = calculateRentalTotal()
+    if (total <= 0) {
+      alert('El monto total debe ser mayor a 0. Verifique la configuracion.')
       return
     }
-    setSelectedAppointmentForContract(appointment)
-    setShowContractModal(true)
-    loadReservationDetails(appointment.reservation_id)
-  }
-
-  const loadReservationDetails = async (reservationId) => {
-    try {
-      const res = await api.get(`/client/reservations/${reservationId}`)
-      setContractReservationDetails(res.data)
-    } catch (error) {
-      console.error('Error cargando detalles de reservacion:', error)
+    if (!rentalConfig.startDate) {
+      alert('Debe seleccionar una fecha de inicio.')
+      return
     }
-  }
-
-  const handlePayRemaining = async () => {
-    if (!contractReservationDetails) return
     setContractLoading(true)
     try {
-      const res = await api.post(`/client/reservations/${contractReservationDetails.id}/pay-remaining`, {
-        payment_method: selectedPaymentMethod
+      const res = await api.post('/payments/full', {
+        space_id: spaceDetails.id,
+        sqm_requested: parseFloat(rentalConfig.sqm),
+        period_type: rentalConfig.periodType,
+        period_quantity: parseInt(rentalConfig.periodQty),
+        start_date: rentalConfig.startDate,
+        payment_method: selectedPaymentMethod,
+        appointment_id: selectedAppointmentForContract?.id
       })
       alert(res.data.message + '\n\nSera redirigido a la seccion de Contratos para firmar.')
       setShowContractModal(false)
       setSelectedAppointmentForContract(null)
-      setContractReservationDetails(null)
+      setSpaceDetails(null)
       setSelectedPaymentMethod('')
       loadData()
     } catch (error) {
@@ -1783,12 +1822,11 @@ function ClientAppointments() {
                     {apt.status === 'aceptada' && apt.guest_completed && !apt.host_completed && (
                       <span className="text-muted">Esperando confirmacion del propietario</span>
                     )}
-                    {apt.status === 'realizada' && apt.reservation_id && (
+                    {apt.status === 'realizada' && (
                       <button onClick={() => handleCloseContract(apt)} className="btn btn-small btn-primary">
                         Cerrar Contrato
                       </button>
                     )}
-                    {apt.status === 'realizada' && !apt.reservation_id && <span className="text-success">Visita Completada</span>}
                     {apt.status === 'rechazada' && <span className="text-danger">Rechazada por propietario</span>}
                     {apt.status === 'cancelada' && <span className="text-muted">Cancelada</span>}
                     {apt.status === 'no_asistida' && <span className="text-warning">No asististe</span>}
@@ -1862,25 +1900,78 @@ function ClientAppointments() {
 
       {showContractModal && (
         <div className="modal-overlay" onClick={() => setShowContractModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px' }}>
             <div className="modal-header">
-              <h2>Cerrar Contrato</h2>
+              <h2>Cerrar Contrato - Pago 100%</h2>
               <button className="close-btn" onClick={() => setShowContractModal(false)}>×</button>
             </div>
             <div className="modal-body">
-              {contractReservationDetails ? (
+              {spaceDetails ? (
                 <>
                   <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f1f5f9', borderRadius: '8px' }}>
-                    <h4 style={{ marginBottom: '0.5rem' }}>{contractReservationDetails.space_title}</h4>
-                    <p><strong>Superficie:</strong> {contractReservationDetails.sqm_requested} m²</p>
-                    <p><strong>Periodo:</strong> {contractReservationDetails.period_quantity} {contractReservationDetails.period_type}</p>
-                    <p><strong>Monto Total:</strong> Bs. {contractReservationDetails.total_amount?.toFixed(2)}</p>
-                    <p><strong>Deposito Pagado (10%):</strong> Bs. {contractReservationDetails.deposit_amount?.toFixed(2)}</p>
-                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a' }}>
-                      <strong>Monto Restante (90%):</strong> Bs. {contractReservationDetails.remaining_amount?.toFixed(2)}
-                    </p>
+                    <h4 style={{ marginBottom: '0.5rem' }}>{spaceDetails.title}</h4>
+                    <p style={{ color: '#64748b', fontSize: '0.9rem' }}>{spaceDetails.city}, {spaceDetails.department}</p>
+                    <p><strong>Superficie Total Disponible:</strong> {spaceDetails.total_sqm} m²</p>
                   </div>
                   
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                    <div className="form-group">
+                      <label>Superficie a Alquilar (m²)</label>
+                      <input 
+                        type="number" 
+                        value={rentalConfig.sqm}
+                        onChange={e => setRentalConfig(prev => ({ ...prev, sqm: e.target.value }))}
+                        max={spaceDetails.total_sqm}
+                        min="1"
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Fecha de Inicio</label>
+                      <input 
+                        type="date" 
+                        value={rentalConfig.startDate}
+                        onChange={e => setRentalConfig(prev => ({ ...prev, startDate: e.target.value }))}
+                        min={new Date().toISOString().split('T')[0]}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                    <div className="form-group">
+                      <label>Tipo de Periodo</label>
+                      <select 
+                        value={rentalConfig.periodType}
+                        onChange={e => setRentalConfig(prev => ({ ...prev, periodType: e.target.value }))}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                      >
+                        {spaceDetails.price_per_day_sqm > 0 && <option value="dia">Dia</option>}
+                        {spaceDetails.price_per_week_sqm > 0 && <option value="semana">Semana</option>}
+                        {spaceDetails.price_per_month_sqm > 0 && <option value="mes">Mes</option>}
+                        {spaceDetails.price_per_quarter_sqm > 0 && <option value="trimestre">Trimestre</option>}
+                        {spaceDetails.price_per_semester_sqm > 0 && <option value="semestre">Semestre</option>}
+                        {spaceDetails.price_per_year_sqm > 0 && <option value="ano">Ano</option>}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Cantidad de Periodos</label>
+                      <input 
+                        type="number" 
+                        value={rentalConfig.periodQty}
+                        onChange={e => setRentalConfig(prev => ({ ...prev, periodQty: e.target.value }))}
+                        min="1"
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '1rem', background: '#dbeafe', borderRadius: '8px', marginBottom: '1rem' }}>
+                    <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#1e3a8a', textAlign: 'center' }}>
+                      Total a Pagar: Bs. {calculateRentalTotal().toFixed(2)}
+                    </p>
+                  </div>
+
                   <div className="form-group">
                     <label>Metodo de Pago</label>
                     <select 
@@ -1889,8 +1980,8 @@ function ClientAppointments() {
                       style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
                     >
                       <option value="">Seleccione metodo de pago...</option>
-                      {paymentMethods.map(pm => (
-                        <option key={pm.id} value={pm.id}>{pm.name}</option>
+                      {paymentMethods && paymentMethods.map(pm => (
+                        <option key={pm.code} value={pm.code}>{pm.name}</option>
                       ))}
                     </select>
                   </div>
@@ -1898,7 +1989,7 @@ function ClientAppointments() {
                   <div style={{ marginTop: '1rem', padding: '1rem', background: '#fef3c7', borderRadius: '8px' }}>
                     <p style={{ fontSize: '0.9rem', color: '#92400e' }}>
                       Al completar el pago, se generara el contrato digital que debera firmar usted primero, 
-                      y luego el propietario. El alquiler comenzara segun las fechas acordadas.
+                      y luego el propietario. El alquiler comenzara en la fecha seleccionada.
                     </p>
                   </div>
                 </>
@@ -1909,11 +2000,11 @@ function ClientAppointments() {
             <div className="modal-footer">
               <button onClick={() => setShowContractModal(false)} className="btn btn-outline">Cancelar</button>
               <button 
-                onClick={handlePayRemaining} 
+                onClick={handlePayFullContract} 
                 className="btn btn-primary" 
-                disabled={!selectedPaymentMethod || contractLoading}
+                disabled={!selectedPaymentMethod || contractLoading || calculateRentalTotal() <= 0}
               >
-                {contractLoading ? 'Procesando...' : `Pagar Bs. ${contractReservationDetails?.remaining_amount?.toFixed(2) || '0.00'}`}
+                {contractLoading ? 'Procesando...' : `Pagar Bs. ${calculateRentalTotal().toFixed(2)}`}
               </button>
             </div>
           </div>
