@@ -1663,13 +1663,13 @@ function ClientAppointments() {
     const qty = parseInt(rentalConfig.periodQty) || 1
     let pricePerSqm = 0
     switch (rentalConfig.periodType) {
-      case 'dia': pricePerSqm = spaceDetails.price_per_day_sqm || 0; break
-      case 'semana': pricePerSqm = spaceDetails.price_per_week_sqm || 0; break
-      case 'mes': pricePerSqm = spaceDetails.price_per_month_sqm || 0; break
-      case 'trimestre': pricePerSqm = spaceDetails.price_per_quarter_sqm || 0; break
-      case 'semestre': pricePerSqm = spaceDetails.price_per_semester_sqm || 0; break
-      case 'ano': pricePerSqm = spaceDetails.price_per_year_sqm || 0; break
-      default: pricePerSqm = spaceDetails.price_per_month_sqm || 0
+      case 'dia': pricePerSqm = spaceDetails.price_per_sqm_day || 0; break
+      case 'semana': pricePerSqm = spaceDetails.price_per_sqm_week || 0; break
+      case 'mes': pricePerSqm = spaceDetails.price_per_sqm_month || 0; break
+      case 'trimestre': pricePerSqm = spaceDetails.price_per_sqm_quarter || 0; break
+      case 'semestre': pricePerSqm = spaceDetails.price_per_sqm_semester || 0; break
+      case 'ano': pricePerSqm = spaceDetails.price_per_sqm_year || 0; break
+      default: pricePerSqm = spaceDetails.price_per_sqm_month || 0
     }
     return sqm * pricePerSqm * qty
   }
@@ -1933,12 +1933,12 @@ function ClientAppointments() {
                         onChange={e => setRentalConfig(prev => ({ ...prev, periodType: e.target.value }))}
                         style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
                       >
-                        <option value="dia">Dia {spaceDetails.price_per_day_sqm > 0 ? `(Bs. ${spaceDetails.price_per_day_sqm}/m²)` : '(Sin precio)'}</option>
-                        <option value="semana">Semana {spaceDetails.price_per_week_sqm > 0 ? `(Bs. ${spaceDetails.price_per_week_sqm}/m²)` : '(Sin precio)'}</option>
-                        <option value="mes">Mes {spaceDetails.price_per_month_sqm > 0 ? `(Bs. ${spaceDetails.price_per_month_sqm}/m²)` : '(Sin precio)'}</option>
-                        <option value="trimestre">Trimestre {spaceDetails.price_per_quarter_sqm > 0 ? `(Bs. ${spaceDetails.price_per_quarter_sqm}/m²)` : '(Sin precio)'}</option>
-                        <option value="semestre">Semestre {spaceDetails.price_per_semester_sqm > 0 ? `(Bs. ${spaceDetails.price_per_semester_sqm}/m²)` : '(Sin precio)'}</option>
-                        <option value="ano">Ano {spaceDetails.price_per_year_sqm > 0 ? `(Bs. ${spaceDetails.price_per_year_sqm}/m²)` : '(Sin precio)'}</option>
+                        <option value="dia">Dia {spaceDetails.price_per_sqm_day > 0 ? `(Bs. ${spaceDetails.price_per_sqm_day}/m²)` : '(Sin precio)'}</option>
+                        <option value="semana">Semana {spaceDetails.price_per_sqm_week > 0 ? `(Bs. ${spaceDetails.price_per_sqm_week}/m²)` : '(Sin precio)'}</option>
+                        <option value="mes">Mes {spaceDetails.price_per_sqm_month > 0 ? `(Bs. ${spaceDetails.price_per_sqm_month}/m²)` : '(Sin precio)'}</option>
+                        <option value="trimestre">Trimestre {spaceDetails.price_per_sqm_quarter > 0 ? `(Bs. ${spaceDetails.price_per_sqm_quarter}/m²)` : '(Sin precio)'}</option>
+                        <option value="semestre">Semestre {spaceDetails.price_per_sqm_semester > 0 ? `(Bs. ${spaceDetails.price_per_sqm_semester}/m²)` : '(Sin precio)'}</option>
+                        <option value="ano">Ano {spaceDetails.price_per_sqm_year > 0 ? `(Bs. ${spaceDetails.price_per_sqm_year}/m²)` : '(Sin precio)'}</option>
                       </select>
                     </div>
                   </div>
@@ -2014,12 +2014,12 @@ function ClientAppointments() {
                       <p><strong>Periodo:</strong></p><p>{rentalConfig.periodQty} {rentalConfig.periodType === 'dia' ? 'dia(s)' : rentalConfig.periodType === 'semana' ? 'semana(s)' : rentalConfig.periodType === 'mes' ? 'mes(es)' : rentalConfig.periodType === 'trimestre' ? 'trimestre(s)' : rentalConfig.periodType === 'semestre' ? 'semestre(s)' : 'ano(s)'}</p>
                       <p><strong>Precio por m²:</strong></p><p>Bs. {(() => {
                         switch (rentalConfig.periodType) {
-                          case 'dia': return spaceDetails.price_per_day_sqm || 0
-                          case 'semana': return spaceDetails.price_per_week_sqm || 0
-                          case 'mes': return spaceDetails.price_per_month_sqm || 0
-                          case 'trimestre': return spaceDetails.price_per_quarter_sqm || 0
-                          case 'semestre': return spaceDetails.price_per_semester_sqm || 0
-                          case 'ano': return spaceDetails.price_per_year_sqm || 0
+                          case 'dia': return spaceDetails.price_per_sqm_day || 0
+                          case 'semana': return spaceDetails.price_per_sqm_week || 0
+                          case 'mes': return spaceDetails.price_per_sqm_month || 0
+                          case 'trimestre': return spaceDetails.price_per_sqm_quarter || 0
+                          case 'semestre': return spaceDetails.price_per_sqm_semester || 0
+                          case 'ano': return spaceDetails.price_per_sqm_year || 0
                           default: return 0
                         }
                       })().toFixed(2)}</p>
