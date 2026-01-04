@@ -727,8 +727,12 @@ router.delete('/spaces/:id/force', requireSuperAdmin, (req, res) => {
       space: space,
       contracts_deleted: contractCount,
       reservations_deleted: reservationCount,
-      appointments_deleted: appointmentCount
+      appointments_deleted: appointmentCount,
+      force_deleted_by_super_admin: true
     };
+
+    db.prepare("UPDATE contracts SET status = 'cancelled' WHERE space_id = ?").run(spaceId);
+    db.prepare("UPDATE reservations SET status = 'cancelled' WHERE space_id = ?").run(spaceId);
 
     db.prepare('DELETE FROM contract_extensions WHERE contract_id IN (SELECT id FROM contracts WHERE space_id = ?)').run(spaceId);
     
