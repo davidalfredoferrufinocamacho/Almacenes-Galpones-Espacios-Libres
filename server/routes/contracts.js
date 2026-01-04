@@ -186,7 +186,7 @@ router.post('/propose', authenticateToken, requireRole('GUEST'), [
     // Insertar contrato con status 'guest_proposed'
     db.prepare(`
       INSERT INTO contracts (
-        id, reservation_id, space_id, guest_id, host_id, contract_number,
+        id, appointment_id, space_id, guest_id, host_id, contract_number,
         contract_data, contract_hash,
         frozen_space_data, frozen_description,
         frozen_pricing, frozen_commission_percentage,

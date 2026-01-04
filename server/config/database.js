@@ -5,18 +5,22 @@ const dbPath = path.join(__dirname, '../../database/app.sqlite');
 const db = new Database(dbPath);
 
 function initDatabase() {
-  // Migracion especial: Recrear tabla contracts si tiene el constraint antiguo
+  // Migracion especial: Recrear tabla contracts para nuevo flujo (appointment_id en lugar de reservation_id)
   try {
     const sqlCheck = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='contracts'").get();
-    const hasOldConstraint = sqlCheck && sqlCheck.sql && sqlCheck.sql.includes("CHECK(status IN ('pending', 'signed', 'active'");
-    if (hasOldConstraint) {
-      console.log('Migrando tabla contracts para incluir nuevos estados...');
+    const needsMigration = sqlCheck && sqlCheck.sql && (
+      sqlCheck.sql.includes("CHECK(status IN ('pending', 'signed', 'active'") ||
+      sqlCheck.sql.includes("reservation_id TEXT NOT NULL")
+    );
+    if (needsMigration) {
+      console.log('Migrando tabla contracts para nuevo flujo de propuestas...');
       const existingContracts = db.prepare('SELECT * FROM contracts').all();
       db.exec('DROP TABLE IF EXISTS contracts');
       db.exec(`
         CREATE TABLE contracts (
           id TEXT PRIMARY KEY,
-          reservation_id TEXT NOT NULL,
+          appointment_id TEXT,
+          reservation_id TEXT,
           space_id TEXT NOT NULL,
           guest_id TEXT NOT NULL,
           host_id TEXT NOT NULL,
@@ -63,16 +67,16 @@ function initDatabase() {
           pdf_url TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (reservation_id) REFERENCES reservations(id),
+          FOREIGN KEY (appointment_id) REFERENCES appointments(id),
           FOREIGN KEY (space_id) REFERENCES spaces(id),
           FOREIGN KEY (guest_id) REFERENCES users(id),
           FOREIGN KEY (host_id) REFERENCES users(id),
           FOREIGN KEY (payment_id) REFERENCES payments(id)
         )
       `);
-      console.log('Tabla contracts migrada exitosamente con nuevos estados');
+      console.log('Tabla contracts migrada: appointment_id agregado, reservation_id ahora es opcional');
       if (existingContracts.length > 0) {
-        console.log('Nota: Se perdieron ' + existingContracts.length + ' contratos antiguos');
+        console.log('Nota: Se migraron ' + existingContracts.length + ' contratos');
       }
     }
   } catch (e) {
@@ -290,7 +294,8 @@ function initDatabase() {
     -- Tabla de contratos
     CREATE TABLE IF NOT EXISTS contracts (
       id TEXT PRIMARY KEY,
-      reservation_id TEXT NOT NULL,
+      appointment_id TEXT,
+      reservation_id TEXT,
       space_id TEXT NOT NULL,
       guest_id TEXT NOT NULL,
       host_id TEXT NOT NULL,
@@ -338,7 +343,7 @@ function initDatabase() {
       pdf_url TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (reservation_id) REFERENCES reservations(id),
+      FOREIGN KEY (appointment_id) REFERENCES appointments(id),
       FOREIGN KEY (space_id) REFERENCES spaces(id),
       FOREIGN KEY (guest_id) REFERENCES users(id),
       FOREIGN KEY (host_id) REFERENCES users(id),
