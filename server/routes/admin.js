@@ -738,27 +738,27 @@ router.delete('/spaces/:id/force', requireSuperAdmin, (req, res) => {
     
     const contractIds = db.prepare('SELECT id FROM contracts WHERE space_id = ?').all(spaceId);
     contractIds.forEach(c => {
-      db.prepare('DELETE FROM invoices WHERE contract_id = ?').run(c.id);
+      try { db.prepare('DELETE FROM invoices WHERE contract_id = ?').run(c.id); } catch(e) {}
     });
     
     db.prepare('DELETE FROM contracts WHERE space_id = ?').run(spaceId);
     
     const reservationIds = db.prepare('SELECT id FROM reservations WHERE space_id = ?').all(spaceId);
     reservationIds.forEach(r => {
-      db.prepare('DELETE FROM payments WHERE reservation_id = ?').run(r.id);
+      try { db.prepare('DELETE FROM payments WHERE reservation_id = ?').run(r.id); } catch(e) {}
     });
     
     db.prepare('DELETE FROM reservations WHERE space_id = ?').run(spaceId);
     
     db.prepare('DELETE FROM appointments WHERE space_id = ?').run(spaceId);
     
-    db.prepare('DELETE FROM host_availability WHERE space_id = ?').run(spaceId);
+    try { db.prepare('DELETE FROM host_availability WHERE space_id = ?').run(spaceId); } catch(e) {}
+    try { db.prepare('DELETE FROM host_availability_exceptions WHERE space_id = ?').run(spaceId); } catch(e) {}
+    try { db.prepare('DELETE FROM space_photos WHERE space_id = ?').run(spaceId); } catch(e) {}
+    try { db.prepare('DELETE FROM favorites WHERE space_id = ?').run(spaceId); } catch(e) {}
     
-    db.prepare('DELETE FROM space_photos WHERE space_id = ?').run(spaceId);
-    
-    try {
-      db.prepare('DELETE FROM favorites WHERE space_id = ?').run(spaceId);
-    } catch (e) {}
+    try { db.prepare('DELETE FROM notification_log WHERE related_entity_type = ? AND related_entity_id = ?').run('space', spaceId); } catch(e) {}
+    try { db.prepare('DELETE FROM audit_log WHERE entity_type = ? AND entity_id = ?').run('spaces', spaceId); } catch(e) {}
     
     db.prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);
 
