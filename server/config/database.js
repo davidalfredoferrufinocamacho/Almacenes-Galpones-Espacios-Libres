@@ -1195,7 +1195,8 @@ function initDatabase() {
     { table: 'contracts', column: 'host_rejected_at', type: 'TEXT' },
     { table: 'contracts', column: 'host_rejection_reason', type: 'TEXT' },
     { table: 'contracts', column: 'payment_requested_at', type: 'TEXT' },
-    { table: 'contracts', column: 'payment_id', type: 'TEXT' }
+    { table: 'contracts', column: 'payment_id', type: 'TEXT' },
+    { table: 'contracts', column: 'contract_hash', type: 'TEXT' }
   ];
 
   // Backfill null categories to 'legal'

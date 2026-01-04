@@ -2172,19 +2172,40 @@ function ClientAppointments() {
                         type="text" 
                         readOnly
                         value={(() => {
-                          const start = new Date(rentalConfig.startDate)
+                          const start = new Date(rentalConfig.startDate + 'T00:00:00')
                           const qty = parseInt(rentalConfig.periodQty) || 1
-                          let end = new Date(start)
+                          const startDay = start.getDate()
+                          let endYear = start.getFullYear()
+                          let endMonth = start.getMonth()
+                          
                           switch (rentalConfig.periodType) {
-                            case 'dia': end.setDate(end.getDate() + qty); break
-                            case 'semana': end.setDate(end.getDate() + (qty * 7)); break
-                            case 'mes': end.setMonth(end.getMonth() + qty); break
-                            case 'trimestre': end.setMonth(end.getMonth() + (qty * 3)); break
-                            case 'semestre': end.setMonth(end.getMonth() + (qty * 6)); break
-                            case 'ano': end.setFullYear(end.getFullYear() + qty); break
-                            default: end.setMonth(end.getMonth() + qty)
+                            case 'dia': 
+                              const endDia = new Date(start)
+                              endDia.setDate(endDia.getDate() + qty - 1)
+                              return endDia.toLocaleDateString('es-BO')
+                            case 'semana': 
+                              const endSemana = new Date(start)
+                              endSemana.setDate(endSemana.getDate() + (qty * 7) - 1)
+                              return endSemana.toLocaleDateString('es-BO')
+                            case 'mes': endMonth += qty; break
+                            case 'trimestre': endMonth += qty * 3; break
+                            case 'semestre': endMonth += qty * 6; break
+                            case 'ano': endYear += qty; break
+                            default: endMonth += qty
                           }
-                          return end.toLocaleDateString('es-BO')
+                          
+                          while (endMonth >= 12) {
+                            endMonth -= 12
+                            endYear += 1
+                          }
+                          
+                          if (startDay === 1) {
+                            const lastDayOfMonth = new Date(endYear, endMonth, 0)
+                            return lastDayOfMonth.toLocaleDateString('es-BO')
+                          } else {
+                            const end = new Date(endYear, endMonth, startDay - 1)
+                            return end.toLocaleDateString('es-BO')
+                          }
                         })()}
                         style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db', background: '#f3f4f6' }}
                       />

@@ -52,30 +52,46 @@ function calculateRentalPrice(pricePerSqm, sqm, periodType, quantity) {
 
 function calculateEndDate(startDate, periodType, quantity) {
   const start = new Date(startDate);
-  const end = new Date(start);
+  const startDay = start.getUTCDate();
+  const startMonth = start.getUTCMonth();
+  const startYear = start.getUTCFullYear();
+  
+  let endYear = startYear;
+  let endMonth = startMonth;
 
   switch (periodType) {
     case 'dia':
-      end.setDate(end.getDate() + quantity);
-      break;
+      const endDia = new Date(Date.UTC(startYear, startMonth, startDay + quantity - 1));
+      return endDia.toISOString().split('T')[0];
     case 'semana':
-      end.setDate(end.getDate() + (quantity * 7));
-      break;
+      const endSemana = new Date(Date.UTC(startYear, startMonth, startDay + (quantity * 7) - 1));
+      return endSemana.toISOString().split('T')[0];
     case 'mes':
-      end.setMonth(end.getMonth() + quantity);
+      endMonth += quantity;
       break;
     case 'trimestre':
-      end.setMonth(end.getMonth() + (quantity * 3));
+      endMonth += quantity * 3;
       break;
     case 'semestre':
-      end.setMonth(end.getMonth() + (quantity * 6));
+      endMonth += quantity * 6;
       break;
     case 'ano':
-      end.setFullYear(end.getFullYear() + quantity);
+      endYear += quantity;
       break;
   }
 
-  return end.toISOString().split('T')[0];
+  while (endMonth >= 12) {
+    endMonth -= 12;
+    endYear += 1;
+  }
+
+  if (startDay === 1) {
+    const lastDayOfMonth = new Date(Date.UTC(endYear, endMonth, 0));
+    return lastDayOfMonth.toISOString().split('T')[0];
+  } else {
+    const end = new Date(Date.UTC(endYear, endMonth, startDay - 1));
+    return end.toISOString().split('T')[0];
+  }
 }
 
 function formatCurrency(amount) {
